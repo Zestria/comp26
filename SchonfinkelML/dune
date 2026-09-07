@@ -3,10 +3,10 @@
  (deps NewGVNtricky.ll))
 
 (executable
- (public_name exec)
+ (public_name compiler)
  (package SchonfinkelML)
- (name exec)
- (modules exec)
+ (name compiler)
+ (modules compiler)
  (libraries LL)
  (instrumentation
   (backend bisect_ppx_ng)))
