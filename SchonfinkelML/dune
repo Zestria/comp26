@@ -1,0 +1,12 @@
+(cram
+ (applies_to NewGVNtricky)
+ (deps NewGVNtricky.ll))
+
+(executable
+ (public_name exec)
+ (package SchonfinkelML)
+ (name exec)
+ (modules exec)
+ (libraries LL)
+ (instrumentation
+  (backend bisect_ppx_ng)))

@@ -1,0 +1,30 @@
+(lang dune 3.24)
+
+(name SchonfinkelML)
+
+(generate_opam_files)
+
+(authors "Samodurov Nikita, Semyon Rosin, Darya Nechayeva")
+
+(maintainers "Samodurov Nikita, Semyon Rosin, Darya Nechayeva")
+
+(license LGPL-3.0-or-later)
+
+(documentation https://url/to/documentation)
+
+(package
+ (name SchonfinkelML)
+ (synopsis "A small compiler")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (= "0.9"))))
+
+; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
