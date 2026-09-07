@@ -1,1 +1,12 @@
+(cram
+ (applies_to NewGVNtricky)
+ (deps NewGVNtricky.ll))
 
+(executable
+ (public_name compiler)
+ (package mylittleml)
+ (name compiler)
+ (modules compiler)
+ (libraries LL)
+ (instrumentation
+  (backend bisect_ppx_ng)))
