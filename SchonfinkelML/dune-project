@@ -4,13 +4,11 @@
 
 (generate_opam_files)
 
-(authors "Samodurov Nikita, Semyon Rosin, Darya Nechayeva")
+(authors "Samodurov Nikita, Rosin Semyon, Nechayeva Darya")
 
-(maintainers "Samodurov Nikita, Semyon Rosin, Darya Nechayeva")
+(maintainers "Samodurov Nikita, Rosin Semyon, Nechayeva Darya")
 
 (license LGPL-3.0-or-later)
-
-(documentation https://url/to/documentation)
 
 (package
  (name SchonfinkelML)
