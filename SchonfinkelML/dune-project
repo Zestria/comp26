@@ -4,9 +4,9 @@
 
 (generate_opam_files)
 
-(authors "Samodurov Nikita, Rosin Semyon, Nechayeva Darya")
+(authors "Samodurov Nikita, Rosin Semyon, Nechaeva Darya")
 
-(maintainers "Samodurov Nikita, Rosin Semyon, Nechayeva Darya")
+(maintainers "Samodurov Nikita, Rosin Semyon, Nechaeva Darya")
 
 (license LGPL-3.0-or-later)
 
