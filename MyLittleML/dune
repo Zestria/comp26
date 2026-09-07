@@ -4,7 +4,7 @@
 
 (executable
  (public_name compiler)
- (package mylittleml)
+ (package MyLittleML)
  (name compiler)
  (modules compiler)
  (libraries LL)

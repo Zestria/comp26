@@ -1,6 +1,6 @@
 (library
  (name LL)
- (public_name mylittleml.LL)
+ (public_name MyLittleML.LL)
  (modules LL)
  (wrapped false)
  (libraries
