@@ -1,0 +1,6 @@
+(library
+ (name frontend)
+ (modules common lexer)
+ (libraries))
+
+(ocamllex lexer)
