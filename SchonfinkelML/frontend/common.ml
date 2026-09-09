@@ -49,6 +49,24 @@ type expr =
   | If of expr * expr * expr
   | Abstr of string * expr
 
+(* Smart constructors, prefer them instead of ordinary ones *)
+
+let eletrec v e1 e2 = Let (Recursive, v, e1, e2)
+let elet v e1 e2 = Let (NotRecursive, v, e1, e2)
+let econsti i = Const (LitInt i)
+let eapp e1 e2 = App (e1, e2)
+let eif e1 e2 e3 = If (e1, e2, e3)
+let elambda v e = Abstr (v, e)
+let eadd a b = App (App (Ident "+", a), b)
+let esub a b = App (App (Ident "-", a), b)
+let emul a b = App (App (Ident "*", a), b)
+let ediv a b = App (App (Ident "/", a), b)
+let egte a b = App (App (Ident ">=", a), b)
+let elte a b = App (App (Ident "<=", a), b)
+let elt a b = App (App (Ident "<", a), b)
+let egt a b = App (App (Ident ">", a), b)
+let euminus a = App (Ident "-", a)
+
 let pp_literal ppf = function
   | LitInt i -> Format.fprintf ppf "%d" i
 ;;
