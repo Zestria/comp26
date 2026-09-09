@@ -93,7 +93,6 @@ rule token = parse
 and comment depth = parse
   | "(*"      { comment (depth + 1) lexbuf }
   | "*)"      { if depth = 0 then () else comment (depth - 1) lexbuf }
-  | '\n'      { comment depth lexbuf }
   | eof       { error lexbuf "unclosed comment" }
   | _         { comment depth lexbuf }
 
