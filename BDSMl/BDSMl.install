@@ -1,0 +1,18 @@
+lib: [
+  "_build/install/default/lib/BDSMl/LL/LL.a" {"LL/LL.a"}
+  "_build/install/default/lib/BDSMl/LL/LL.cma" {"LL/LL.cma"}
+  "_build/install/default/lib/BDSMl/LL/LL.cmxa" {"LL/LL.cmxa"}
+  "_build/install/default/lib/BDSMl/LL/LL.ml" {"LL/LL.ml"}
+  "_build/install/default/lib/BDSMl/LL/lL.cmi" {"LL/lL.cmi"}
+  "_build/install/default/lib/BDSMl/LL/lL.cmt" {"LL/lL.cmt"}
+  "_build/install/default/lib/BDSMl/LL/lL.cmx" {"LL/lL.cmx"}
+  "_build/install/default/lib/BDSMl/META"
+  "_build/install/default/lib/BDSMl/dune-package"
+  "_build/install/default/lib/BDSMl/opam"
+]
+libexec: [
+  "_build/install/default/lib/BDSMl/LL/LL.cmxs" {"LL/LL.cmxs"}
+]
+bin: [
+  "_build/install/default/bin/BDSMl"
+]
