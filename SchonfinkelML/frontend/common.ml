@@ -34,11 +34,15 @@ type literal = LitInt of int
 (* | LitString of string *)
 (* | LitBool of bool *)
 
+type let_flag =
+  | Recursive
+  | NotRecursive
+
 type expr =
   | Var of string
   | Const of literal
   | App of expr * expr
-  | Let of string * expr * expr
+  | Let of let_flag * string * expr * expr
 
 let pp_literal ppf = function
   | LitInt i -> Format.fprintf ppf "%d" i
@@ -76,7 +80,9 @@ let rec pp_expr ppf = function
   | Var x -> Format.fprintf ppf "%s" x
   | Const l -> pp_literal ppf l
   | App (e1, e2) -> Format.fprintf ppf "@[(%a %a)@]" pp_expr e1 pp_expr e2
-  | Let (x, e1, e2) ->
+  | Let (Recursive, x, e1, e2) ->
+    Format.fprintf ppf "@[<2>let rec %s =@ %a@ in@ %a@]" x pp_expr e1 pp_expr e2
+  | Let (NotRecursive, x, e1, e2) ->
     Format.fprintf ppf "@[<2>let %s =@ %a@ in@ %a@]" x pp_expr e1 pp_expr e2
 ;;
 
