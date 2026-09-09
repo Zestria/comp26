@@ -42,7 +42,7 @@ type let_flag =
   | NotRecursive
 
 type expr =
-  | Var of string
+  | Ident of string
   | Const of literal
   | App of expr * expr
   | Let of let_flag * string * expr * expr
@@ -85,7 +85,7 @@ let pp_token ppf = function
 ;;
 
 let rec pp_expr ppf = function
-  | Var x -> Format.fprintf ppf "%s" x
+  | Ident x -> Format.fprintf ppf "%s" x
   | Const l -> pp_literal ppf l
   | App (e1, e2) -> Format.fprintf ppf "@[(%a %a)@]" pp_expr e1 pp_expr e2
   | Let (Recursive, x, e1, e2) ->
