@@ -69,11 +69,11 @@ rule token = parse
   | "in"              { IN }
   | identifier as id  { IDENT id }
   | int_lit as num    { INT (int_of_string num) }
-  | float_lit as f    { FLOAT (float_of_string f) }
-  | '"' string_body '"' as s
-                      { STRING (lex_string lexbuf s) }
-  | "true"            { BOOL true }
-  | "false"           { BOOL false }
+  (* | float_lit as f    { FLOAT (float_of_string f) } *)
+  (* | '"' string_body '"' as s *)
+                      (* { STRING (lex_string lexbuf s) } *)
+  (* | "true"            { BOOL true } *)
+  (* | "false"           { BOOL false } *)
   | "()"              { UNIT }
   | '+'               { PLUS }
   | '-'               { MINUS }

@@ -1,6 +1,6 @@
 .PHONY: all test
 all:
-	dune build
+	@dune build --root=.
 
 test:
 	dune test
