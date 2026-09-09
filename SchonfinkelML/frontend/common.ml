@@ -11,6 +11,7 @@ type token =
   | THEN
   | ELSE
   | LET
+  | REC
   | IN
   | IDENT of string
   | INT of int
@@ -28,6 +29,8 @@ type token =
   | LPAREN
   | RPAREN
   | EOF
+  | FUN
+  | RIGHTARROW
 
 type literal = LitInt of int
 (* | LitFloat of float *)
@@ -43,6 +46,8 @@ type expr =
   | Const of literal
   | App of expr * expr
   | Let of let_flag * string * expr * expr
+  | If of expr * expr * expr
+  | Abstr of string * expr
 
 let pp_literal ppf = function
   | LitInt i -> Format.fprintf ppf "%d" i
@@ -57,6 +62,7 @@ let pp_token ppf = function
   | THEN -> Format.fprintf ppf "then"
   | ELSE -> Format.fprintf ppf "else"
   | LET -> Format.fprintf ppf "let"
+  | REC -> Format.fprintf ppf "rec"
   | IN -> Format.fprintf ppf "in"
   | IDENT s -> Format.fprintf ppf "%s" s
   | INT i -> Format.fprintf ppf "%d" i
@@ -74,6 +80,8 @@ let pp_token ppf = function
   | LPAREN -> Format.fprintf ppf "("
   | RPAREN -> Format.fprintf ppf ")"
   | EOF -> Format.fprintf ppf "EOF"
+  | FUN -> Format.fprintf ppf "fun"
+  | RIGHTARROW -> Format.fprintf ppf "->"
 ;;
 
 let rec pp_expr ppf = function
@@ -84,6 +92,9 @@ let rec pp_expr ppf = function
     Format.fprintf ppf "@[<2>let rec %s =@ %a@ in@ %a@]" x pp_expr e1 pp_expr e2
   | Let (NotRecursive, x, e1, e2) ->
     Format.fprintf ppf "@[<2>let %s =@ %a@ in@ %a@]" x pp_expr e1 pp_expr e2
+  | If (e1, e2, e3) ->
+    Format.fprintf ppf "@[<2>if %a then@ %a@ else@ %a@]" pp_expr e1 pp_expr e2 pp_expr e3
+  | Abstr (v, e) -> Format.fprintf ppf "@[<2>fun %s -> %a@]" v pp_expr e
 ;;
 
 let string_of_expr e = Format.asprintf "%a" pp_expr e

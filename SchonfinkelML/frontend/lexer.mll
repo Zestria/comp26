@@ -56,17 +56,20 @@ let float_lit   = digit+ '.' digit+ (['e' 'E'] ['+' '-']? digit+)?
 let string_char = [^ '"' '\\']
 let escape_seq  = '\\' ( '"' | 'n' | 't' | 'r' | '\\' )
 let string_body = (string_char | escape_seq)*
+let newline     = '\n' | "\r\n"
+let whitespace  = (' ' | '\t' | newline)+
 
 rule token = parse
-  | [' ' '\t']+       { token lexbuf }
-  | '\n'              { token lexbuf }
-  | "\r\n"            { token lexbuf }
+  | whitespace        { token lexbuf }
   | "(*"              { comment 0 lexbuf; token lexbuf }
   | "if"              { IF }
   | "then"            { THEN }
   | "else"            { ELSE }
   | "let"             { LET }
+  | "rec"             { REC }
   | "in"              { IN }
+  | "fun"             { FUN }
+  | "->"              { RIGHTARROW }
   | identifier as id  { IDENT id }
   | int_lit as num    { INT (int_of_string num) }
   (* | float_lit as f    { FLOAT (float_of_string f) } *)
