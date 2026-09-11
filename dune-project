@@ -28,7 +28,22 @@
   (llvm
    (= "18-shared"))
   (ppx_deriving_qcheck
-   (= "0.6"))))
+   (= "0.9"))))
+
+(package
+ (name shmel)
+ (synopsis "A short LLVM demo")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (= "0.9"))))
 
 (package
  (name demo2)

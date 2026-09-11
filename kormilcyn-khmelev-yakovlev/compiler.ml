@@ -13,7 +13,7 @@ let () =
   let the_module = Llvm.create_module context "main" in
   Llvm.set_target_triple "x86_64-pc-linux-gnu" the_module;
   let _the_execution_engine = Llvm_executionengine.create the_module in
-  let module LL = (val LL.make context builder the_module) in
+  let module KormilcynKhmelevYakovlev = (val KormilcynKhmelevYakovlev.make context builder the_module) in
   let i64_type = Llvm.i64_type context in
   let void_type = Llvm.void_type context in
   let ptr_type = Llvm.pointer_type context in
@@ -30,9 +30,9 @@ let () =
     (* Add all arguments to the symbol table and create their allocas. *)
     (* Finish off the function. *)
     let (_ : Llvm.llvalue) =
-      LL.build_call
+      KormilcynKhmelevYakovlev.build_call
         (Llvm.function_type void_type [| i64_type |])
-        LL.(lookup_func_exn "print_int")
+        KormilcynKhmelevYakovlev.(lookup_func_exn "print_int")
         [ Llvm.const_int i64_type 70 ]
     in
     let (_ : Llvm.llvalue) = Llvm.build_ret (Llvm.const_int i64_type 0) builder in

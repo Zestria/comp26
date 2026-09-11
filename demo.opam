@@ -14,7 +14,7 @@ depends: [
   "qcheck"
   "bisect_ppx_ng"
   "llvm" {= "18-shared"}
-  "ppx_deriving_qcheck" {= "0.6"}
+  "ppx_deriving_qcheck" {= "0.9"}
   "odoc" {with-doc}
 ]
 build: [
@@ -35,8 +35,5 @@ dev-repo: "git+https://github.com/username/reponame.git"
 x-maintenance-intent: ["(latest)"]
 depexts: [
   [ "llvm-18-dev" "clang-18" "gcc-riscv64-linux-gnu" "g++-riscv64-linux-gnu" "qemu-user"] {os-distribution = "ubuntu"}
-]
-pin-depends: [
-  ["ppx_deriving_qcheck.0.6" "git+https://github.com/c-cube/qcheck.git#42429bf06ba12373cad02b1404f50d0ad6238af5"]
 ]
 # Don't edit '*.opam' file manually. Use 'dune b @install'

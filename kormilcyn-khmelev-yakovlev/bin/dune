@@ -1,7 +1,7 @@
 (library
- (name LL)
- (public_name demo.LL)
- (modules LL)
+ (name KormilcynKhmelevYakovlev)
+ (public_name shmel.KormilcynKhmelevYakovlev)
+ (modules KormilcynKhmelevYakovlev)
  (wrapped false)
  (libraries
   llvm

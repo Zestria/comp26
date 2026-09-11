@@ -3,10 +3,10 @@
  (deps NewGVNtricky.ll))
 
 (executable
- (public_name compiler)
- (package demo)
+ (public_name shmel)
+ (package shmel)
  (name compiler)
  (modules compiler)
- (libraries LL)
+ (libraries KormilcynKhmelevYakovlev)
  (instrumentation
   (backend bisect_ppx_ng)))

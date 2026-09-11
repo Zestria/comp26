@@ -15,6 +15,6 @@
 
 
 
-  $ clang-18 out.ll runtime.o -o demo1.exe
-  $ echo "Press $(./demo1.exe) to pay respect"
+  $ clang-18 out.ll runtime.o -o shmel1.exe
+  $ echo "Press $(./shmel1.exe) to pay respect"
   Press F to pay respect
