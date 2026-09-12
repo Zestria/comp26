@@ -65,6 +65,7 @@ let egte a b = App (App (Ident ">=", a), b)
 let elte a b = App (App (Ident "<=", a), b)
 let elt a b = App (App (Ident "<", a), b)
 let egt a b = App (App (Ident ">", a), b)
+let eeq a b = App (App (Ident "=", a), b)
 let euminus a = App (Ident "-", a)
 
 let pp_literal ppf = function
