@@ -6,24 +6,21 @@
 
 [@@@ocaml.text "/*"]
 
-(** Курсор по исходной строке.
+(** Cursor over the source string.
 
-    Модуль знает только «механику»: позиции, символы, пробелы, комментарии и
-    прогоны символов. Политику разбора (в том числе режим слипшихся ключевых
-    слов) определяет {!Parser}. *)
+    Char mechanics only; parsing policy lives in {!Parser}. *)
 
 type t
-(** Состояние: строка, смещение, номер строки и начало текущей строки. *)
+(** Source, offset, line number and line start. *)
 
 type state
-(** Снимок состояния для отката (backtracking). *)
+(** Snapshot for backtracking. *)
 
 type error =
   { pos : Lexing.position
   ; msg : string
   }
-(** Ошибка с позицией. Позиции совместимы с [Lexing.position], чтобы сообщения
-    выглядели как у обычного лексера. *)
+(** Error with a [Lexing.position]. *)
 
 val create : string -> t
 val source : t -> string
@@ -32,35 +29,33 @@ val position : t -> Lexing.position
 val error : t -> string -> error
 
 val save : t -> state
-(** Снимок текущего состояния. Снимок дешёвый: три целых. *)
+(** Cheap snapshot. *)
 
 val restore : t -> state -> unit
-(** Возврат к снимку. *)
+(** Roll back to a snapshot. *)
 
 val eof : t -> bool
 val peek : t -> char option
-(** Символ в текущей позиции. *)
+(** Current char. *)
 
 val peek_at : t -> int -> char option
-(** [peek_at t n] — символ со сдвигом [n] от текущей позиции. *)
+(** Char at offset [n]. *)
 
 val advance : t -> unit
-(** Сдвиг на один символ; перевод строки обновляет [pos_lnum]/[pos_bol]. *)
+(** Consume one char, tracking lines. *)
 
 val advance_n : t -> int -> unit
 val is_digit : char -> bool
 val is_ident_start : char -> bool
 val is_ident_char : char -> bool
 val starts_with : t -> string -> bool
-(** Начинается ли источник с [s] в текущей позиции. *)
+(** Does the source start with [s] here? *)
 
 val peek_ident_run : t -> string
-(** Максимальный прогон [ident_char] от текущей позиции; [""], если символа
-    нет или он не может начинать идентификатор. *)
+(** Longest [ident_char] run from here, [""] if none. *)
 
 val peek_int_run : t -> string
-(** Максимальный прогон цифр от текущей позиции. *)
+(** Longest digit run from here. *)
 
 val skip_ws_and_comments : t -> (unit, error) result
-(** Пропускает пробелы и вложенные комментарии [(* ... *)]. Ошибка —
-    незакрытый комментарий. *)
+(** Skip whitespace and nested comments; [Error] on an unclosed comment. *)

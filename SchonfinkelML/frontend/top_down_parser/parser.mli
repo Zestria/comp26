@@ -6,23 +6,16 @@
 
 [@@@ocaml.text "/*"]
 
-(** Нисходящий парсер подмножества OCaml: рекурсивный спуск без отдельного
-    лексера (scannerless).
+(** Recursive descent parser for a subset of OCaml, without a separate lexer.
 
-    Парсер сам решает, где кончается лексема, поэтому умеет то, что не
-    выражается парой ocamllex+menhir: ключевое слово можно писать слитно с
-    идентификатором. Режим включается флагом [glued]:
+    The parser decides lexeme boundaries itself, so a keyword may stick to an
+    identifier: with [glued:true], [letx=1inx] is [let x = 1 in x]; with
+    [glued:false] keywords need a token boundary ([letx] is one identifier).
 
-    - [glued:false] — обычный OCaml-подобный лексический режим: ключевое слово
-      должно заканчиваться на границе ([letx] — это один идентификатор);
-    - [glued:true] — ключевое слово может быть префиксом
-      ([letx=1inx] — это [let x = 1 in x], [funx->x] — [fun x -> x]).
+    Never exits: any input yields [Ok] or [Error] with a position.
 
-    Разбор всегда возвращает [result] и никогда не завершает процесс: на любом
-    входе — [Ok] или [Error] с позицией.
-
-    Вне области видимости (осознанно): [()] и unit, [true]/[false], float и
-    string, [match], toplevel-определения, [and], []. *)
+    Out of scope: [()], [true]/[false], float, string, [match], toplevel
+    bindings, [and], []. *)
 
 type error = Cursor.error =
   { pos : Lexing.position
@@ -32,6 +25,5 @@ type error = Cursor.error =
 val pp_error : Format.formatter -> error -> unit
 val string_of_error : error -> string
 val parse_expr : ?glued:bool -> string -> (Frontend.Common.expr, error) result
-(** Разбирает одно выражение и требует, чтобы после него остались только
-    пробелы и комментарии. @param glued режим слипшихся ключевых слов (по
-    умолчанию [false]). *)
+(** Parse one expression, allowing only whitespace and comments after it.
+    [glued] enables glued keywords. *)

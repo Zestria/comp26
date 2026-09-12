@@ -6,13 +6,13 @@
 
 [@@@ocaml.text "/*"]
 
-(** Рекурсивный спуск без отдельного лексера.
+(** Recursive descent without a separate lexer: keywords are
 
-    Ключевые слова распознаются по требованию парсера (в режиме [glued] — как
-    префикс), а аппликация не съедает идентификатор, если его ключевой префикс
-    входит в follow-set текущего контекста. Благодаря этому [letx=1inx]
-    разбирается как [let x = 1 in x], а [letter] как имя не ломается: на старте
-    выражения ключевая ветвь пробуется с откатом. *)
+    recognised on the parser's demand (as a prefix when [glued]), and
+    application never eats an identifier whose keyword prefix terminates
+    the current context, so [letx=1inx] reads as [let x = 1 in x] while
+    [letter] stays a name (the keyword branch is tried, then rolled back).
+    Out of scope: [()], [true]/[false], float, string, [match], [and]. *)
 
 module Ast = Frontend.Common
 
@@ -40,7 +40,7 @@ let cmp_ops = [ "<=", Ast.elte; ">=", Ast.egte; "<", Ast.elt; ">", Ast.egt; "=",
 let add_ops = [ "+", Ast.eadd; "-", Ast.esub ]
 let mul_ops = [ "*", Ast.emul; "/", Ast.ediv ]
 
-(* Запас на откаты: гарантирует завершение на сколь угодно странном входе. *)
+(* Backtracking budget: guarantees termination on any input. *)
 let max_fuel = 100_000
 
 let is_kw s = List.mem s keywords
@@ -52,8 +52,8 @@ let sub_matches s i pat =
   i >= 0 && i + l <= String.length s && String.sub s i l = pat
 ;;
 
-(* В обычном режиме ключевое слово обязано заканчиваться на границе токена;
-   в режиме [glued] достаточно префикса. *)
+(* Keywords need a token boundary normally,
+   just a prefix when glued. *)
 let keyword_ahead ctx kw =
   let st = ctx.st in
   Cursor.starts_with st kw
@@ -79,7 +79,7 @@ let expect_symbol ctx sym =
   else fail ctx (Printf.sprintf "expected '%s'" sym)
 ;;
 
-(* Оператор из таблицы в текущей позиции. '-' не должен съедать начало '->'. *)
+(* Operator from the table; '-' must not eat the start of '->'. *)
 let op_here ctx ops =
   let st = ctx.st in
   List.find_opt
@@ -88,8 +88,8 @@ let op_here ctx ops =
     ops
 ;;
 
-(* Прогон идентификатора: максимальный, но в режиме [glued] обрезается перед
-   ближайшим вхождением ключевого слова из follow-set. *)
+(* Identifier run; when glued, cut before the
+   nearest follow-set keyword. *)
 let ident_run ctx follow =
   let r = Cursor.peek_ident_run ctx.st in
   if (not ctx.glued) || String.equal r ""
@@ -106,7 +106,7 @@ let ident_run ctx follow =
     String.sub r 0 (find 1))
 ;;
 
-(* Может ли в этой позиции начинаться аргумент аппликации. *)
+(* Can an application argument start here? *)
 let can_start_argument ctx follow =
   let st = ctx.st in
   match Cursor.peek st with
@@ -114,9 +114,9 @@ let can_start_argument ctx follow =
   | Some '(' -> true
   | Some c when Cursor.is_ident_start c ->
     let r = Cursor.peek_ident_run st in
-    (* Ключевое слово не может быть аргументом аппликации ни в одном режиме.
-       В режиме glued дополнительно не съедаем имя, если его ключевой префикс
-       принадлежит follow-set: это терминатор текущего контекста. *)    (not (is_kw r))
+    (* A keyword is never an application argument;
+       when glued, also stop at a name whose keyword prefix
+       is a follow-set terminator. *)    (not (is_kw r))
     && not (ctx.glued && List.exists (fun kw -> sub_matches r 0 kw) follow)
   | _ -> false
 ;;
@@ -147,8 +147,8 @@ let p_binding_name ctx =
   | _ -> fail ctx "expected an identifier"
 ;;
 
-(* Имена связываются и параметры читаются максимальным прогоном: после имени
-   идёт '=' или другой параметр, склеивать их с ключевым словом не нужно. *)
+(* Names and parameters are read greedily:
+   they end at '=' or a space. *)
 let p_params ctx =
   let rec loop acc =
     let* () = skip ctx in
