@@ -1,5 +1,5 @@
 (library
- (name LL)
+ (name MML_LL)
  (public_name MML.LL)
  (modules LL)
  (wrapped false)

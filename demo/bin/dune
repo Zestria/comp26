@@ -1,5 +1,5 @@
 (library
- (name Demo_LL)
+ (name LL)
  (public_name demo.LL)
  (modules LL)
  (wrapped false)

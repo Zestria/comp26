@@ -3,10 +3,10 @@
  (deps NewGVNtricky.ll))
 
 (executable
- (public_name demo-compiler)
+ (public_name compiler)
  (package demo)
  (name compiler)
  (modules compiler)
- (libraries Demo_LL)
+ (libraries LL)
  (instrumentation
   (backend bisect_ppx_ng)))
