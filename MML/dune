@@ -5,7 +5,7 @@
 
 (executable
  (public_name compiler)
- (package demo)
+ (package MML)
  (name compiler)
  (modules compiler)
  (libraries LL)

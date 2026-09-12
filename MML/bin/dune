@@ -1,6 +1,6 @@
 (library
  (name LL)
- (public_name demo.LL)
+ (public_name MML.LL)
  (modules LL)
  (wrapped false)
  (libraries
