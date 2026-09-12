@@ -3,7 +3,7 @@
  (deps NewGVNtricky.ll))
 
 (executable
- (public_name compiler)
+ (public_name SchonfinkelML.compiler)
  (package SchonfinkelML)
  (name compiler)
  (modules compiler)
