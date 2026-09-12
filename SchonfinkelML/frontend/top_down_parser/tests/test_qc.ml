@@ -6,12 +6,11 @@
 
 [@@@ocaml.text "/*"]
 
-(** QuickCheck-тесты нисходящего парсера.
+(** QuickCheck properties for the top-down parser.
 
-    Генератор и «канонический» принтер написаны руками: [Common.expr] не имеет
-    [\[@@deriving qcheck]], и для round-trip нужен свой принтер (у
-    [Common.pp_expr] операторные формы печатаются как [(+ a b)]-подобное
-    [((+ a) b)], что не является каноническим исходником). *)
+    The generator and the canonical printer are hand-written: [Common.expr] has
+    no [@@deriving qcheck], and [Common.pp_expr] prints operator forms as
+    [((+ a) b)], which is no canonical source. *)
 
 open Frontend.Common
 module P = Top_down.Parser
@@ -22,7 +21,7 @@ let binop_ops = [ "+"; "-"; "*"; "/"; "<"; "<="; ">"; ">="; "=" ]
 let is_binop op = List.mem op binop_ops
 let names = [ "x"; "y"; "z"; "f"; "g"; "h"; "n"; "k"; "r"; "fact"; "fib"; "foo"; "bar"; "accum" ]
 
-(* --- Канонический исходник --- *)
+(* --- Canonical source --- *)
 
 let rec surface_operand e =
   match e with
@@ -44,12 +43,11 @@ and surface_pp e =
   | App (l, r) -> "(" ^ surface_operand l ^ " " ^ surface_operand r ^ ")"
 ;;
 
-(* --- Исходник без пробелов: ключевое слово слипается с идентификатором ---
+(* --- Glue-safe source ---
 
-   Пробелы убираются только там, где парсер в режиме [glued] умеет их
-   восстановить: ключевое слово + идентификатор. Два идентификатора подряд
-   склеивать нельзя (получится одно имя), поэтому аргументы аппликации всегда
-   заключаются в скобки. *)
+   Spaces are dropped only where the parser can restore them: keyword +
+   identifier. Two identifiers would merge into one name, so application
+   arguments are always parenthesised. *)
 
 let glue_pp e =
   let b = Buffer.create 128 in
@@ -84,7 +82,7 @@ let glue_pp e =
   Buffer.contents b
 ;;
 
-(* --- Генератор --- *)
+(* --- Generator --- *)
 
 let gen_name = Gen.oneof (List.map Gen.return names)
 let gen_op = Gen.oneof (List.map Gen.return binop_ops)
@@ -141,7 +139,7 @@ let arb_triple =
     (Gen.triple gen_expr_sized gen_expr_sized gen_expr_sized)
 ;;
 
-(* --- Свойства --- *)
+(* --- Properties --- *)
 
 let tests =
   [ QCheck.Test.make ~name:"round-trip: parse ∘ pp = id" arb_expr (fun e ->

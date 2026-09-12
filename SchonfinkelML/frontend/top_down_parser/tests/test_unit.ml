@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-(** Юнит-тесты нисходящего парсера: таблица «исходник -> AST». *)
+(** Unit tests for the top-down parser: source -> AST table. *)
 
 open Frontend.Common
 module P = Top_down.Parser
@@ -57,7 +57,7 @@ let check_does_not_raise name src =
   | Some s -> report_fail name ~expected:"Ok/Error без исключений" ~actual:s
 ;;
 
-(* --- Константы и идентификаторы --- *)
+(* --- Literals and identifiers --- *)
 
 let () =
   check_expr "числовой литерал" "42" (econsti 42);
@@ -66,7 +66,7 @@ let () =
   check_expr "верхний регистр" "Foo" (Ident "Foo")
 ;;
 
-(* --- Аппликация --- *)
+(* --- Application --- *)
 
 let () =
   let x = Ident "x" and y = Ident "y" and z = Ident "z" and f = Ident "f" in
@@ -77,7 +77,7 @@ let () =
   check_expr "аппликация связывает крепче плюса" "f x + y" (eadd (eapp f x) y)
 ;;
 
-(* --- Операторы --- *)
+(* --- Operators --- *)
 
 let () =
   let a = Ident "a" and b = Ident "b" and c = Ident "c" and x = Ident "x" in
@@ -133,7 +133,7 @@ let () =
     (elet "x" (econsti 1) (elet "y" (econsti 2) (eadd x (Ident "y"))))
 ;;
 
-(* --- Комментарии и пробелы --- *)
+(* --- Comments and whitespace --- *)
 
 let () =
   check_expr "комментарии" "(* c *) 1 (* d *)" (econsti 1);
@@ -142,7 +142,7 @@ let () =
   check_expr "лишние пробелы и скобки" "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
 ;;
 
-(* --- CPSные факториал и фибоначчи (главный приёмочный тест задания) --- *)
+(* --- CPS factorial and fibonacci --- *)
 
 let () =
   check_expr
@@ -187,7 +187,7 @@ let () =
        (eapp (eapp (Ident "fib") (econsti 10)) (elambda "x" (Ident "x"))))
 ;;
 
-(* --- Режим слипшихся ключевых слов --- *)
+(* --- Glued keywords --- *)
 
 let () =
   check_expr ~glued:true "слипание: let/in" "letx=1inx" (elet "x" (econsti 1) (Ident "x"));
@@ -205,18 +205,18 @@ let () =
              (econsti 1)
              (eapp (Ident "f") (esub (Ident "x") (econsti 1)))))
        (eapp (Ident "f") (econsti 5)));
-  (* Имена, начинающиеся с ключевого слова, остаются именами там, где
-     ключевая ветвь не разбирается. *)
+  (* A name starting with a keyword stays a name while
+     the keyword branch does not parse. *)
   check_expr ~glued:true "letter как имя" "letter" (Ident "letter");
   check_expr ~glued:true "letter в скобках" "(letter)" (Ident "letter");
   check_expr ~glued:true "letters как имя" "letters" (Ident "letters");
-  (* Задокументированная неоднозначность: `letter=1inletter` читается
-     ключевым словом вперёд, то есть как `let ter = 1 in letter`. *)
+  (* Documented ambiguity: keyword-first wins, so this reads as
+     `let ter = 1 in letter`. *)
   check_expr ~glued:true "неоднозначность letter=" "letter=1inletter"
     (elet "ter" (econsti 1) (Ident "letter"));
-  (* Без режима слипания тот же текст читается иначе — это и есть демонстрация
-     того, что делает флаг. Проверяем именно другое (или отсутствующее) дерево,
-     а не «ошибку вообще»: `letx=1inx` — валидное сравнение с аппликацией. *)
+  (* Without gluing the same text reads differently, which is
+     exactly what the flag does: the tree either differs or the text
+     does not parse at all. *)
   check_error "слипание выключено: fun" "funx->x";
   check_error "слипание выключено: нет границы после in" "let x = 1 inx";
   check_expr "слипание выключено: letx — имя" "letx=1inx"
@@ -224,12 +224,12 @@ let () =
   check_expr "слипание выключено: ifn — имя" "ifn<1then0else1"
     (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")));
   check_error ~glued:true "слипание имён: let x=1 без in" "let x=1";
-  (* Два имени через пробел — по-прежнему два токена: слипание убирает пробелы
-     только у ключевого слова с идентификатором, а не вообще все. *)
+  (* Two names separated by a space are still two tokens:
+     only keyword+identifier glues, not everything. *)
   check_expr ~glued:true "два имени через пробел" "f x" (eapp (Ident "f") (Ident "x"))
 ;;
 
-(* --- Ошибки --- *)
+(* --- Errors --- *)
 
 let () =
   check_error "пустой ввод" "";
