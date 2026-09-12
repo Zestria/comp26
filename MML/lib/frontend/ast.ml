@@ -1,3 +1,5 @@
+(** Parsed, untyped MiniML syntax shared by both parsers. *)
+
 type identifier = string [@@deriving eq, show { with_path = false }]
 
 type constant =

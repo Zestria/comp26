@@ -1,0 +1,10 @@
+(ocamllex lexer)
+
+(library
+ (name frontend)
+ (public_name MML.frontend)
+ (modules ast error_monad lexer location pretty_printer token)
+ (wrapped false)
+ (libraries qcheck)
+ (preprocess
+  (pps ppx_deriving.eq ppx_deriving.show ppx_deriving_qcheck)))

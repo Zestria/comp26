@@ -1,3 +1,5 @@
+(** Precedence-aware rendering of the surface AST as MiniML source. *)
+
 open Ast
 
 type associativity =

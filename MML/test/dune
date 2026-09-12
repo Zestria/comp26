@@ -2,3 +2,13 @@
  (name pretty_printer_test)
  (package MML)
  (libraries MML.frontend))
+
+(test
+ (name lexer_test)
+ (package MML)
+ (libraries MML.frontend))
+
+(test
+ (name lexer_qcheck)
+ (package MML)
+ (libraries MML.frontend qcheck))
