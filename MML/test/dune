@@ -1,0 +1,4 @@
+(test
+ (name pretty_printer_test)
+ (package MML)
+ (libraries MML.frontend))

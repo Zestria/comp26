@@ -1,15 +1,15 @@
-type identifier = string [@@deriving eq, show]
+type identifier = string [@@deriving eq, show { with_path = false }]
 
 type constant =
   | Integer of int
   | Boolean of bool
   | Unit
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]
 
 type rec_flag =
   | Nonrecursive
   | Recursive
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]
 
 type pattern =
   | PWildcard
@@ -18,7 +18,7 @@ type pattern =
   | PList of pattern list
   | PCons of pattern * pattern
   | PTuple of pattern * pattern * pattern list
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]
 
 type expr =
   | Constant of constant
@@ -41,13 +41,13 @@ and case =
   { case_pattern : pattern
   ; case_expression : expr
   }
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]
 
 type structure_item =
   | Value of rec_flag * value_binding * value_binding list
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]
 
-type program = structure_item list [@@deriving eq, show]
+type program = structure_item list [@@deriving eq, show { with_path = false }]
 
 let application = List.fold_left (fun function_ argument -> Application (function_, argument))
 
