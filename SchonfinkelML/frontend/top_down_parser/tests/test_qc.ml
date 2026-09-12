@@ -144,19 +144,19 @@ let arb_triple =
 let tests =
   [ QCheck.Test.make ~name:"round-trip: parse ∘ pp = id" arb_expr (fun e ->
       P.parse_expr (surface_pp e) = Ok e)
-  ; QCheck.Test.make ~name:"glued: склеенный исходник" arb_expr (fun e ->
+  ; QCheck.Test.make ~name:"glued: glued source" arb_expr (fun e ->
       P.parse_expr ~glued:true (glue_pp e) = Ok e)
-  ; QCheck.Test.make ~name:"glued: обычный исходник читается так же" arb_expr (fun e ->
+  ; QCheck.Test.make ~name:"glued: plain source parses the same" arb_expr (fun e ->
       P.parse_expr ~glued:true (surface_pp e) = Ok e)
-  ; QCheck.Test.make ~name:"идемпотентность pp/parse" arb_expr (fun e ->
+  ; QCheck.Test.make ~name:"idempotence pp/parse" arb_expr (fun e ->
       match P.parse_expr (surface_pp e) with
       | Error _ -> false
       | Ok e' -> P.parse_expr (surface_pp e') = Ok e')
-  ; QCheck.Test.make ~name:"тотальность и границы позиции ошибки" QCheck.string (fun s ->
+  ; QCheck.Test.make ~name:"totality and error position bounds" QCheck.string (fun s ->
       match P.parse_expr s with
       | Ok _ -> true
       | Error err -> err.pos.pos_cnum >= 0 && err.pos.pos_cnum <= String.length s)
-  ; QCheck.Test.make ~name:"* связывает крепче +" arb_triple (fun (a, b, c) ->
+  ; QCheck.Test.make ~name:"* binds tighter than +" arb_triple (fun (a, b, c) ->
       P.parse_expr
         (Printf.sprintf
            "%s + %s * %s"
@@ -164,7 +164,7 @@ let tests =
            (surface_operand b)
            (surface_operand c))
       = Ok (eadd a (emul b c)))
-  ; QCheck.Test.make ~name:"- левоассоциативен" arb_triple (fun (a, b, c) ->
+  ; QCheck.Test.make ~name:"- is left-associative" arb_triple (fun (a, b, c) ->
       P.parse_expr
         (Printf.sprintf
            "%s - %s - %s"
@@ -172,7 +172,7 @@ let tests =
            (surface_operand b)
            (surface_operand c))
       = Ok (esub (esub a b) c))
-  ; QCheck.Test.make ~name:"< связывает крепче +" arb_triple (fun (a, b, c) ->
+  ; QCheck.Test.make ~name:"< binds tighter than +" arb_triple (fun (a, b, c) ->
       P.parse_expr
         (Printf.sprintf
            "%s < %s + %s"
