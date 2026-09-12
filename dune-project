@@ -2,8 +2,11 @@
 
 (using menhir 3.0)
 
+<<<<<<< HEAD
 (name comp26)
 
+=======
+>>>>>>> d96de20 (feat: add MML project)
 (source
  (github username/reponame))
 
@@ -127,6 +130,10 @@
  (homepage "https://sourcecraft.dev/shrexer06/comp26")
  (documentation
   "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
+
+(package
+ (name MML)
+ (synopsis "A short LLVM project")
  (depends
   ocaml
   dune
@@ -134,6 +141,13 @@
    (= "0.16.0"))
   menhir
   qcheck
-  ppx_expect))
+  ppx_expect
+  qcheck
+  bisect_ppx_ng
+  ppx_deriving
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (= "0.6"))))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
