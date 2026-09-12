@@ -1,0 +1,12 @@
+(cram
+ (applies_to NewGVNtricky)
+ (deps NewGVNtricky.ll))
+
+(executable
+ (public_name demo-compiler)
+ (package demo)
+ (name compiler)
+ (modules compiler)
+ (libraries Demo_LL)
+ (instrumentation
+  (backend bisect_ppx_ng)))
