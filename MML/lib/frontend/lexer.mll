@@ -53,6 +53,12 @@ let unexpected_character lexbuf character =
     (point_at_start lexbuf)
     (Printf.sprintf "unexpected character %C" character)
 ;;
+
+let invalid_identifier lexbuf text =
+  error
+    (point_at_start lexbuf)
+    (Printf.sprintf "invalid identifier %S: identifiers cannot start with a digit" text)
+;;
 }
 
 let digit = ['0'-'9']
@@ -60,6 +66,7 @@ let integer = digit+
 let identifier_start = ['a'-'z' 'A'-'Z' '_']
 let identifier_continue = ['a'-'z' 'A'-'Z' '0'-'9' '_' '\'']
 let identifier = identifier_start identifier_continue*
+let invalid_identifier = integer identifier_start identifier_continue*
 let horizontal_whitespace = [' ' '\t' '\r']+
 let operator_character =
   ['!' '$' '%' '&' '*' '+' '-' '.' '/' ':' '<' '=' '>' '?' '@' '^' '|' '~']
@@ -74,6 +81,7 @@ rule read = parse
       let* () = comment comment_start 1 lexbuf in
       read lexbuf
     }
+  | invalid_identifier as text { invalid_identifier lexbuf text }
   | integer as text       { integer_token lexbuf text }
   | identifier as text    { return (located lexbuf (keyword_or_identifier text)) }
   | "->"                  { return (located lexbuf ARROW) }
