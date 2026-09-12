@@ -57,6 +57,7 @@ let check_error ~name ~line ~column ~message input =
            error)
 ;;
 
+(** Checks that reserved words are distinguished from ordinary identifiers. *)
 let test_keywords () =
   check_tokens
     ~name:"keywords and identifiers"
@@ -80,6 +81,7 @@ let test_keywords () =
     "let rec fact = fun n -> if n <= 1 then true else false"
 ;;
 
+(** Checks tokens used by patterns, tuples, lists, functions, and match cases. *)
 let test_patterns_and_delimiters () =
   check_tokens
     ~name:"patterns and delimiters"
@@ -106,6 +108,7 @@ let test_patterns_and_delimiters () =
     "match xs with [] -> () | x :: xs -> (x, xs)"
 ;;
 
+(** Checks a representative expression containing built-in operators. *)
 let test_operators () =
   check_tokens
     ~name:"built-in operators"
@@ -124,6 +127,7 @@ let test_operators () =
     "x <> y && x >= 0 || not false"
 ;;
 
+(** Checks each operator spelling, longest-match behavior, and operator names. *)
 let test_operator_tokens () =
   let cases =
     [ ( "operator names in parentheses"
@@ -210,6 +214,7 @@ let test_operator_tokens () =
   List.iter (fun (name, input, expected) -> check_tokens ~name expected input) cases
 ;;
 
+(** Checks that correctly closed nested comments are ignored as whitespace. *)
 let test_comments () =
   check_tokens
     ~name:"nested comments"
@@ -217,6 +222,39 @@ let test_comments () =
     "let (* outer (* nested *) comment *) answer = 42"
 ;;
 
+(** Checks valid boundaries around identifiers and numeric literals. *)
+let test_identifier_boundaries () =
+  check_tokens
+    ~name:"a number and an identifier separated by whitespace"
+    [ INT 9; IDENT "ui"; EOF ]
+    "9 ui";
+  check_tokens
+    ~name:"digits are allowed after the start of an identifier"
+    [ IDENT "ui9"; EOF ]
+    "ui9";
+  check_tokens
+    ~name:"apostrophes and underscores inside identifiers"
+    [ IDENT "_value"; IDENT "value'"; IDENT "value''9"; EOF ]
+    "_value value' value''9";
+  check_tokens
+    ~name:"keyword prefixes remain identifiers"
+    [ IDENT "letx"; IDENT "recursive"; IDENT "trueValue"; IDENT "not"; EOF ]
+    "letx recursive trueValue not";
+  check_tokens
+    ~name:"a comment separates a number from an identifier"
+    [ INT 9; IDENT "ui"; EOF ]
+    "9(* separator *)ui"
+;;
+
+(** Checks that balanced delimiters are parser concerns, not lexer state. *)
+let test_unclosed_delimiters_are_tokens () =
+  check_tokens
+    ~name:"unclosed delimiters remain tokens for the parser"
+    [ LPAREN; IDENT "x"; LBRACKET; INT 1; SEMICOLON; INT 2; EOF ]
+    "(x [1; 2"
+;;
+
+(** Checks half-open byte ranges attached to ordinary tokens and EOF. *)
 let test_locations () =
   match Lexer.tokenize "let x" with
   | Error error -> failwith (Error_monad.show_error error)
@@ -246,6 +284,7 @@ let next_token_exn lexer =
   | Error error -> failwith (Error_monad.show_error error)
 ;;
 
+(** Checks sequential [next_token] consumption and stable EOF behavior. *)
 let test_incremental_lexer () =
   let lexer = Lexer.create "let x" in
   let first = next_token_exn lexer in
@@ -259,6 +298,7 @@ let test_incremental_lexer () =
   then failwith "next_token did not advance correctly or keep EOF stable"
 ;;
 
+(** Checks buffered, multiline tokenization from an input channel. *)
 let test_buffered_channel () =
   let source = "let x = 1\nlet y = x + 2\n" in
   let expected =
@@ -298,7 +338,36 @@ let test_buffered_channel () =
                  (show_tokens actual))))
 ;;
 
-let test_errors () =
+(** Checks that digit-leading identifier-shaped lexemes are rejected whole. *)
+let test_invalid_identifiers () =
+  check_error
+    ~name:"identifier starting with a digit"
+    ~line:1
+    ~column:1
+    ~message:"invalid identifier \"9ui\": identifiers cannot start with a digit"
+    "9ui";
+  check_error
+    ~name:"identifier starting with several digits"
+    ~line:1
+    ~column:1
+    ~message:"invalid identifier \"123abc456\": identifiers cannot start with a digit"
+    "123abc456";
+  check_error
+    ~name:"identifier with a leading digit after a newline"
+    ~line:2
+    ~column:3
+    ~message:"invalid identifier \"7value\": identifiers cannot start with a digit"
+    "let x =\n  7value";
+  check_error
+    ~name:"identifier starting with a digit and underscore"
+    ~line:1
+    ~column:1
+    ~message:"invalid identifier \"9_name\": identifiers cannot start with a digit"
+    "9_name"
+;;
+
+(** Checks that maximal unsupported operator spellings produce lexer errors. *)
+let test_unknown_operators () =
   check_error
     ~name:"unknown operator"
     ~line:1
@@ -306,11 +375,49 @@ let test_errors () =
     ~message:"unknown operator \"++\""
     "a ++ b";
   check_error
+    ~name:"longest unknown operator"
+    ~line:1
+    ~column:2
+    ~message:"unknown operator \"+-=\""
+    "x+-=y";
+  check_error
+    ~name:"unsupported single-character operator"
+    ~line:1
+    ~column:3
+    ~message:"unknown operator \"@\""
+    "f @ x"
+;;
+
+(** Checks unsupported non-operator characters and their exact positions. *)
+let test_unexpected_characters () =
+  check_error
     ~name:"unexpected character"
     ~line:1
     ~column:5
     ~message:"unexpected character '`'"
     "let `";
+  check_error
+    ~name:"unexpected character inside an identifier-shaped input"
+    ~line:1
+    ~column:2
+    ~message:"unexpected character '#'"
+    "x#field";
+  check_error
+    ~name:"unexpected opening brace"
+    ~line:1
+    ~column:1
+    ~message:"unexpected character '{'"
+    "{x}";
+  check_error
+    ~name:"multiline unexpected character location"
+    ~line:2
+    ~column:3
+    ~message:"unexpected character '`'"
+    "let x = 1\n  `"
+;;
+
+(** Checks that EOF inside simple and nested comments reports their opening. *)
+let test_unterminated_comments () =
   check_error
     ~name:"unterminated comment"
     ~line:1
@@ -318,17 +425,21 @@ let test_errors () =
     ~message:"unterminated comment"
     "x (* never closed";
   check_error
+    ~name:"unterminated nested multiline comment"
+    ~line:2
+    ~column:1
+    ~message:"unterminated comment"
+    "let x = 1\n(* outer\n   (* inner *)"
+;;
+
+(** Checks that an integer outside the runtime [int] range is rejected. *)
+let test_integer_overflow () =
+  check_error
     ~name:"integer overflow"
     ~line:1
     ~column:1
     ~message:"integer literal is out of range"
-    (string_of_int Int.max_int ^ "0");
-  check_error
-    ~name:"multiline location"
-    ~line:2
-    ~column:3
-    ~message:"unexpected character '`'"
-    "let x = 1\n  `"
+    (string_of_int Int.max_int ^ "0")
 ;;
 
 let () =
@@ -337,8 +448,14 @@ let () =
   test_operators ();
   test_operator_tokens ();
   test_comments ();
+  test_identifier_boundaries ();
+  test_unclosed_delimiters_are_tokens ();
   test_locations ();
   test_incremental_lexer ();
   test_buffered_channel ();
-  test_errors ()
+  test_invalid_identifiers ();
+  test_unknown_operators ();
+  test_unexpected_characters ();
+  test_unterminated_comments ();
+  test_integer_overflow ()
 ;;

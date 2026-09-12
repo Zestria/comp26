@@ -25,6 +25,8 @@ let lexemes separator tokens =
   tokens |> List.map to_lexeme |> String.concat separator
 ;;
 
+(** Property: printing arbitrary tokens with spaces and lexing the result
+    recovers the same tokens followed by [EOF]. *)
 let token_round_trip =
   Test.make
     ~name:"token lexemes round-trip through the lexer"
@@ -36,6 +38,8 @@ let token_round_trip =
       | Ok actual -> List.equal equal (expected @ [ EOF ]) actual)
 ;;
 
+(** Property: a correctly closed nested comment separates tokens exactly like
+    ordinary whitespace. *)
 let comments_are_whitespace =
   Test.make
     ~name:"nested comments behave like whitespace"
