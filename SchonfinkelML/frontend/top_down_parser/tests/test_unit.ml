@@ -16,7 +16,7 @@ let total = ref 0
 
 let report_fail name ~expected ~actual =
   incr failures;
-  Printf.printf "FAIL: %s\n  ожидалось: %s\n  получено:  %s\n%!" name expected actual
+  Printf.printf "FAIL: %s\n  expected: %s\n  actual:   %s\n%!" name expected actual
 ;;
 
 let check_expr name ?glued src expected =
@@ -25,14 +25,14 @@ let check_expr name ?glued src expected =
   | Ok e when e = expected -> ()
   | Ok e -> report_fail name ~expected:(string_of_expr expected) ~actual:(string_of_expr e)
   | Error err ->
-    report_fail name ~expected:(string_of_expr expected) ~actual:("ошибка: " ^ P.string_of_error err)
+    report_fail name ~expected:(string_of_expr expected) ~actual:("error: " ^ P.string_of_error err)
 ;;
 
 let check_error name ?glued src =
   incr total;
   match P.parse_expr ?glued src with
   | Error _ -> ()
-  | Ok e -> report_fail name ~expected:"ошибка разбора" ~actual:(string_of_expr e)
+  | Ok e -> report_fail name ~expected:"parse error" ~actual:(string_of_expr e)
 ;;
 
 let check_error_at name src expected_offset =
@@ -44,7 +44,7 @@ let check_error_at name src expected_offset =
       name
       ~expected:(string_of_int expected_offset)
       ~actual:(string_of_int e.pos.pos_cnum)
-  | Ok e -> report_fail name ~expected:"ошибка разбора" ~actual:(string_of_expr e)
+  | Ok e -> report_fail name ~expected:"parse error" ~actual:(string_of_expr e)
 ;;
 
 let check_does_not_raise name src =
@@ -54,16 +54,16 @@ let check_does_not_raise name src =
    | exn -> raised := Some (Printexc.to_string exn));
   match !raised with
   | None -> ()
-  | Some s -> report_fail name ~expected:"Ok/Error без исключений" ~actual:s
+  | Some s -> report_fail name ~expected:"Ok/Error without exceptions" ~actual:s
 ;;
 
 (* --- Literals and identifiers --- *)
 
 let () =
-  check_expr "числовой литерал" "42" (econsti 42);
-  check_expr "идентификатор" "x" (Ident "x");
-  check_expr "идентификатор с цифрами и штрихом" "x1'_2" (Ident "x1'_2");
-  check_expr "верхний регистр" "Foo" (Ident "Foo")
+  check_expr "integer literal" "42" (econsti 42);
+  check_expr "identifier" "x" (Ident "x");
+  check_expr "identifier with digits and a quote" "x1'_2" (Ident "x1'_2");
+  check_expr "uppercase identifier" "Foo" (Ident "Foo")
 ;;
 
 (* --- Application --- *)
@@ -71,33 +71,33 @@ let () =
 let () =
   let x = Ident "x" and y = Ident "y" and z = Ident "z" and f = Ident "f" in
   let g = Ident "g" in
-  check_expr "аппликация левоассоциативна" "x y z" (eapp (eapp x y) z);
-  check_expr "аппликация с скобками" "f (g x)" (eapp f (eapp g x));
-  check_expr "аппликация нескольких атомов" "f 1 2" (eapp (eapp f (econsti 1)) (econsti 2));
-  check_expr "аппликация связывает крепче плюса" "f x + y" (eadd (eapp f x) y)
+  check_expr "application is left-associative" "x y z" (eapp (eapp x y) z);
+  check_expr "application with parens" "f (g x)" (eapp f (eapp g x));
+  check_expr "application of several atoms" "f 1 2" (eapp (eapp f (econsti 1)) (econsti 2));
+  check_expr "application binds tighter than plus" "f x + y" (eadd (eapp f x) y)
 ;;
 
 (* --- Operators --- *)
 
 let () =
   let a = Ident "a" and b = Ident "b" and c = Ident "c" and x = Ident "x" in
-  check_expr "* крепче +" "1 + 2 * 3" (eadd (econsti 1) (emul (econsti 2) (econsti 3)));
-  check_expr "* крепче + (2)" "1 * 2 + 3" (eadd (emul (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "- левоассоциативен" "1 - 2 - 3" (esub (esub (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "+ левоассоциативен" "1 + 2 + 3" (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "скобки меняют порядок" "(1 + 2) * 3" (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "деление" "1 / 2" (ediv (econsti 1) (econsti 2));
-  check_expr "унарный минус" "- x" (euminus x);
-  check_expr "унарный минус ниже аппликации" "- f x" (euminus (eapp (Ident "f") x));
-  check_expr "бинарный и унарный минус" "1 - -2" (esub (econsti 1) (euminus (econsti 2)));
-  check_expr "бинарный минус" "1 - 2" (esub (econsti 1) (econsti 2));
-  check_expr "сравнение <" "a < b" (elt a b);
-  check_expr "сравнение <=" "a <= b" (elte a b);
-  check_expr "сравнение >" "a > b" (egt a b);
-  check_expr "сравнение >=" "a >= b" (egte a b);
-  check_expr "сравнение =" "a = b" (eeq a b);
-  check_expr "сравнение ниже +" "a < b + c" (elt a (eadd b c));
-  check_expr "сравнения левоассоциативны" "a = b = c" (eeq (eeq a b) c)
+  check_expr "* binds tighter than +" "1 + 2 * 3" (eadd (econsti 1) (emul (econsti 2) (econsti 3)));
+  check_expr "* binds tighter than + (2)" "1 * 2 + 3" (eadd (emul (econsti 1) (econsti 2)) (econsti 3));
+  check_expr "- is left-associative" "1 - 2 - 3" (esub (esub (econsti 1) (econsti 2)) (econsti 3));
+  check_expr "+ is left-associative" "1 + 2 + 3" (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
+  check_expr "parens change the order" "(1 + 2) * 3" (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
+  check_expr "division" "1 / 2" (ediv (econsti 1) (econsti 2));
+  check_expr "unary minus" "- x" (euminus x);
+  check_expr "unary minus below application" "- f x" (euminus (eapp (Ident "f") x));
+  check_expr "binary and unary minus" "1 - -2" (esub (econsti 1) (euminus (econsti 2)));
+  check_expr "binary minus" "1 - 2" (esub (econsti 1) (econsti 2));
+  check_expr "comparison <" "a < b" (elt a b);
+  check_expr "comparison <=" "a <= b" (elte a b);
+  check_expr "comparison >" "a > b" (egt a b);
+  check_expr "comparison >=" "a >= b" (egte a b);
+  check_expr "comparison =" "a = b" (eeq a b);
+  check_expr "comparison is below +" "a < b + c" (elt a (eadd b c));
+  check_expr "comparisons are left-associative" "a = b = c" (eeq (eeq a b) c)
 ;;
 
 (* --- if / fun --- *)
@@ -105,17 +105,17 @@ let () =
 let () =
   let x = Ident "x" and y = Ident "y" in
   check_expr "if" "if x then 1 else 2" (eif x (econsti 1) (econsti 2));
-  check_expr "ветви if тянутся вправо" "if x then 1 else 2 + 3" (eif x (econsti 1) (eadd (econsti 2) (econsti 3)));
+  check_expr "if branches extend to the right" "if x then 1 else 2 + 3" (eif x (econsti 1) (eadd (econsti 2) (econsti 3)));
   check_expr
-    "if с условием-сравнением"
+    "if with a comparison condition"
     "if a < b then f x else g y"
     (eif (elt (Ident "a") (Ident "b")) (eapp (Ident "f") x) (eapp (Ident "g") y));
-  check_expr "вложенный if" "if x then if y then 1 else 2 else 3"
+  check_expr "nested if" "if x then if y then 1 else 2 else 3"
     (eif x (eif y (econsti 1) (econsti 2)) (econsti 3));
   check_expr "fun" "fun x -> x" (elambda "x" x);
-  check_expr "fun с двумя параметрами" "fun x y -> x + y" (elambda "x" (elambda "y" (eadd x y)));
-  check_expr "fun с явным fun" "fun x -> fun y -> x" (elambda "x" (elambda "y" x));
-  check_expr "тело fun тянется вправо" "fun x -> x + 1" (elambda "x" (eadd x (econsti 1)))
+  check_expr "fun with two parameters" "fun x y -> x + y" (elambda "x" (elambda "y" (eadd x y)));
+  check_expr "fun with an explicit fun" "fun x -> fun y -> x" (elambda "x" (elambda "y" x));
+  check_expr "fun body extends to the right" "fun x -> x + 1" (elambda "x" (eadd x (econsti 1)))
 ;;
 
 (* --- let --- *)
@@ -123,12 +123,12 @@ let () =
 let () =
   let x = Ident "x" and f = Ident "f" in
   check_expr "let" "let x = 1 in x" (elet "x" (econsti 1) x);
-  check_expr "let с fun" "let f = fun x -> x in f 2" (elet "f" (elambda "x" x) (eapp f (econsti 2)));
-  check_expr "let с сахаром параметров" "let f x = x + 1 in f 2"
+  check_expr "let with fun" "let f = fun x -> x in f 2" (elet "f" (elambda "x" x) (eapp f (econsti 2)));
+  check_expr "let with parameter sugar" "let f x = x + 1 in f 2"
     (elet "f" (elambda "x" (eadd x (econsti 1))) (eapp f (econsti 2)));
   check_expr "let rec" "let rec f x = f x in f"
     (eletrec "f" (elambda "x" (eapp f x)) f);
-  check_expr "вложенные let"
+  check_expr "nested let"
     "let x = 1 in let y = 2 in x + y"
     (elet "x" (econsti 1) (elet "y" (econsti 2) (eadd x (Ident "y"))))
 ;;
@@ -136,17 +136,17 @@ let () =
 (* --- Comments and whitespace --- *)
 
 let () =
-  check_expr "комментарии" "(* c *) 1 (* d *)" (econsti 1);
-  check_expr "переводы строк" "1\n+\n2" (eadd (econsti 1) (econsti 2));
-  check_expr "вложенные комментарии" "(* a (* b *) c *) 1" (econsti 1);
-  check_expr "лишние пробелы и скобки" "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
+  check_expr "comments" "(* c *) 1 (* d *)" (econsti 1);
+  check_expr "newlines" "1\n+\n2" (eadd (econsti 1) (econsti 2));
+  check_expr "nested comments" "(* a (* b *) c *) 1" (econsti 1);
+  check_expr "extra spaces and parens" "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
 ;;
 
 (* --- CPS factorial and fibonacci --- *)
 
 let () =
   check_expr
-    "CPS факториал"
+    "CPS factorial"
     "let rec fact n k = if n = 0 then k 1 else fact (n - 1) (fun r -> k (n * r)) in \
      fact 5 (fun x -> x)"
     (eletrec
@@ -163,7 +163,7 @@ let () =
                    (elambda "r" (eapp (Ident "k") (emul (Ident "n") (Ident "r"))))))))
        (eapp (eapp (Ident "fact") (econsti 5)) (elambda "x" (Ident "x"))));
   check_expr
-    "CPS фибоначчи"
+    "CPS fibonacci"
     "let rec fib n k = if n < 2 then k n else fib (n - 1) (fun a -> fib (n - 2) (fun b -> k (a \
      + b))) in fib 10 (fun x -> x)"
     (eletrec
@@ -190,11 +190,11 @@ let () =
 (* --- Glued keywords --- *)
 
 let () =
-  check_expr ~glued:true "слипание: let/in" "letx=1inx" (elet "x" (econsti 1) (Ident "x"));
-  check_expr ~glued:true "слипание: fun" "funx->x" (elambda "x" (Ident "x"));
-  check_expr ~glued:true "слипание: if/then/else" "ifn<1then0else1"
+  check_expr ~glued:true "glued: let/in" "letx=1inx" (elet "x" (econsti 1) (Ident "x"));
+  check_expr ~glued:true "glued: fun" "funx->x" (elambda "x" (Ident "x"));
+  check_expr ~glued:true "glued: if/then/else" "ifn<1then0else1"
     (eif (elt (Ident "n") (econsti 1)) (econsti 0) (econsti 1));
-  check_expr ~glued:true "слипание: rec, аппликация в скобках"
+  check_expr ~glued:true "glued: rec, application in parens"
     "letrecf=funx->ifx=0then1elsef(x-1)inf(5)"
     (eletrec
        "f"
@@ -207,55 +207,55 @@ let () =
        (eapp (Ident "f") (econsti 5)));
   (* A name starting with a keyword stays a name while
      the keyword branch does not parse. *)
-  check_expr ~glued:true "letter как имя" "letter" (Ident "letter");
-  check_expr ~glued:true "letter в скобках" "(letter)" (Ident "letter");
-  check_expr ~glued:true "letters как имя" "letters" (Ident "letters");
+  check_expr ~glued:true "letter as a name" "letter" (Ident "letter");
+  check_expr ~glued:true "letter in parens" "(letter)" (Ident "letter");
+  check_expr ~glued:true "letters as a name" "letters" (Ident "letters");
   (* Documented ambiguity: keyword-first wins, so this reads as
      `let ter = 1 in letter`. *)
-  check_expr ~glued:true "неоднозначность letter=" "letter=1inletter"
+  check_expr ~glued:true "letter= ambiguity" "letter=1inletter"
     (elet "ter" (econsti 1) (Ident "letter"));
   (* Without gluing the same text reads differently, which is
      exactly what the flag does: the tree either differs or the text
      does not parse at all. *)
-  check_error "слипание выключено: fun" "funx->x";
-  check_error "слипание выключено: нет границы после in" "let x = 1 inx";
-  check_expr "слипание выключено: letx — имя" "letx=1inx"
+  check_error "gluing off: fun" "funx->x";
+  check_error "gluing off: no boundary after in" "let x = 1 inx";
+  check_expr "gluing off: letx is a name" "letx=1inx"
     (eeq (Ident "letx") (eapp (econsti 1) (Ident "inx")));
-  check_expr "слипание выключено: ifn — имя" "ifn<1then0else1"
+  check_expr "gluing off: ifn is a name" "ifn<1then0else1"
     (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")));
-  check_error ~glued:true "слипание имён: let x=1 без in" "let x=1";
+  check_error ~glued:true "name gluing: let x=1 without in" "let x=1";
   (* Two names separated by a space are still two tokens:
      only keyword+identifier glues, not everything. *)
-  check_expr ~glued:true "два имени через пробел" "f x" (eapp (Ident "f") (Ident "x"))
+  check_expr ~glued:true "two names separated by a space" "f x" (eapp (Ident "f") (Ident "x"))
 ;;
 
 (* --- Errors --- *)
 
 let () =
-  check_error "пустой ввод" "";
-  check_error "только пробелы" "   ";
-  check_error "let без in" "let x = 1";
-  check_error "if без else" "if x then 1";
-  check_error "незакрытая скобка" "(1";
-  check_error "лишняя скобка" "1)";
-  check_error "unit не поддержан" "()";
-  check_error "пустые скобки" "( )";
-  check_error "let без имени" "let = 1 in x";
-  check_error "имя-ключевое слово" "let rec = 1 in x";
-  check_error "оборванный плюс" "1 +";
-  check_error "незакрытый комментарий" "(* unterminated";
-  check_error "недопустимый символ" "1 % 2";
-  check_error "ключевое слово как выражение" "in";
-  check_error "переполнение литерала" "99999999999999999999";
-  check_error_at "позиция недопустимого символа" "1 % 2" 2;
-  check_error_at "позиция отсутствующего in" "let x = 1" 9;
+  check_error "empty input" "";
+  check_error "whitespace only" "   ";
+  check_error "let without in" "let x = 1";
+  check_error "if without else" "if x then 1";
+  check_error "unclosed paren" "(1";
+  check_error "extra paren" "1)";
+  check_error "unit is not supported" "()";
+  check_error "empty parens" "( )";
+  check_error "let without a name" "let = 1 in x";
+  check_error "keyword as a name" "let rec = 1 in x";
+  check_error "dangling plus" "1 +";
+  check_error "unclosed comment" "(* unterminated";
+  check_error "invalid character" "1 % 2";
+  check_error "keyword as an expression" "in";
+  check_error "literal overflow" "99999999999999999999";
+  check_error_at "position of an invalid character" "1 % 2" 2;
+  check_error_at "position of a missing in" "let x = 1" 9;
   List.iter
-    (fun src -> check_does_not_raise ("не падает на " ^ String.escaped src) src)
+    (fun src -> check_does_not_raise ("does not raise on " ^ String.escaped src) src)
     [ "(((((("; "%$#@!"; "(*"; "letx=1inx"; "let rec"; "-->"; "\""; "'''" ]
 ;;
 
 if !failures = 0
-then Printf.printf "unit: %d проверок пройдено\n%!" !total
+then Printf.printf "unit: %d checks passed\n%!" !total
 else (
-  Printf.printf "unit: упало %d из %d проверок\n%!" !failures !total;
+  Printf.printf "unit: %d of %d checks failed\n%!" !failures !total;
   exit 1)
