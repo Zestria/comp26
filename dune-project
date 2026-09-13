@@ -5,8 +5,11 @@
 <<<<<<< HEAD
 (name comp26)
 
+<<<<<<< HEAD
 =======
 >>>>>>> d96de20 (feat: add MML project)
+=======
+>>>>>>> 1f3200c (svmk17/project_base (!1))
 (source
  (github username/reponame))
 
@@ -139,7 +142,6 @@
   (angstrom
    (= "0.16.0"))
   menhir
-  qcheck
   ppx_expect
   qcheck
   bisect_ppx_ng

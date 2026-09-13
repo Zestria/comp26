@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 on:
   # push:
@@ -101,3 +102,58 @@ workflows:
               # - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
               # - /app/bin/scan-result-uploader
         # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
+=======
+on:
+  pull_request:
+    - workflows: [ci]
+      filter:
+        source_branches: ["**"]
+        target_branches: ["main"]
+
+  push:
+    - workflows: [ci]
+      filter:
+        branches: ["main"]
+
+workflows:
+  ci:
+    settings:
+      max_cube_duration: 30m
+
+    tasks:
+      - name: ocaml-ci
+        cubes:
+          - name: checks
+            image: ocaml/opam:debian-12
+
+            script:
+              - opam update
+              - opam switch create 5.5.1 ocaml-base-compiler.5.5.1 --yes
+              - >
+                opam install
+                --switch=5.5.1
+                .
+                --deps-only
+                --with-test
+                --with-doc
+                --yes
+              - >
+                opam install
+                --switch=5.5.1
+                ocamlformat.0.29.0
+                odoc
+                --yes
+              - >
+                opam pin add
+                --switch=5.5.1
+                zanuda
+                git+https://github.com/Kakadu/zanuda.git#master
+                --yes
+              - opam exec --switch=5.5.1 -- ocamlc --version
+              - opam exec --switch=5.5.1 -- ocamlformat --version
+              - opam exec --switch=5.5.1 -- dune build
+              - opam exec --switch=5.5.1 -- dune build @fmt
+              - opam exec --switch=5.5.1 -- dune build @doc
+              - opam exec --switch=5.5.1 -- dune runtest
+              - opam exec --switch=5.5.1 -- zanuda -dir .
+>>>>>>> 1f3200c (svmk17/project_base (!1))

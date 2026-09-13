@@ -1,4 +1,9 @@
 /_build
 /_coverage
+<<<<<<< HEAD
 /_opam
 /*.install
+=======
+.vscode
+.envrc
+>>>>>>> 1f3200c (svmk17/project_base (!1))

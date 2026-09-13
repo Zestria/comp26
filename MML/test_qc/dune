@@ -10,4 +10,3 @@
   (:< test_qc.exe))
  (action
   (run %{<})))
-
