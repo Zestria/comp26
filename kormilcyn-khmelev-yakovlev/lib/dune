@@ -1,0 +1,9 @@
+(library
+ (name kormilcyn_khmelev_yakovlev_lib)
+ (public_name shmel.Lib)
+ (wrapped false)
+ (modules Ast Printast)
+ (preprocess
+  (pps ppx_deriving.show))
+ (instrumentation
+  (backend bisect_ppx_ng)))
