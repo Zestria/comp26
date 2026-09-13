@@ -27,7 +27,7 @@ workflows:
               - sudo su -
               - echo "I am $(whoami)"
               - sudo usermod -aG root $(whoami)
-              - opam repo set-url default https://se.math.spbu.ru/opam
+              - opam repo set-url default https://se.math.spbu.ru/opamadd bare init to opam and missed packages)
               - opam update
               - cd $SOURCECRAFT_WORKSPACE
               - git config --global --add safe.directory .
