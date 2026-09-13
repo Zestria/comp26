@@ -1,3 +1,4 @@
+
 on:
   # push:
   #   - workflows: [ sample-workflow ]
@@ -100,4 +101,3 @@ workflows:
               # - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
               # - /app/bin/scan-result-uploader
         # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
-              - opam exec --switch=5.5.1 -- zanuda -dir .
