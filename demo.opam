@@ -8,7 +8,7 @@ homepage: "https://github.com/username/reponame"
 doc: "https://url/to/documentation"
 bug-reports: "https://github.com/username/reponame/issues"
 depends: [
-  "ocaml"
+  "ocaml" {= "5.5.1"}
   "dune" {>= "3.24"}
   "angstrom" {= "0.16.0"}
   "qcheck"
