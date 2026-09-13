@@ -86,7 +86,7 @@
    (= "0.9"))))
 
 (package
- (name MML)
+ (name MMML)
  (synopsis "A short LLVM project")
  (depends
   ocaml
