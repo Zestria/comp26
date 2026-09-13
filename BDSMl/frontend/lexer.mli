@@ -1,36 +1,36 @@
 type token =
-  | Unit
+  | TUnit
   | TInt of int
-  | Idebt of string
-  | True
-  | False
-  | Plus
-  | Minus
-  | Star
-  | Slash
-  | Equal
-  | NotEqual
-  | More
-  | Less
-  | EMore
-  | ELess
-  | And
-  | Or
-  | Not
-  | LPAREN
-  | RPAREN
-  | UNDERSCORE
-  | SEMISEMI (* ;; *)
-  | EOF
-  | IF
-  | THEN
-  | ELSE
-  | LET
-  | REC
-  | IN
-  | FUN
-  | ARROW (* -> *)
+  | TIdent of string
+  | TTrue
+  | TFalse
+  | TPlus
+  | TMinus
+  | TStar
+  | TSlash
+  | TEqual
+  | TNotEqual
+  | TMore
+  | TLess
+  | TEMore
+  | TELess
+  | TAnd
+  | TOr
+  | TNot
+  | TLParen
+  | TRParen
+  | TUnderscore
+  | TSemisemi (* ;; *)
+  | TEOF
+  | TIF
+  | TThen
+  | TElse
+  | TLet
+  | TRec
+  | TIn
+  | TFun
+  | TArrow (* -> *)
 
 type error = [ `lexer_error of string ]
 
-val tokenize : string -> token list
+val tokenize : string -> (token list, [> error ]) result
