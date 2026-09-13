@@ -3,9 +3,7 @@ open Token
 let show_tokens tokens =
   Format.asprintf
     "[%a]"
-    (Format.pp_print_list
-       ~pp_sep:(fun formatter () -> Format.fprintf formatter ";@ ")
-       pp)
+    (Format.pp_print_list ~pp_sep:(fun formatter () -> Format.fprintf formatter ";@ ") pp)
     tokens
 ;;
 
@@ -40,11 +38,15 @@ let check_error ~name ~line ~column ~message input =
   match Lexer.tokenize input with
   | Ok tokens ->
     failwith
-      (Format.asprintf "%s: expected an error, got %s" name (show_tokens (List.map (fun x -> x.token) tokens)))
+      (Format.asprintf
+         "%s: expected an error, got %s"
+         name
+         (show_tokens (List.map (fun x -> x.token) tokens)))
   | Error error ->
-    if error.location.line <> line
-       || error.location.column <> column
-       || not (String.equal error.message message)
+    if
+      error.location.line <> line
+      || error.location.column <> column
+      || not (String.equal error.message message)
     then
       failwith
         (Format.asprintf
@@ -206,9 +208,7 @@ let test_operator_tokens () =
         ; IDENT "tail"
         ; EOF
         ] )
-    ; ( "structural symbols stay distinct tokens"
-      , "| -> ::"
-      , [ BAR; ARROW; CONS; EOF ] )
+    ; "structural symbols stay distinct tokens", "| -> ::", [ BAR; ARROW; CONS; EOF ]
     ]
   in
   List.iter (fun (name, input, expected) -> check_tokens ~name expected input) cases
@@ -291,10 +291,11 @@ let test_incremental_lexer () =
   let second = next_token_exn lexer in
   let eof = next_token_exn lexer in
   let repeated_eof = next_token_exn lexer in
-  if not (equal first.token LET)
-     || not (equal second.token (IDENT "x"))
-     || not (equal eof.token EOF)
-     || not (equal_located eof repeated_eof)
+  if
+    (not (equal first.token LET))
+    || (not (equal second.token (IDENT "x")))
+    || (not (equal eof.token EOF))
+    || not (equal_located eof repeated_eof)
   then failwith "next_token did not advance correctly or keep EOF stable"
 ;;
 
@@ -302,40 +303,29 @@ let test_incremental_lexer () =
 let test_buffered_channel () =
   let source = "let x = 1\nlet y = x + 2\n" in
   let expected =
-    [ LET
-    ; IDENT "x"
-    ; EQUAL
-    ; INT 1
-    ; LET
-    ; IDENT "y"
-    ; EQUAL
-    ; IDENT "x"
-    ; PLUS
-    ; INT 2
-    ; EOF
-    ]
+    [ LET; IDENT "x"; EQUAL; INT 1; LET; IDENT "y"; EQUAL; IDENT "x"; PLUS; INT 2; EOF ]
   in
   let path = Filename.temp_file "mml-lexer-" ".ml" in
   Fun.protect
     ~finally:(fun () -> Sys.remove path)
     (fun () ->
-      let output = open_out_bin path in
-      Fun.protect
-        ~finally:(fun () -> close_out output)
-        (fun () -> output_string output source);
-      let input = open_in_bin path in
-      Fun.protect
-        ~finally:(fun () -> close_in input)
-        (fun () ->
-          let actual = tokens_of_lexer_exn (Lexer.from_channel input) in
-          if not (List.equal equal expected actual)
-          then
-            failwith
-              (Format.asprintf
-                 "buffered channel:@ input: %S@ expected: %s@ actual:   %s"
-                 source
-                 (show_tokens expected)
-                 (show_tokens actual))))
+       let output = open_out_bin path in
+       Fun.protect
+         ~finally:(fun () -> close_out output)
+         (fun () -> output_string output source);
+       let input = open_in_bin path in
+       Fun.protect
+         ~finally:(fun () -> close_in input)
+         (fun () ->
+            let actual = tokens_of_lexer_exn (Lexer.from_channel input) in
+            if not (List.equal equal expected actual)
+            then
+              failwith
+                (Format.asprintf
+                   "buffered channel:@ input: %S@ expected: %s@ actual:   %s"
+                   source
+                   (show_tokens expected)
+                   (show_tokens actual))))
 ;;
 
 (** Checks that digit-leading identifier-shaped lexemes are rejected whole. *)

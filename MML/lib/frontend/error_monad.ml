@@ -1,8 +1,8 @@
 (** Result computations carrying a positioned frontend diagnostic. *)
 
 type error =
-  { location : Location.point  (** Where the error was detected. *)
-  ; message : string  (** Human-readable explanation without the location. *)
+  { location : Location.point (** Where the error was detected. *)
+  ; message : string (** Human-readable explanation without the location. *)
   }
 [@@deriving eq]
 

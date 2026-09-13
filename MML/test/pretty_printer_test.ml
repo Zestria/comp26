@@ -31,10 +31,7 @@ let check_program name expected =
 ;;
 
 let test_constants_and_collections () =
-  check_expr
-    "tuple"
-    "(1, true, ())"
-    (Tuple (int 1, bool true, [ Constant Unit ]));
+  check_expr "tuple" "(1, true, ())" (Tuple (int 1, bool true, [ Constant Unit ]));
   check_expr "list" "[1; 2 + 3]" (List [ int 1; infix "+" (int 2) (int 3) ]);
   check_pattern
     "list pattern"
@@ -47,7 +44,10 @@ let test_constants_and_collections () =
 ;;
 
 let test_operator_precedence () =
-  let a = var "a" and b = var "b" and c = var "c" and d = var "d" in
+  let a = var "a"
+  and b = var "b"
+  and c = var "c"
+  and d = var "d" in
   check_expr
     "mixed precedence"
     "(a + b) * (c - d)"
@@ -59,10 +59,7 @@ let test_operator_precedence () =
     "a :: b :: []"
     (infix "::" a (infix "::" b (List [])));
   check_expr "prefix precedence" "not (a && b)" (prefix "not" (infix "&&" a b));
-  check_expr
-    "operator as a value"
-    "(++) a b"
-    (application (var "++") [ a; b ])
+  check_expr "operator as a value" "(++) a b" (application (var "++") [ a; b ])
 ;;
 
 let test_functions_and_applications () =
@@ -109,9 +106,7 @@ let test_program () =
           ] )
   in
   let fac =
-    { pattern = pvar "fac"
-    ; expression = function_ [ pvar "n"; pvar "k" ] fac_body
-    }
+    { pattern = pvar "fac"; expression = function_ [ pvar "n"; pvar "k" ] fac_body }
   in
   check_program
     "CPS factorial"

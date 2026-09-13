@@ -6,7 +6,8 @@ type t =
   | INT of (int[@gen QCheck.Gen.nat_small])
   | IDENT of
       (string
-      [@gen QCheck.Gen.map (fun value -> "value_" ^ string_of_int value) QCheck.Gen.nat_small])
+      [@gen
+        QCheck.Gen.map (fun value -> "value_" ^ string_of_int value) QCheck.Gen.nat_small])
   | LET
   | REC
   | AND
@@ -49,8 +50,8 @@ type t =
 
 (** A token paired with its range in the original input. *)
 type located =
-  { token : t  (** The recognized token. *)
-  ; span : Location.span  (** Its half-open source range. *)
+  { token : t (** The recognized token. *)
+  ; span : Location.span (** Its half-open source range. *)
   }
 [@@deriving eq, show { with_path = false }]
 

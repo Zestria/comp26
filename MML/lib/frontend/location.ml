@@ -1,9 +1,9 @@
 (** Source positions use zero-based byte offsets and one-based lines and columns. *)
 
 type point =
-  { offset : int  (** Zero-based byte offset from the start of the input. *)
-  ; line : int  (** One-based line number. *)
-  ; column : int  (** One-based byte column within [line]. *)
+  { offset : int (** Zero-based byte offset from the start of the input. *)
+  ; line : int (** One-based line number. *)
+  ; column : int (** One-based byte column within [line]. *)
   }
 [@@deriving eq, show { with_path = false }]
 

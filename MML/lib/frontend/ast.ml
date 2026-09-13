@@ -45,16 +45,18 @@ and case =
   }
 [@@deriving eq, show { with_path = false }]
 
-type structure_item =
-  | Value of rec_flag * value_binding * value_binding list
+type structure_item = Value of rec_flag * value_binding * value_binding list
 [@@deriving eq, show { with_path = false }]
 
 type program = structure_item list [@@deriving eq, show { with_path = false }]
 
-let application = List.fold_left (fun function_ argument -> Application (function_, argument))
+let application =
+  List.fold_left (fun function_ argument -> Application (function_, argument))
+;;
 
 let function_ parameters body =
   List.fold_right (fun parameter body -> Lambda (parameter, body)) parameters body
+;;
 
 let infix operator left right = application (Variable operator) [ left; right ]
 let prefix operator operand = Application (Variable operator, operand)
