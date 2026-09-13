@@ -1,15 +1,8 @@
 (lang dune 3.24)
 
 (using menhir 3.0)
-
-<<<<<<< HEAD
 (name comp26)
 
-<<<<<<< HEAD
-=======
->>>>>>> d96de20 (feat: add MML project)
-=======
->>>>>>> 1f3200c (svmk17/project_base (!1))
 (source
  (github username/reponame))
 
@@ -131,7 +124,7 @@
   (uri "git+ssh://ssh.sourcecraft.dev/shrexer06/comp26.git"))
  (homepage "https://sourcecraft.dev/shrexer06/comp26")
  (documentation
-  "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
+  "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend"))
 
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
