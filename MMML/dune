@@ -4,9 +4,9 @@
 
 (executable
  (public_name mml-compiler)
- (package MML)
+ (package MMML)
  (name compiler)
  (modules compiler)
- (libraries MML_LL)
+ (libraries MMML_LL)
  (instrumentation
   (backend bisect_ppx_ng)))

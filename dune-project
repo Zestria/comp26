@@ -28,7 +28,7 @@
   ppx_deriving_qcheck))
 
 (package
- (name MML)
+ (name MMML)
  (synopsis "A short LLVM project")
  (depends
   ocaml
