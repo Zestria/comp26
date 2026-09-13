@@ -8,6 +8,9 @@
 
 open Ast
 
-type error = [ `parse_error of string ]
+type error =
+  [ `lexer_error of string
+  | `parse_error of string
+  ]
 
-val parse_program_LL : string -> (program, error) result
+val parse_string_LL : string -> (program, [> error ]) result
