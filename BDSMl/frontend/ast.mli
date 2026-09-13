@@ -36,7 +36,7 @@ type rec_flag =
 type pattern =
   | PVar of ident
   | PUnit
-  | PWild
+  | PUnderscore
 [@@deriving show { with_path = false }]
 
 type expr =
