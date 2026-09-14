@@ -23,9 +23,13 @@ let check_expr name ?glued src expected =
   incr total;
   match P.parse_expr ?glued src with
   | Ok e when e = expected -> ()
-  | Ok e -> report_fail name ~expected:(string_of_expr expected) ~actual:(string_of_expr e)
+  | Ok e ->
+    report_fail name ~expected:(string_of_expr expected) ~actual:(string_of_expr e)
   | Error err ->
-    report_fail name ~expected:(string_of_expr expected) ~actual:("error: " ^ P.string_of_error err)
+    report_fail
+      name
+      ~expected:(string_of_expr expected)
+      ~actual:("error: " ^ P.string_of_error err)
 ;;
 
 let check_error name ?glued src =
@@ -69,23 +73,47 @@ let () =
 (* --- Application --- *)
 
 let () =
-  let x = Ident "x" and y = Ident "y" and z = Ident "z" and f = Ident "f" in
+  let x = Ident "x"
+  and y = Ident "y"
+  and z = Ident "z"
+  and f = Ident "f" in
   let g = Ident "g" in
   check_expr "application is left-associative" "x y z" (eapp (eapp x y) z);
   check_expr "application with parens" "f (g x)" (eapp f (eapp g x));
-  check_expr "application of several atoms" "f 1 2" (eapp (eapp f (econsti 1)) (econsti 2));
+  check_expr
+    "application of several atoms"
+    "f 1 2"
+    (eapp (eapp f (econsti 1)) (econsti 2));
   check_expr "application binds tighter than plus" "f x + y" (eadd (eapp f x) y)
 ;;
 
 (* --- Operators --- *)
 
 let () =
-  let a = Ident "a" and b = Ident "b" and c = Ident "c" and x = Ident "x" in
-  check_expr "* binds tighter than +" "1 + 2 * 3" (eadd (econsti 1) (emul (econsti 2) (econsti 3)));
-  check_expr "* binds tighter than + (2)" "1 * 2 + 3" (eadd (emul (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "- is left-associative" "1 - 2 - 3" (esub (esub (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "+ is left-associative" "1 + 2 + 3" (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "parens change the order" "(1 + 2) * 3" (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
+  let a = Ident "a"
+  and b = Ident "b"
+  and c = Ident "c"
+  and x = Ident "x" in
+  check_expr
+    "* binds tighter than +"
+    "1 + 2 * 3"
+    (eadd (econsti 1) (emul (econsti 2) (econsti 3)));
+  check_expr
+    "* binds tighter than + (2)"
+    "1 * 2 + 3"
+    (eadd (emul (econsti 1) (econsti 2)) (econsti 3));
+  check_expr
+    "- is left-associative"
+    "1 - 2 - 3"
+    (esub (esub (econsti 1) (econsti 2)) (econsti 3));
+  check_expr
+    "+ is left-associative"
+    "1 + 2 + 3"
+    (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
+  check_expr
+    "parens change the order"
+    "(1 + 2) * 3"
+    (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
   check_expr "division" "1 / 2" (ediv (econsti 1) (econsti 2));
   check_expr "unary minus" "- x" (euminus x);
   check_expr "unary minus below application" "- f x" (euminus (eapp (Ident "f") x));
@@ -103,32 +131,53 @@ let () =
 (* --- if / fun --- *)
 
 let () =
-  let x = Ident "x" and y = Ident "y" in
+  let x = Ident "x"
+  and y = Ident "y" in
   check_expr "if" "if x then 1 else 2" (eif x (econsti 1) (econsti 2));
-  check_expr "if branches extend to the right" "if x then 1 else 2 + 3" (eif x (econsti 1) (eadd (econsti 2) (econsti 3)));
+  check_expr
+    "if branches extend to the right"
+    "if x then 1 else 2 + 3"
+    (eif x (econsti 1) (eadd (econsti 2) (econsti 3)));
   check_expr
     "if with a comparison condition"
     "if a < b then f x else g y"
     (eif (elt (Ident "a") (Ident "b")) (eapp (Ident "f") x) (eapp (Ident "g") y));
-  check_expr "nested if" "if x then if y then 1 else 2 else 3"
+  check_expr
+    "nested if"
+    "if x then if y then 1 else 2 else 3"
     (eif x (eif y (econsti 1) (econsti 2)) (econsti 3));
   check_expr "fun" "fun x -> x" (elambda "x" x);
-  check_expr "fun with two parameters" "fun x y -> x + y" (elambda "x" (elambda "y" (eadd x y)));
-  check_expr "fun with an explicit fun" "fun x -> fun y -> x" (elambda "x" (elambda "y" x));
-  check_expr "fun body extends to the right" "fun x -> x + 1" (elambda "x" (eadd x (econsti 1)))
+  check_expr
+    "fun with two parameters"
+    "fun x y -> x + y"
+    (elambda "x" (elambda "y" (eadd x y)));
+  check_expr
+    "fun with an explicit fun"
+    "fun x -> fun y -> x"
+    (elambda "x" (elambda "y" x));
+  check_expr
+    "fun body extends to the right"
+    "fun x -> x + 1"
+    (elambda "x" (eadd x (econsti 1)))
 ;;
 
 (* --- let --- *)
 
 let () =
-  let x = Ident "x" and f = Ident "f" in
+  let x = Ident "x"
+  and f = Ident "f" in
   check_expr "let" "let x = 1 in x" (elet "x" (econsti 1) x);
-  check_expr "let with fun" "let f = fun x -> x in f 2" (elet "f" (elambda "x" x) (eapp f (econsti 2)));
-  check_expr "let with parameter sugar" "let f x = x + 1 in f 2"
+  check_expr
+    "let with fun"
+    "let f = fun x -> x in f 2"
+    (elet "f" (elambda "x" x) (eapp f (econsti 2)));
+  check_expr
+    "let with parameter sugar"
+    "let f x = x + 1 in f 2"
     (elet "f" (elambda "x" (eadd x (econsti 1))) (eapp f (econsti 2)));
-  check_expr "let rec" "let rec f x = f x in f"
-    (eletrec "f" (elambda "x" (eapp f x)) f);
-  check_expr "nested let"
+  check_expr "let rec" "let rec f x = f x in f" (eletrec "f" (elambda "x" (eapp f x)) f);
+  check_expr
+    "nested let"
     "let x = 1 in let y = 2 in x + y"
     (elet "x" (econsti 1) (elet "y" (econsti 2) (eadd x (Ident "y"))))
 ;;
@@ -147,8 +196,8 @@ let () =
 let () =
   check_expr
     "CPS factorial"
-    "let rec fact n k = if n = 0 then k 1 else fact (n - 1) (fun r -> k (n * r)) in \
-     fact 5 (fun x -> x)"
+    "let rec fact n k = if n = 0 then k 1 else fact (n - 1) (fun r -> k (n * r)) in fact \
+     5 (fun x -> x)"
     (eletrec
        "fact"
        (elambda
@@ -164,8 +213,8 @@ let () =
        (eapp (eapp (Ident "fact") (econsti 5)) (elambda "x" (Ident "x"))));
   check_expr
     "CPS fibonacci"
-    "let rec fib n k = if n < 2 then k n else fib (n - 1) (fun a -> fib (n - 2) (fun b -> k (a \
-     + b))) in fib 10 (fun x -> x)"
+    "let rec fib n k = if n < 2 then k n else fib (n - 1) (fun a -> fib (n - 2) (fun b \
+     -> k (a + b))) in fib 10 (fun x -> x)"
     (eletrec
        "fib"
        (elambda
@@ -181,9 +230,7 @@ let () =
                       "a"
                       (eapp
                          (eapp (Ident "fib") (esub (Ident "n") (econsti 2)))
-                         (elambda
-                            "b"
-                            (eapp (Ident "k") (eadd (Ident "a") (Ident "b"))))))))))
+                         (elambda "b" (eapp (Ident "k") (eadd (Ident "a") (Ident "b"))))))))))
        (eapp (eapp (Ident "fib") (econsti 10)) (elambda "x" (Ident "x"))))
 ;;
 
@@ -192,9 +239,14 @@ let () =
 let () =
   check_expr ~glued:true "glued: let/in" "letx=1inx" (elet "x" (econsti 1) (Ident "x"));
   check_expr ~glued:true "glued: fun" "funx->x" (elambda "x" (Ident "x"));
-  check_expr ~glued:true "glued: if/then/else" "ifn<1then0else1"
+  check_expr
+    ~glued:true
+    "glued: if/then/else"
+    "ifn<1then0else1"
     (eif (elt (Ident "n") (econsti 1)) (econsti 0) (econsti 1));
-  check_expr ~glued:true "glued: rec, application in parens"
+  check_expr
+    ~glued:true
+    "glued: rec, application in parens"
     "letrecf=funx->ifx=0then1elsef(x-1)inf(5)"
     (eletrec
        "f"
@@ -212,21 +264,32 @@ let () =
   check_expr ~glued:true "letters as a name" "letters" (Ident "letters");
   (* Documented ambiguity: keyword-first wins, so this reads as
      `let ter = 1 in letter`. *)
-  check_expr ~glued:true "letter= ambiguity" "letter=1inletter"
+  check_expr
+    ~glued:true
+    "letter= ambiguity"
+    "letter=1inletter"
     (elet "ter" (econsti 1) (Ident "letter"));
   (* Without gluing the same text reads differently, which is
      exactly what the flag does: the tree either differs or the text
      does not parse at all. *)
   check_error "gluing off: fun" "funx->x";
   check_error "gluing off: no boundary after in" "let x = 1 inx";
-  check_expr "gluing off: letx is a name" "letx=1inx"
+  check_expr
+    "gluing off: letx is a name"
+    "letx=1inx"
     (eeq (Ident "letx") (eapp (econsti 1) (Ident "inx")));
-  check_expr "gluing off: ifn is a name" "ifn<1then0else1"
+  check_expr
+    "gluing off: ifn is a name"
+    "ifn<1then0else1"
     (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")));
   check_error ~glued:true "name gluing: let x=1 without in" "let x=1";
   (* Two names separated by a space are still two tokens:
      only keyword+identifier glues, not everything. *)
-  check_expr ~glued:true "two names separated by a space" "f x" (eapp (Ident "f") (Ident "x"))
+  check_expr
+    ~glued:true
+    "two names separated by a space"
+    "f x"
+    (eapp (Ident "f") (Ident "x"))
 ;;
 
 (* --- Errors --- *)

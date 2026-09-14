@@ -19,7 +19,10 @@ open QCheck.Iter
 
 let binop_ops = [ "+"; "-"; "*"; "/"; "<"; "<="; ">"; ">="; "=" ]
 let is_binop op = List.mem op binop_ops
-let names = [ "x"; "y"; "z"; "f"; "g"; "h"; "n"; "k"; "r"; "fact"; "fib"; "foo"; "bar"; "accum" ]
+
+let names =
+  [ "x"; "y"; "z"; "f"; "g"; "h"; "n"; "k"; "r"; "fact"; "fib"; "foo"; "bar"; "accum" ]
+;;
 
 (* --- Canonical source --- *)
 
@@ -33,10 +36,12 @@ and surface_pp e =
   | Ident s -> s
   | Const (LitInt n) -> string_of_int n
   | Abstr (x, body) -> "fun " ^ x ^ " -> " ^ surface_pp body
-  | Let (Recursive, x, v, body) -> "let rec " ^ x ^ " = " ^ surface_pp v ^ " in " ^ surface_pp body
+  | Let (Recursive, x, v, body) ->
+    "let rec " ^ x ^ " = " ^ surface_pp v ^ " in " ^ surface_pp body
   | Let (NotRecursive, x, v, body) ->
     "let " ^ x ^ " = " ^ surface_pp v ^ " in " ^ surface_pp body
-  | If (c, t, e) -> "if " ^ surface_pp c ^ " then " ^ surface_pp t ^ " else " ^ surface_pp e
+  | If (c, t, e) ->
+    "if " ^ surface_pp c ^ " then " ^ surface_pp t ^ " else " ^ surface_pp e
   | App (App (Ident op, a), b) when is_binop op ->
     "(" ^ surface_operand a ^ " " ^ op ^ " " ^ surface_operand b ^ ")"
   | App (Ident "-", a) -> "(- " ^ surface_operand a ^ ")"
@@ -56,26 +61,50 @@ let glue_pp e =
     match e with
     | Ident s -> out s
     | Const (LitInt n) -> out (string_of_int n)
-    | Abstr (x, body) -> out "fun"; out x; out "->"; pp body
+    | Abstr (x, body) ->
+      out "fun";
+      out x;
+      out "->";
+      pp body
     | Let (flag, x, v, body) ->
-      out (match flag with Recursive -> "letrec" | NotRecursive -> "let");
+      out
+        (match flag with
+         | Recursive -> "letrec"
+         | NotRecursive -> "let");
       out x;
       out "=";
       pp v;
       out "in";
       pp body
-    | If (c, t, e) -> out "if"; pp c; out "then"; pp t; out "else"; pp e
+    | If (c, t, e) ->
+      out "if";
+      pp c;
+      out "then";
+      pp t;
+      out "else";
+      pp e
     | App (App (Ident op, a), b) when is_binop op ->
       out "(";
       operand a;
       out op;
       operand b;
       out ")"
-    | App (Ident "-", a) -> out "(-"; operand a; out ")"
-    | App (l, r) -> out "("; operand l; out "("; pp r; out "))"
+    | App (Ident "-", a) ->
+      out "(-";
+      operand a;
+      out ")"
+    | App (l, r) ->
+      out "(";
+      operand l;
+      out "(";
+      pp r;
+      out "))"
   and operand e =
     match e with
-    | Let _ | If _ | Abstr _ -> out "("; pp e; out ")"
+    | Let _ | If _ | Abstr _ ->
+      out "(";
+      pp e;
+      out ")"
     | _ -> pp e
   in
   pp e;
@@ -90,7 +119,9 @@ let gen_int = Gen.int_range 0 20
 
 let rec gen_expr n =
   if n <= 0
-  then Gen.oneof [ Gen.map (fun i -> Const (LitInt i)) gen_int; Gen.map (fun s -> Ident s) gen_name ]
+  then
+    Gen.oneof
+      [ Gen.map (fun i -> Const (LitInt i)) gen_int; Gen.map (fun s -> Ident s) gen_name ]
   else (
     let half = n / 2 in
     let gen_sub = gen_expr half in

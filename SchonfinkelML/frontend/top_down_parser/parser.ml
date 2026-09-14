@@ -11,8 +11,7 @@
     recognised on the parser's demand (as a prefix when [glued]), and
     application never eats an identifier whose keyword prefix terminates
     the current context, so [letx=1inx] reads as [let x = 1 in x] while
-    [letter] stays a name (the keyword branch is tried, then rolled back).
-    Out of scope: [()], [true]/[false], float, string, [match], [and]. *)
+    [letter] stays a name (the keyword branch is tried, then rolled back). *)
 
 module Ast = Frontend.Common
 
@@ -42,7 +41,6 @@ let mul_ops = [ "*", Ast.emul; "/", Ast.ediv ]
 
 (* Backtracking budget: guarantees termination on any input. *)
 let max_fuel = 100_000
-
 let is_kw s = List.mem s keywords
 let fail ctx msg = Error (Cursor.error ctx.st msg)
 let skip ctx = Cursor.skip_ws_and_comments ctx.st
@@ -58,9 +56,10 @@ let keyword_ahead ctx kw =
   let st = ctx.st in
   Cursor.starts_with st kw
   && (ctx.glued
-      || (match Cursor.peek_at st (String.length kw) with
-          | Some c -> not (Cursor.is_ident_char c)
-          | None -> true))
+      ||
+      match Cursor.peek_at st (String.length kw) with
+      | Some c -> not (Cursor.is_ident_char c)
+      | None -> true)
 ;;
 
 let expect_keyword ctx kw =
@@ -84,7 +83,7 @@ let op_here ctx ops =
   let st = ctx.st in
   List.find_opt
     (fun (op, _) ->
-      Cursor.starts_with st op && not (String.equal op "-" && Cursor.starts_with st "->"))
+       Cursor.starts_with st op && not (String.equal op "-" && Cursor.starts_with st "->"))
     ops
 ;;
 
@@ -116,8 +115,8 @@ let can_start_argument ctx follow =
     let r = Cursor.peek_ident_run st in
     (* A keyword is never an application argument;
        when glued, also stop at a name whose keyword prefix
-       is a follow-set terminator. *)    (not (is_kw r))
-    && not (ctx.glued && List.exists (fun kw -> sub_matches r 0 kw) follow)
+       is a follow-set terminator. *)
+    (not (is_kw r)) && not (ctx.glued && List.exists (fun kw -> sub_matches r 0 kw) follow)
   | _ -> false
 ;;
 
@@ -131,7 +130,9 @@ let rec loop_ops ctx follow ops next lhs =
     loop_ops ctx follow ops next (f lhs rhs)
 ;;
 
-let desugar_params params body = List.fold_right (fun p acc -> Ast.elambda p acc) params body
+let desugar_params params body =
+  List.fold_right (fun p acc -> Ast.elambda p acc) params body
+;;
 
 let p_binding_name ctx =
   let* () = skip ctx in
@@ -236,11 +237,11 @@ and p_fun ctx follow =
   let* params = p_params ctx in
   if params = []
   then fail ctx "expected a parameter after 'fun'"
-  else (
+  else
     let* () = skip ctx in
     let* () = expect_symbol ctx "->" in
     let* body = p_expr ctx follow in
-    Ok (desugar_params params body))
+    Ok (desugar_params params body)
 
 and p_binop ctx follow = p_cmp ctx follow
 
@@ -270,9 +271,9 @@ and p_app ctx follow =
   let rec loop acc =
     let* () = skip ctx in
     if can_start_argument ctx follow
-    then (
+    then
       let* arg = p_atom ctx follow in
-      loop (Ast.eapp acc arg))
+      loop (Ast.eapp acc arg)
     else Ok acc
   in
   loop head
@@ -294,14 +295,14 @@ and p_atom ctx follow =
     let* () = skip ctx in
     if Cursor.starts_with st ")"
     then fail ctx "the unit value () is not supported"
-    else (
+    else
       let* e = p_expr ctx [ ")" ] in
       let* () = skip ctx in
       if Cursor.starts_with st ")"
       then (
         Cursor.advance st;
         Ok e)
-      else fail ctx "expected ')'")
+      else fail ctx "expected ')'"
   | Some c when Cursor.is_ident_start c ->
     let run = ident_run ctx follow in
     if String.equal run ""
@@ -318,15 +319,15 @@ let parse_expr ?(glued = false) src =
   let st = Cursor.create src in
   let ctx = { st; glued; fuel = max_fuel } in
   try
-    (match p_expr ctx [] with
-     | Error e -> Error e
-     | Ok e ->
-       (match Cursor.skip_ws_and_comments st with
-        | Error e -> Error e
-        | Ok () ->
-          if Cursor.eof st
-          then Ok e
-          else Error (Cursor.error st "unexpected input after the expression")))
+    match p_expr ctx [] with
+    | Error e -> Error e
+    | Ok e ->
+      (match Cursor.skip_ws_and_comments st with
+       | Error e -> Error e
+       | Ok () ->
+         if Cursor.eof st
+         then Ok e
+         else Error (Cursor.error st "unexpected input after the expression"))
   with
   | Stack_overflow -> Error (Cursor.error st "expression is nested too deeply")
 ;;

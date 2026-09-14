@@ -25,8 +25,8 @@ type error =
   }
 
 let create src = { src; pos = 0; lnum = 1; bol = 0 }
-let source (t : t) = t.src
-let offset (t : t) = t.pos
+let source t = t.src
+let offset t = t.pos
 
 let position (t : t) =
   { Lexing.pos_fname = ""; pos_lnum = t.lnum; pos_bol = t.bol; pos_cnum = t.pos }
@@ -42,12 +42,7 @@ let restore (t : t) ({ spos; slnum; sbol } : state) =
 ;;
 
 let eof (t : t) = t.pos >= String.length t.src
-
-let peek (t : t) =
-  if eof t
-  then None
-  else Some t.src.[t.pos]
-;;
+let peek (t : t) = if eof t then None else Some t.src.[t.pos]
 
 let peek_at (t : t) n =
   let i = t.pos + n in

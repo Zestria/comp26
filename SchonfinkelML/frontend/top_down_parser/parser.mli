@@ -24,6 +24,7 @@ type error = Cursor.error =
 
 val pp_error : Format.formatter -> error -> unit
 val string_of_error : error -> string
-val parse_expr : ?glued:bool -> string -> (Frontend.Common.expr, error) result
+
 (** Parse one expression, allowing only whitespace and comments after it.
     [glued] enables glued keywords. *)
+val parse_expr : ?glued:bool -> string -> (Frontend.Common.expr, error) result
