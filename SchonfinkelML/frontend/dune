@@ -1,7 +1,11 @@
 (library
  (name frontend)
- (modules common lexer)
+ (modules common lexer bottom_up_parser)
  (libraries)
  (package SchonfinkelML))
 
 (ocamllex lexer)
+
+(menhir
+ (modules bottom_up_parser)
+ (flags --explain --external-tokens Common))
