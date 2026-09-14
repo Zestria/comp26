@@ -1,0 +1,14 @@
+(test
+ (name pretty_printer_test)
+ (package MMML)
+ (libraries MMML.frontend))
+
+(test
+ (name lexer_test)
+ (package MMML)
+ (libraries MMML.frontend))
+
+(test
+ (name lexer_qcheck)
+ (package MMML)
+ (libraries MMML.frontend qcheck))

@@ -2,7 +2,7 @@
 
 (library
  (name frontend)
- (public_name MML.frontend)
+ (public_name MMML.frontend)
  (modules ast error_monad lexer location pretty_printer token)
  (wrapped false)
  (libraries qcheck)
