@@ -26,19 +26,19 @@ type error =
 
 let create src = { src; pos = 0; lnum = 1; bol = 0 }
 let source t = t.src
-let offset t = t.pos
+let offset (t : t) = t.pos
 
-let position (t : t) =
+let position t =
   { Lexing.pos_fname = ""; pos_lnum = t.lnum; pos_bol = t.bol; pos_cnum = t.pos }
 ;;
 
 let error t msg = { pos = position t; msg }
 let save (t : t) = { spos = t.pos; slnum = t.lnum; sbol = t.bol }
 
-let restore (t : t) ({ spos; slnum; sbol } : state) =
-  t.pos <- spos;
-  t.lnum <- slnum;
-  t.bol <- sbol
+let restore (t : t) st =
+  t.pos <- st.spos;
+  t.lnum <- st.slnum;
+  t.bol <- st.sbol
 ;;
 
 let eof (t : t) = t.pos >= String.length t.src
@@ -49,7 +49,7 @@ let peek_at (t : t) n =
   if i >= 0 && i < String.length t.src then Some t.src.[i] else None
 ;;
 
-let advance (t : t) =
+let advance t =
   if not (eof t)
   then (
     if t.src.[t.pos] = '\n'
@@ -77,8 +77,8 @@ let starts_with (t : t) s =
   t.pos + n <= String.length t.src && String.sub t.src t.pos n = s
 ;;
 
-let peek_ident_run (t : t) =
-  if eof t || not (is_ident_start t.src.[t.pos])
+let peek_ident_run t =
+  if eof t || not (is_letter t.src.[t.pos])
   then ""
   else (
     let n = String.length t.src in
@@ -89,7 +89,7 @@ let peek_ident_run (t : t) =
     String.sub t.src t.pos (!i - t.pos))
 ;;
 
-let peek_int_run (t : t) =
+let peek_int_run t =
   if eof t || not (is_digit t.src.[t.pos])
   then ""
   else (
@@ -101,7 +101,7 @@ let peek_int_run (t : t) =
     String.sub t.src t.pos (!i - t.pos))
 ;;
 
-let skip_ws_and_comments (t : t) =
+let skip_ws_and_comments t =
   let rec skip () =
     match peek t with
     | Some (' ' | '\t' | '\n' | '\r') ->
