@@ -151,7 +151,7 @@ let rec shrink_common_expr =
 
 let arbitrary_common_expr =
   QCheck.make
-    Common_ast.gen_expr
+    (QCheck.Gen.sized (fun size -> Common_ast.gen_expr_sized (min (size / 2) 5)))
     ~print:Frontend.Common.string_of_expr
     ~shrink:shrink_common_expr
 ;;
