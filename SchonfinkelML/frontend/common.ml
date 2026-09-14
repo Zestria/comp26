@@ -110,7 +110,7 @@ let pp_token ppf = function
 let rec pp_expr ppf = function
   | Ident x -> Format.fprintf ppf "%s" x
   | Const l -> pp_literal ppf l
-  | App (e1, e2) -> Format.fprintf ppf "@[(%a %a)@]" pp_expr e1 pp_expr e2
+  | App (e1, e2) -> Format.fprintf ppf "@[(%a %a)@]" pp_atom_like e1 pp_atom_like e2
   | Let (Recursive, x, e1, e2) ->
     Format.fprintf ppf "@[<2>let rec %s =@ %a@ in@ %a@]" x pp_expr e1 pp_expr e2
   | Let (NotRecursive, x, e1, e2) ->
@@ -118,6 +118,11 @@ let rec pp_expr ppf = function
   | If (e1, e2, e3) ->
     Format.fprintf ppf "@[<2>if %a then@ %a@ else@ %a@]" pp_expr e1 pp_expr e2 pp_expr e3
   | Abstr (v, e) -> Format.fprintf ppf "@[<2>fun %s -> %a@]" v pp_expr e
+
+and pp_atom_like ppf e =
+  match e with
+  | Abstr _ | If _ | Let _ -> Format.fprintf ppf "(%a)" pp_expr e
+  | Ident _ | Const _ | App _ -> pp_expr ppf e
 ;;
 
 let string_of_expr e = Format.asprintf "%a" pp_expr e
