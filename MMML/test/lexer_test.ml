@@ -432,20 +432,18 @@ let test_integer_overflow () =
     (string_of_int Int.max_int ^ "0")
 ;;
 
-let () =
-  test_keywords ();
-  test_patterns_and_delimiters ();
-  test_operators ();
-  test_operator_tokens ();
-  test_comments ();
-  test_identifier_boundaries ();
-  test_unclosed_delimiters_are_tokens ();
-  test_locations ();
-  test_incremental_lexer ();
-  test_buffered_channel ();
-  test_invalid_identifiers ();
-  test_unknown_operators ();
-  test_unexpected_characters ();
-  test_unterminated_comments ();
-  test_integer_overflow ()
-;;
+let%test_unit "keywords and identifiers" = test_keywords ()
+let%test_unit "patterns and delimiters" = test_patterns_and_delimiters ()
+let%test_unit "built-in operators" = test_operators ()
+let%test_unit "operator token boundaries" = test_operator_tokens ()
+let%test_unit "nested comments" = test_comments ()
+let%test_unit "identifier boundaries" = test_identifier_boundaries ()
+let%test_unit "unclosed delimiters belong to parser" = test_unclosed_delimiters_are_tokens ()
+let%test_unit "source locations" = test_locations ()
+let%test_unit "incremental lexer" = test_incremental_lexer ()
+let%test_unit "buffered channel" = test_buffered_channel ()
+let%test_unit "invalid identifiers" = test_invalid_identifiers ()
+let%test_unit "unknown operators" = test_unknown_operators ()
+let%test_unit "unexpected characters" = test_unexpected_characters ()
+let%test_unit "unterminated comments" = test_unterminated_comments ()
+let%test_unit "integer overflow" = test_integer_overflow ()

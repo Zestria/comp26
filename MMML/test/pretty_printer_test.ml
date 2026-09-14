@@ -30,6 +30,7 @@ let check_program name expected =
   check ~name ~show:show_program ~printer:Pretty_printer.pp_program expected
 ;;
 
+(** Checks constants, tuples, lists, and recursive list patterns. *)
 let test_constants_and_collections () =
   check_expr "tuple" "(1, true, ())" (Tuple (int 1, bool true, [ Constant Unit ]));
   check_expr "list" "[1; 2 + 3]" (List [ int 1; infix "+" (int 2) (int 3) ]);
@@ -43,6 +44,7 @@ let test_constants_and_collections () =
     (PCons (pvar "x", PCons (pvar "y", PList [])))
 ;;
 
+(** Checks that precedence and associativity introduce only required parentheses. *)
 let test_operator_precedence () =
   let a = var "a"
   and b = var "b"
@@ -62,6 +64,7 @@ let test_operator_precedence () =
   check_expr "operator as a value" "(++) a b" (application (var "++") [ a; b ])
 ;;
 
+(** Checks compact rendering of curried functions and compound arguments. *)
 let test_functions_and_applications () =
   check_expr
     "curried function"
@@ -75,6 +78,7 @@ let test_functions_and_applications () =
        [ application (var "g") [ var "x" ]; function_ [ pvar "y" ] (var "y") ])
 ;;
 
+(** Checks layout and pattern rendering in [match] and [function] cases. *)
 let test_match () =
   let empty_case = { case_pattern = PList []; case_expression = int 0 } in
   let cons_case =
@@ -92,6 +96,7 @@ let test_match () =
     (Function (empty_case, [ cons_case ]))
 ;;
 
+(** Checks stable multiline rendering of a complete CPS-factorial program. *)
 let test_program () =
   let fac_body =
     If_then_else
@@ -121,10 +126,8 @@ let test_program () =
     [ Value (Recursive, fac, []) ]
 ;;
 
-let () =
-  test_constants_and_collections ();
-  test_operator_precedence ();
-  test_functions_and_applications ();
-  test_match ();
-  test_program ()
-;;
+let%test_unit "constants and collections" = test_constants_and_collections ()
+let%test_unit "operator precedence" = test_operator_precedence ()
+let%test_unit "functions and applications" = test_functions_and_applications ()
+let%test_unit "match expressions" = test_match ()
+let%test_unit "complete program" = test_program ()

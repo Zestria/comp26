@@ -8,6 +8,8 @@ let show_tokens tokens =
     tokens
 ;;
 
+(** Arbitrary token lists contain no [EOF], because EOF is produced by the
+    lexer itself. Payload generators are defined alongside [Token.t]. *)
 let token_lists =
   let generator =
     Gen.map
@@ -21,6 +23,24 @@ let token_lists =
 
 let lexemes separator tokens = tokens |> List.map to_lexeme |> String.concat separator
 
+let check_round_trip ~source expected =
+  let expected = expected @ [ EOF ] in
+  match Lexer.tokens source with
+  | Error error ->
+    Test.fail_reportf
+      "input: %S@,unexpected lexer error: %a"
+      source
+      Error_monad.pp_error
+      error
+  | Ok actual when List.equal equal expected actual -> true
+  | Ok actual ->
+    Test.fail_reportf
+      "input: %S@,expected: %s@,actual:   %s"
+      source
+      (show_tokens expected)
+      (show_tokens actual)
+;;
+
 (** Property: printing arbitrary tokens with spaces and lexing the result
     recovers the same tokens followed by [EOF]. *)
 let token_round_trip =
@@ -28,10 +48,7 @@ let token_round_trip =
     ~name:"token lexemes round-trip through the lexer"
     ~count:1_000
     token_lists
-    (fun expected ->
-       match Lexer.tokens (lexemes " " expected) with
-       | Error _ -> false
-       | Ok actual -> List.equal equal (expected @ [ EOF ]) actual)
+    (fun expected -> check_round_trip ~source:(lexemes " " expected) expected)
 ;;
 
 (** Property: a correctly closed nested comment separates tokens exactly like
@@ -42,8 +59,8 @@ let comments_are_whitespace =
     ~count:500
     token_lists
     (fun expected ->
-       let separator = " (* ignored (* nested *) comment *) " in
-       match Lexer.tokens (lexemes separator expected) with
-       | Error _ -> false
-       | Ok actual -> List.equal equal (expected @ [ EOF ]) actual)
+       let comment = "(* ignored (* nested *) comment *)" in
+       let separator = " " ^ comment ^ " " in
+       let source = comment ^ " " ^ lexemes separator expected ^ " " ^ comment in
+       check_round_trip ~source expected)
 ;;
