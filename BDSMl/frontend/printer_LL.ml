@@ -1,4 +1,10 @@
-(* open Ast *)
+[@@@ocaml.text "/*"]
+
+(** Copyright 2023-2024, Kakadu, bogban893, shamashaehmitov and garry2311 *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
 
 let print_binop = function
   | Ast.Plus -> "+"
@@ -27,34 +33,33 @@ let print_unop = function
 ;;
 
 let rec print_expr_ast : Ast.expr -> string = function
-  | Ast.Int x -> Printf.sprintf "EInt %d" x
-  | Var v -> Printf.sprintf "EVar %s" v
+  | Ast.Int x -> Printf.sprintf "Int %d" x
+  | Var v -> Printf.sprintf "Var %s" v
   | BinOp (op, e1, e2) ->
     Printf.sprintf
-      "EBinOp ('%s', %s, %s)"
+      "BinOp ('%s', %s, %s)"
       (print_binop op)
       (print_expr_ast e1)
       (print_expr_ast e2)
-  | UnOp (op, x) -> Printf.sprintf "EUnOp (%s, %s)" (print_unop op) (print_expr_ast x)
+  | UnOp (op, x) -> Printf.sprintf "UnOp (%s, %s)" (print_unop op) (print_expr_ast x)
   | If (c, t, e) ->
     Printf.sprintf
-      "EIf (%s, %s, %s)"
+      "If (%s, %s, %s)"
       (print_expr_ast c)
       (print_expr_ast t)
       (print_expr_ast e)
   | Let (r, p, e, ep) ->
     let rec_str = if r = Rec then " rec" else "" in
     Printf.sprintf
-      "ELet%s (%s = %s, %s)"
+      "Let%s (%s = %s, %s)"
       rec_str
       (print_pattern p)
       (print_expr_ast e)
       (print_expr_ast ep)
-  | Abs (p, body) ->
-    Printf.sprintf "EAbs (%s, %s)" (print_pattern p) (print_expr_ast body)
-  | App (f, arg) -> Printf.sprintf "EApp (%s, %s)" (print_expr_ast f) (print_expr_ast arg)
-  | Unit -> "EUnit"
-  | Bool b -> Printf.sprintf "EBool %b" b
+  | Abs (p, body) -> Printf.sprintf "Abs (%s, %s)" (print_pattern p) (print_expr_ast body)
+  | App (f, arg) -> Printf.sprintf "App (%s, %s)" (print_expr_ast f) (print_expr_ast arg)
+  | Unit -> "Unit"
+  | Bool b -> Printf.sprintf "Bool %b" b
 ;;
 
 let rec print_expr (expr : Ast.expr) : string =
@@ -106,7 +111,7 @@ let print_ast program =
         | Rec -> " rec"
         | NonRec -> ""
       in
-      Printf.sprintf "ELet%s (%s = %s)" rec_str (print_pattern p) (print_expr_ast e)
+      Printf.sprintf "Let%s (%s = %s)" rec_str (print_pattern p) (print_expr_ast e)
   in
   String.concat "\n" (List.map print_item program)
 ;;
