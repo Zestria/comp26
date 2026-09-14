@@ -32,7 +32,9 @@ type token =
   | FUN
   | RIGHTARROW
 
-type literal = LitInt of int
+type literal =
+  | LitInt of int
+  | LitUnit
 (* | LitFloat of float *)
 (* | LitString of string *)
 (* | LitBool of bool *)
@@ -54,6 +56,7 @@ type expr =
 let eletrec v e1 e2 = Let (Recursive, v, e1, e2)
 let elet v e1 e2 = Let (NotRecursive, v, e1, e2)
 let econsti i = Const (LitInt i)
+let eunit = Const LitUnit
 let eapp e1 e2 = App (e1, e2)
 let eif e1 e2 e3 = If (e1, e2, e3)
 let elambda v e = Abstr (v, e)
@@ -70,6 +73,7 @@ let euminus a = App (Ident "-", a)
 
 let pp_literal ppf = function
   | LitInt i -> Format.fprintf ppf "%d" i
+  | LitUnit -> Format.fprintf ppf "()"
 ;;
 
 (* | LitFloat f -> Format.fprintf ppf "%g" f *)
