@@ -42,7 +42,7 @@ let restore (t : t) st =
 ;;
 
 let eof (t : t) = t.pos >= String.length t.src
-let peek (t : t) = if eof t then None else Some t.src.[t.pos]
+let peek (t : t) = if eof t then '\000' else t.src.[t.pos]
 
 let peek_at (t : t) n =
   let i = t.pos + n in
@@ -74,40 +74,32 @@ let is_ident_char c = is_letter c || is_digit c || c = '_' || c = '\''
 
 let starts_with (t : t) s =
   let n = String.length s in
-  t.pos + n <= String.length t.src && String.sub t.src t.pos n = s
+  let rec equal_at i = i >= n || (t.src.[t.pos + i] = s.[i] && equal_at (i + 1)) in
+  t.pos + n <= String.length t.src && equal_at 0
 ;;
 
 let peek_ident_run t =
-  if eof t || not (is_letter t.src.[t.pos])
+  if not (is_ident_start (peek t))
   then ""
   else (
     let n = String.length t.src in
-    let i = ref t.pos in
-    while !i < n && is_ident_char t.src.[!i] do
-      incr i
-    done;
-    String.sub t.src t.pos (!i - t.pos))
+    let rec run_end i = if i < n && is_ident_char t.src.[i] then run_end (i + 1) else i in
+    String.sub t.src t.pos (run_end t.pos - t.pos))
 ;;
 
 let peek_int_run t =
-  if eof t || not (is_digit t.src.[t.pos])
-  then ""
-  else (
-    let n = String.length t.src in
-    let i = ref t.pos in
-    while !i < n && is_digit t.src.[!i] do
-      incr i
-    done;
-    String.sub t.src t.pos (!i - t.pos))
+  let n = String.length t.src in
+  let rec run_end i = if i < n && is_digit t.src.[i] then run_end (i + 1) else i in
+  String.sub t.src t.pos (run_end t.pos - t.pos)
 ;;
 
 let skip_ws_and_comments t =
   let rec skip () =
     match peek t with
-    | Some (' ' | '\t' | '\n' | '\r') ->
+    | ' ' | '\t' | '\n' | '\r' ->
       advance t;
       skip ()
-    | Some '(' when starts_with t "(*" ->
+    | '(' when starts_with t "(*" ->
       advance t;
       advance t;
       comment 0

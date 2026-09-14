@@ -109,9 +109,9 @@ let ident_run ctx follow =
 let can_start_argument ctx follow =
   let st = ctx.st in
   match Cursor.peek st with
-  | Some c when Cursor.is_digit c -> true
-  | Some '(' -> true
-  | Some c when Cursor.is_ident_start c ->
+  | c when Cursor.is_digit c -> true
+  | '(' -> true
+  | c when Cursor.is_ident_start c ->
     let r = Cursor.peek_ident_run st in
     (* A keyword is never an application argument;
        when glued, also stop at a name whose keyword prefix
@@ -138,7 +138,7 @@ let p_binding_name ctx =
   let* () = skip ctx in
   let st = ctx.st in
   match Cursor.peek st with
-  | Some c when Cursor.is_ident_start c ->
+  | c when Cursor.is_ident_start c ->
     let run = Cursor.peek_ident_run st in
     if is_kw run
     then fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" run)
@@ -155,7 +155,7 @@ let p_params ctx =
     let* () = skip ctx in
     let st = ctx.st in
     match Cursor.peek st with
-    | Some c when Cursor.is_ident_start c ->
+    | c when Cursor.is_ident_start c ->
       let run = Cursor.peek_ident_run st in
       if is_kw run
       then Ok (List.rev acc)
@@ -282,15 +282,15 @@ and p_atom ctx follow =
   let* () = skip ctx in
   let st = ctx.st in
   match Cursor.peek st with
-  | None -> fail ctx "expected an expression"
-  | Some c when Cursor.is_digit c ->
+  | _ when Cursor.eof st -> fail ctx "expected an expression"
+  | c when Cursor.is_digit c ->
     let run = Cursor.peek_int_run st in
     (match int_of_string_opt run with
      | Some n ->
        Cursor.advance_n st (String.length run);
        Ok (Ast.econsti n)
      | None -> fail ctx "integer literal is out of range")
-  | Some '(' ->
+  | '(' ->
     Cursor.advance st;
     let* () = skip ctx in
     if Cursor.starts_with st ")"
@@ -303,7 +303,7 @@ and p_atom ctx follow =
         Cursor.advance st;
         Ok e)
       else fail ctx "expected ')'"
-  | Some c when Cursor.is_ident_start c ->
+  | c when Cursor.is_ident_start c ->
     let run = ident_run ctx follow in
     if String.equal run ""
     then fail ctx "expected an expression"
@@ -312,7 +312,7 @@ and p_atom ctx follow =
     else (
       Cursor.advance_n st (String.length run);
       Ok (Ast.Ident run))
-  | Some c -> fail ctx (Printf.sprintf "unexpected character '%c'" c)
+  | c -> fail ctx (Printf.sprintf "unexpected character '%c'" c)
 ;;
 
 let parse_expr ?(glued = false) src =

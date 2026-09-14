@@ -35,9 +35,7 @@ val save : t -> state
 val restore : t -> state -> unit
 
 val eof : t -> bool
-
-(** Current char. *)
-val peek : t -> char option
+val peek : t -> char
 
 (** Char at offset [n]. *)
 val peek_at : t -> int -> char option
