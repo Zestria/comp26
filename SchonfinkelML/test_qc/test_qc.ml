@@ -78,32 +78,32 @@ let arbitrary_expr =
 module Common_ast = struct
   open Frontend.Common
 
-let ident_start_gen =
-  QCheck.Gen.oneof
-    [ QCheck.Gen.map Char.chr (QCheck.Gen.int_range (Char.code 'a') (Char.code 'z'))
-    ; QCheck.Gen.map Char.chr (QCheck.Gen.int_range (Char.code 'A') (Char.code 'Z'))
-    ]
-;;
+  let ident_start_gen =
+    QCheck.Gen.oneof
+      [ QCheck.Gen.map Char.chr (QCheck.Gen.int_range (Char.code 'a') (Char.code 'z'))
+      ; QCheck.Gen.map Char.chr (QCheck.Gen.int_range (Char.code 'A') (Char.code 'Z'))
+      ]
+  ;;
 
-let ident_cont_gen =
-  QCheck.Gen.oneof
-    [ ident_start_gen
-    ; QCheck.Gen.map Char.chr (QCheck.Gen.int_range (Char.code '0') (Char.code '9'))
-    ; QCheck.Gen.return '_'
-    ]
-;;
+  let ident_cont_gen =
+    QCheck.Gen.oneof
+      [ ident_start_gen
+      ; QCheck.Gen.map Char.chr (QCheck.Gen.int_range (Char.code '0') (Char.code '9'))
+      ; QCheck.Gen.return '_'
+      ]
+  ;;
 
-let gen_ident =
-  QCheck.Gen.(
-    ident_start_gen
-    >>= fun first ->
-    list_size (int_range 0 6) ident_cont_gen
-    >>= fun rest ->
-    let name = String.of_seq (List.to_seq (first :: rest)) in
-    match name with
-    | "let" | "in" | "rec" | "if" | "then" | "else" | "fun" -> return (name ^ "_id")
-    | _ -> return name)
-;;
+  let gen_ident =
+    QCheck.Gen.(
+      ident_start_gen
+      >>= fun first ->
+      list_size (int_range 0 6) ident_cont_gen
+      >>= fun rest ->
+      let name = String.of_seq (List.to_seq (first :: rest)) in
+      match name with
+      | "let" | "in" | "rec" | "if" | "then" | "else" | "fun" -> return (name ^ "_id")
+      | _ -> return name)
+  ;;
 
   let gen_literal =
     QCheck.Gen.oneof
