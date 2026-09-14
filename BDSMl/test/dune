@@ -1,0 +1,7 @@
+(library
+ (name frontend_tests)
+ (modules lexer_LL_tests parser_LL_tests)
+ (inline_tests)
+ (libraries BDSMl.frontend)
+ (preprocess
+  (pps ppx_expect)))
