@@ -32,6 +32,12 @@ let print_unop = function
   | Not -> "not"
 ;;
 
+let print_pattern_ast : Ast.pattern -> string = function
+  | Ast.PVar x -> Printf.sprintf "Var %s" x
+  | PUnit -> "Unit"
+  | PUnderscore -> "Underscore"
+;;
+
 let rec print_expr_ast : Ast.expr -> string = function
   | Ast.Int x -> Printf.sprintf "Int %d" x
   | Var v -> Printf.sprintf "Var %s" v
@@ -49,14 +55,19 @@ let rec print_expr_ast : Ast.expr -> string = function
       (print_expr_ast t)
       (print_expr_ast e)
   | Let (r, p, e, ep) ->
-    let rec_str = if r = Rec then " rec" else "" in
+    let rec_str =
+      match r with
+      | Rec -> "Rec"
+      | NonRec -> "NonRec"
+    in
     Printf.sprintf
-      "Let%s (%s = %s, %s)"
+      "Let (%s, %s, %s, %s)"
       rec_str
-      (print_pattern p)
+      (print_pattern_ast p)
       (print_expr_ast e)
       (print_expr_ast ep)
-  | Abs (p, body) -> Printf.sprintf "Abs (%s, %s)" (print_pattern p) (print_expr_ast body)
+  | Abs (p, body) ->
+    Printf.sprintf "Abs (%s, %s)" (print_pattern_ast p) (print_expr_ast body)
   | App (f, arg) -> Printf.sprintf "App (%s, %s)" (print_expr_ast f) (print_expr_ast arg)
   | Unit -> "Unit"
   | Bool b -> Printf.sprintf "Bool %b" b
@@ -108,10 +119,10 @@ let print_ast program =
     | StrLet (r, p, e) ->
       let rec_str =
         match r with
-        | Rec -> " rec"
-        | NonRec -> ""
+        | Rec -> "Rec, "
+        | NonRec -> "NonRec, "
       in
-      Printf.sprintf "Let%s (%s = %s)" rec_str (print_pattern p) (print_expr_ast e)
+      Printf.sprintf "Let (%s%s = %s)" rec_str (print_pattern p) (print_expr_ast e)
   in
   String.concat "\n" (List.map print_item program)
 ;;
