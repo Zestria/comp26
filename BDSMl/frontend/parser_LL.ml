@@ -1,5 +1,5 @@
 open Ast
-open Lexer
+open Lexer_LL
 
 type error =
   [ `lexer_error of string
@@ -230,8 +230,8 @@ let rec parse_items tokens =
 
 let parse (tokens : token list) : (program, [> error ]) result = parse_items tokens
 
-let parse_string_LL (src : string) : (program, [> error | Lexer.error ]) result =
-  match Lexer.tokenize src with
+let parse_string_LL (src : string) : (program, [> error | Lexer_LL.error ]) result =
+  match Lexer_LL.tokenize src with
   | Error e -> Error e
-  | Ok tokens -> (parse tokens :> (program, [> error | Lexer.error ]) result)
+  | Ok tokens -> (parse tokens :> (program, [> error | Lexer_LL.error ]) result)
 ;;
