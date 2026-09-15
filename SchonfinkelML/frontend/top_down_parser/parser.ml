@@ -6,18 +6,12 @@
 
 [@@@ocaml.text "/*"]
 
-(** Recursive descent without a separate lexer: keywords are
-
-    recognised on the parser's demand (as a prefix when [glued]), and
-    application never eats an identifier whose keyword prefix terminates
-    the current context, so [letx=1inx] reads as [let x = 1 in x] while
-    [letter] stays a name (the keyword branch is tried, then rolled back). *)
-
 module Ast = Frontend.Common
+module Lexer = Frontend.Lexer
 
 let ( let* ) = Result.bind
 
-type error = Cursor.error =
+type error =
   { pos : Lexing.position
   ; msg : string
   }
@@ -28,306 +22,232 @@ let pp_error ppf { pos; msg } =
 
 let string_of_error e = Format.asprintf "%a" pp_error e
 
+let tokenize src =
+  let lexbuf = Lexing.from_string src in
+  let rec loop acc =
+    let tok = Lexer.token lexbuf in
+    let pos = lexbuf.Lexing.lex_start_p in
+    match tok with
+    | Ast.EOF -> Ok (List.rev ((tok, pos) :: acc))
+    | _ -> loop ((tok, pos) :: acc)
+  in
+  try loop [] with
+  | Failure _ ->
+    Error { pos = lexbuf.Lexing.lex_start_p; msg = "integer literal is out of range" }
+;;
+
 type ctx =
-  { st : Cursor.t
-  ; glued : bool
-  ; mutable fuel : int
+  { toks : (Ast.token * Lexing.position) array
+  ; ops : Operators.t
+  ; mutable pos : int
+  ; mutable budget : int
   }
 
-let keywords = [ "let"; "rec"; "in"; "if"; "then"; "else"; "fun" ]
-let cmp_ops = [ "<=", Ast.elte; ">=", Ast.egte; "<", Ast.elt; ">", Ast.egt; "=", Ast.eeq ]
-let add_ops = [ "+", Ast.eadd; "-", Ast.esub ]
-let mul_ops = [ "*", Ast.emul; "/", Ast.ediv ]
+let default_budget = 100_000
+let cur ctx = fst ctx.toks.(ctx.pos)
+let cur_pos ctx = snd ctx.toks.(ctx.pos)
 
-(* Backtracking budget: guarantees termination on any input. *)
-let max_fuel = 100_000
-let is_kw s = List.mem s keywords
-let fail ctx msg = Error (Cursor.error ctx.st msg)
-let skip ctx = Cursor.skip_ws_and_comments ctx.st
+(** [tokenize] always ends with [EOF] and [advance] never moves past it, so
+   [ctx.pos] is always a valid index. *)
+let advance ctx = if ctx.pos < Array.length ctx.toks - 1 then ctx.pos <- ctx.pos + 1
 
-let sub_matches s i pat =
-  let l = String.length pat in
-  i >= 0 && i + l <= String.length s && String.sub s i l = pat
-;;
+let fail ctx msg = Error { pos = cur_pos ctx; msg }
 
-(* Keywords need a token boundary normally,
-   just a prefix when glued. *)
-let keyword_ahead ctx kw =
-  let st = ctx.st in
-  Cursor.starts_with st kw
-  && (ctx.glued
-      ||
-      match Cursor.peek_at st (String.length kw) with
-      | Some c -> not (Cursor.is_ident_char c)
-      | None -> true)
-;;
-
-let expect_keyword ctx kw =
-  if keyword_ahead ctx kw
+let expect ctx tok what =
+  if cur ctx = tok
   then (
-    Cursor.advance_n ctx.st (String.length kw);
+    advance ctx;
     Ok ())
-  else fail ctx (Printf.sprintf "expected '%s'" kw)
+  else fail ctx (Printf.sprintf "expected '%s'" what)
 ;;
 
-let expect_symbol ctx sym =
-  if Cursor.starts_with ctx.st sym
-  then (
-    Cursor.advance_n ctx.st (String.length sym);
-    Ok ())
-  else fail ctx (Printf.sprintf "expected '%s'" sym)
+let keyword_spelling = function
+  | Ast.LET -> Some "let"
+  | Ast.REC -> Some "rec"
+  | Ast.IN -> Some "in"
+  | Ast.IF -> Some "if"
+  | Ast.THEN -> Some "then"
+  | Ast.ELSE -> Some "else"
+  | Ast.FUN -> Some "fun"
+  | _ -> None
 ;;
 
-(* Operator from the table; '-' must not eat the start of '->'. *)
-let op_here ctx ops =
-  let st = ctx.st in
-  List.find_opt
-    (fun (op, _) ->
-       Cursor.starts_with st op && not (String.equal op "-" && Cursor.starts_with st "->"))
-    ops
+let expect_ident ctx =
+  match cur ctx with
+  | Ast.IDENT name ->
+    advance ctx;
+    Ok name
+  | tok ->
+    (match keyword_spelling tok with
+     | Some kw ->
+       fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" kw)
+     | None -> fail ctx "expected an identifier")
 ;;
 
-(* Identifier run; when glued, cut before the
-   nearest follow-set keyword. *)
-let ident_run ctx follow =
-  let r = Cursor.peek_ident_run ctx.st in
-  if (not ctx.glued) || String.equal r ""
-  then r
-  else (
-    let n = String.length r in
-    let rec find i =
-      if i > n
-      then n
-      else if List.exists (fun kw -> sub_matches r i kw) follow
-      then i
-      else find (i + 1)
-    in
-    String.sub r 0 (find 1))
-;;
-
-(* Can an application argument start here? *)
-let can_start_argument ctx follow =
-  let st = ctx.st in
-  match Cursor.peek st with
-  | c when Cursor.is_digit c -> true
-  | '(' -> true
-  | c when Cursor.is_ident_start c ->
-    let r = Cursor.peek_ident_run st in
-    (* A keyword is never an application argument;
-       when glued, also stop at a name whose keyword prefix
-       is a follow-set terminator. *)
-    (not (is_kw r)) && not (ctx.glued && List.exists (fun kw -> sub_matches r 0 kw) follow)
-  | _ -> false
-;;
-
-let rec loop_ops ctx follow ops next lhs =
-  let* () = skip ctx in
-  match op_here ctx ops with
-  | None -> Ok lhs
-  | Some (op, f) ->
-    Cursor.advance_n ctx.st (String.length op);
-    let* rhs = next ctx follow in
-    loop_ops ctx follow ops next (f lhs rhs)
+(** Names and parameters are read greedily: they end at the first token that is
+   not an identifier. *)
+let p_params ctx =
+  let rec p_param acc =
+    match cur ctx with
+    | Ast.IDENT name ->
+      advance ctx;
+      p_param (name :: acc)
+    | _ -> List.rev acc
+  in
+  p_param []
 ;;
 
 let desugar_params params body =
   List.fold_right (fun p acc -> Ast.elambda p acc) params body
 ;;
 
-let p_binding_name ctx =
-  let* () = skip ctx in
-  let st = ctx.st in
-  match Cursor.peek st with
-  | c when Cursor.is_ident_start c ->
-    let run = Cursor.peek_ident_run st in
-    if is_kw run
-    then fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" run)
-    else (
-      Cursor.advance_n st (String.length run);
-      Ok run)
-  | _ -> fail ctx "expected an identifier"
+(* The precondition of the right hand side of [e]: a left associative operator
+   gives up equality, a right associative one does not. *)
+let rhs_min_prec e =
+  match e.Operators.fixity with
+  | Operators.Infix Operators.Right -> e.Operators.prec
+  | _ -> e.Operators.prec + 1
 ;;
 
-(* Names and parameters are read greedily:
-   they end at '=' or a space. *)
-let p_params ctx =
-  let rec loop acc =
-    let* () = skip ctx in
-    let st = ctx.st in
-    match Cursor.peek st with
-    | c when Cursor.is_ident_start c ->
-      let run = Cursor.peek_ident_run st in
-      if is_kw run
-      then Ok (List.rev acc)
-      else (
-        Cursor.advance_n st (String.length run);
-        loop (run :: acc))
-    | _ -> Ok (List.rev acc)
-  in
-  loop []
-;;
-
-let rec p_expr ctx follow =
-  let* () = skip ctx in
-  if ctx.fuel <= 0
+let rec p_expr ctx =
+  if ctx.budget <= 0
   then fail ctx "expression is too complex"
   else (
-    ctx.fuel <- ctx.fuel - 1;
-    if ctx.glued
-    then (
-      let try_keyword kw f =
-        if Cursor.starts_with ctx.st kw
-        then (
-          let snapshot = Cursor.save ctx.st in
-          match f ctx follow with
-          | Ok v -> Some (Ok v)
-          | Error _ ->
-            Cursor.restore ctx.st snapshot;
-            None)
-        else None
-      in
-      match try_keyword "let" p_let with
-      | Some r -> r
-      | None ->
-        (match try_keyword "if" p_if with
-         | Some r -> r
-         | None ->
-           (match try_keyword "fun" p_fun with
-            | Some r -> r
-            | None -> p_binop ctx follow)))
-    else if keyword_ahead ctx "let"
-    then p_let ctx follow
-    else if keyword_ahead ctx "if"
-    then p_if ctx follow
-    else if keyword_ahead ctx "fun"
-    then p_fun ctx follow
-    else p_binop ctx follow)
+    ctx.budget <- ctx.budget - 1;
+    match cur ctx with
+    | Ast.LET -> p_let ctx
+    | Ast.IF -> p_if ctx
+    | Ast.FUN -> p_fun ctx
+    | _ -> p_binop ctx 0)
 
-and p_let ctx follow =
-  let* () = expect_keyword ctx "let" in
-  let* () = skip ctx in
+(** Precedence climbing: [p_binop ctx min_prec] reads an operand followed by all
+   the operators of the table that bind at least as tight as [min_prec]. *)
+and p_binop ctx min_prec =
+  let* lhs = p_operand ctx in
+  p_infix ctx min_prec lhs
+
+and p_infix ctx min_prec lhs =
+  match Operators.find_infix ctx.ops (cur ctx) with
+  | Some e when e.Operators.prec >= min_prec ->
+    advance ctx;
+    let* rhs = p_binop ctx (rhs_min_prec e) in
+    let* () = check_chaining ctx e in
+    p_infix ctx min_prec (Ast.eapp (Ast.eapp (Ast.Ident e.Operators.sym) lhs) rhs)
+  | _ -> Ok lhs
+
+(** A non-associative operator cannot be followed by an operator of the same
+   precedence, so [a = b = c] is rejected rather than silently associated. *)
+(* MAYBE EASIER *)
+and check_chaining ctx e =
+  match e.Operators.fixity with
+  | Operators.Infix Operators.Nonassoc ->
+    (match Operators.find_infix ctx.ops (cur ctx) with
+     | Some next when next.Operators.prec = e.Operators.prec ->
+       if next.Operators.sym = e.Operators.sym
+       then fail ctx (Printf.sprintf "operator '%s' is not associative" e.Operators.sym)
+       else
+         fail
+           ctx
+           (Printf.sprintf
+              "operators '%s' and '%s' are not associative"
+              e.Operators.sym
+              next.Operators.sym)
+     | _ -> Ok ())
+  | _ -> Ok ()
+
+and p_operand ctx =
+  match Operators.find_prefix ctx.ops (cur ctx) with
+  | Some e ->
+    advance ctx;
+    let* arg = p_binop ctx e.Operators.prec in
+    Ok (Ast.eapp (Ast.Ident e.Operators.sym) arg)
+  | None -> p_app ctx
+
+and p_app ctx =
+  let* head = p_atom ctx in
+  let rec p_arg acc =
+    match cur ctx with
+    | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN ->
+      let* arg = p_atom ctx in
+      p_arg (Ast.eapp acc arg)
+    | _ -> Ok acc
+  in
+  p_arg head
+
+and p_atom ctx =
+  match cur ctx with
+  | Ast.INT n ->
+    advance ctx;
+    Ok (Ast.econsti n)
+  | Ast.IDENT name ->
+    advance ctx;
+    Ok (Ast.Ident name)
+  | Ast.LPAREN ->
+    advance ctx;
+    if cur ctx = Ast.RPAREN
+    then fail ctx "the unit value () is not supported"
+    else
+      let* e = p_expr ctx in
+      let* () = expect ctx Ast.RPAREN ")" in
+      Ok e
+  | Ast.UNIT -> fail ctx "the unit value () is not supported"
+  | Ast.EOF -> fail ctx "expected an expression"
+  | tok ->
+    (match keyword_spelling tok with
+     | Some kw -> fail ctx (Printf.sprintf "unexpected keyword '%s'" kw)
+     | None ->
+       fail
+         ctx
+         (Printf.sprintf "unexpected token '%s'" (Format.asprintf "%a" Ast.pp_token tok)))
+
+and p_let ctx =
+  let* () = expect ctx Ast.LET "let" in
   let is_rec =
-    if keyword_ahead ctx "rec"
+    if cur ctx = Ast.REC
     then (
-      Cursor.advance_n ctx.st (String.length "rec");
+      advance ctx;
       true)
     else false
   in
-  let* name = p_binding_name ctx in
-  let* params = p_params ctx in
-  let* () = skip ctx in
-  let* () = expect_symbol ctx "=" in
-  let* value = p_expr ctx [ "in" ] in
-  let* () = expect_keyword ctx "in" in
-  let* body = p_expr ctx follow in
+  let* name = expect_ident ctx in
+  let params = p_params ctx in
+  let* () = expect ctx Ast.EQ "=" in
+  let* value = p_expr ctx in
+  let* () = expect ctx Ast.IN "in" in
+  let* body = p_expr ctx in
   let value = desugar_params params value in
   Ok (if is_rec then Ast.eletrec name value body else Ast.elet name value body)
 
-and p_if ctx follow =
-  let* () = expect_keyword ctx "if" in
-  let* cond = p_expr ctx [ "then" ] in
-  let* () = expect_keyword ctx "then" in
-  let* then_branch = p_expr ctx [ "else" ] in
-  let* () = expect_keyword ctx "else" in
-  let* else_branch = p_expr ctx follow in
+and p_if ctx =
+  let* () = expect ctx Ast.IF "if" in
+  let* cond = p_expr ctx in
+  let* () = expect ctx Ast.THEN "then" in
+  let* then_branch = p_expr ctx in
+  let* () = expect ctx Ast.ELSE "else" in
+  let* else_branch = p_expr ctx in
   Ok (Ast.eif cond then_branch else_branch)
 
-and p_fun ctx follow =
-  let* () = expect_keyword ctx "fun" in
-  let* params = p_params ctx in
+and p_fun ctx =
+  let* () = expect ctx Ast.FUN "fun" in
+  let params = p_params ctx in
   if params = []
   then fail ctx "expected a parameter after 'fun'"
   else
-    let* () = skip ctx in
-    let* () = expect_symbol ctx "->" in
-    let* body = p_expr ctx follow in
+    let* () = expect ctx Ast.RIGHTARROW "->" in
+    let* body = p_expr ctx in
     Ok (desugar_params params body)
-
-and p_binop ctx follow = p_cmp ctx follow
-
-and p_cmp ctx follow =
-  let* lhs = p_add ctx follow in
-  loop_ops ctx follow cmp_ops p_add lhs
-
-and p_add ctx follow =
-  let* lhs = p_mul ctx follow in
-  loop_ops ctx follow add_ops p_mul lhs
-
-and p_mul ctx follow =
-  let* lhs = p_unary ctx follow in
-  loop_ops ctx follow mul_ops p_unary lhs
-
-and p_unary ctx follow =
-  let* () = skip ctx in
-  if Cursor.starts_with ctx.st "-" && not (Cursor.starts_with ctx.st "->")
-  then (
-    Cursor.advance ctx.st;
-    let* e = p_unary ctx follow in
-    Ok (Ast.euminus e))
-  else p_app ctx follow
-
-and p_app ctx follow =
-  let* head = p_atom ctx follow in
-  let rec loop acc =
-    let* () = skip ctx in
-    if can_start_argument ctx follow
-    then
-      let* arg = p_atom ctx follow in
-      loop (Ast.eapp acc arg)
-    else Ok acc
-  in
-  loop head
-
-and p_atom ctx follow =
-  let* () = skip ctx in
-  let st = ctx.st in
-  match Cursor.peek st with
-  | _ when Cursor.eof st -> fail ctx "expected an expression"
-  | c when Cursor.is_digit c ->
-    let run = Cursor.peek_int_run st in
-    (match int_of_string_opt run with
-     | Some n ->
-       Cursor.advance_n st (String.length run);
-       Ok (Ast.econsti n)
-     | None -> fail ctx "integer literal is out of range")
-  | '(' ->
-    Cursor.advance st;
-    let* () = skip ctx in
-    if Cursor.starts_with st ")"
-    then fail ctx "the unit value () is not supported"
-    else
-      let* e = p_expr ctx [ ")" ] in
-      let* () = skip ctx in
-      if Cursor.starts_with st ")"
-      then (
-        Cursor.advance st;
-        Ok e)
-      else fail ctx "expected ')'"
-  | c when Cursor.is_ident_start c ->
-    let run = ident_run ctx follow in
-    if String.equal run ""
-    then fail ctx "expected an expression"
-    else if is_kw run
-    then fail ctx (Printf.sprintf "unexpected keyword '%s'" run)
-    else (
-      Cursor.advance_n st (String.length run);
-      Ok (Ast.Ident run))
-  | c -> fail ctx (Printf.sprintf "unexpected character '%c'" c)
 ;;
 
-let parse_expr ?(glued = false) src =
-  let st = Cursor.create src in
-  let ctx = { st; glued; fuel = max_fuel } in
-  try
-    match p_expr ctx [] with
-    | Error e -> Error e
-    | Ok e ->
-      (match Cursor.skip_ws_and_comments st with
-       | Error e -> Error e
-       | Ok () ->
-         if Cursor.eof st
-         then Ok e
-         else Error (Cursor.error st "unexpected input after the expression"))
-  with
-  | Stack_overflow -> Error (Cursor.error st "expression is nested too deeply")
+let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
+  match tokenize src with
+  | Error e -> Error e
+  | Ok toks ->
+    let ctx = { toks = Array.of_list toks; ops; pos = 0; budget = max_budget } in
+    (try
+       let* e = p_expr ctx in
+       if cur ctx = Ast.EOF
+       then Ok e
+       else fail ctx "unexpected input after the expression"
+     with
+     | Stack_overflow -> fail ctx "expression is nested too deeply")
 ;;

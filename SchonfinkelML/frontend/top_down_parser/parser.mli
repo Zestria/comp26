@@ -6,18 +6,15 @@
 
 [@@@ocaml.text "/*"]
 
-(** Recursive descent parser for a subset of OCaml, without a separate lexer.
+(** Top-down (recursive descent) parser over the token stream produced by [Frontend.Lexer].
 
-    The parser decides lexeme boundaries itself, so a keyword may stick to an
-    identifier: with [glued:true], [letx=1inx] is [let x = 1 in x]; with
-    [glued:false] keywords need a token boundary ([letx] is one identifier).
+    Operators are described by an [Operators.t], so their arity, associativity and
+    precedence are data: the table can be redefined from the command line.
 
-    Never exits: any input yields [Ok] or [Error] with a position.
+    Reading the source is done by [tokenize], which is here as well: it pairs
+    every token of [Frontend.Lexer] with the position it starts at. *)
 
-    Out of scope: [()], [true]/[false], float, string, [match], toplevel
-    bindings, [and], []. *)
-
-type error = Cursor.error =
+type error =
   { pos : Lexing.position
   ; msg : string
   }
@@ -25,6 +22,19 @@ type error = Cursor.error =
 val pp_error : Format.formatter -> error -> unit
 val string_of_error : error -> string
 
+(** [tokenize src] is the tokens of [src] in order, each paired with the position
+    it starts at, ending with [EOF].  A position is read as a character offset. *)
+val tokenize : string -> ((Frontend.Common.token * Lexing.position) list, error) result
+
 (** Parse one expression, allowing only whitespace and comments after it.
-    [glued] enables glued keywords. *)
-val parse_expr : ?glued:bool -> string -> (Frontend.Common.expr, error) result
+    Operators are taken from [operators], [Operators.default] by default.
+
+    [budget] bounds how many parser frames may be alive at once, and so the
+    nesting the parser accepts; it is spent one unit per nested call and is
+    [100_000] by default.  Going over it, or overflowing the stack, is reported
+    as an error rather than crashing. *)
+val parse_expr
+  :  ?ops:Operators.t
+  -> ?max_budget:int
+  -> string
+  -> (Frontend.Common.expr, error) result
