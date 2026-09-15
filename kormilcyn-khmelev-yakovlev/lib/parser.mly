@@ -18,6 +18,7 @@
 %token THEN
 %token ELSE
 %token FUN
+%token REC
 %token ARROW
 %token EOF
 
@@ -35,7 +36,6 @@ prog:
   | e = expr; EOF { e }
   ;
 
-
 expr:
   | i = CONST { Const i }
   | x = ID { Var x }
@@ -46,5 +46,7 @@ expr:
   | LET; x = ID; EQUALS; e1 = expr; IN; e2 = expr { Let (x, e1, e2) }
   | IF; e1 = expr; THEN; e2 = expr; ELSE; e3 = expr { If (e1, e2, e3) }
   | FUN; args = nonempty_list(ID); ARROW; body = expr {List.fold_right (fun x y -> Abs(x, y)) args body}
+  | LET; REC; fun_id = ID; arg1 = ID; args = list(ID); EQUALS; body = expr; IN; e = expr
+      { LetRec (fun_id, arg1, List.fold_right (fun x y -> Abs (x, y)) args body, e) }
   | LPAREN; e=expr; RPAREN {e}
   ;

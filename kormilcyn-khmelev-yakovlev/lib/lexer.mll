@@ -2,7 +2,6 @@
 open Parser
 }
 
-(* TODO: functions *)
 let white = [' ' '\t']+
 let digit = ['0'-'9']
 let const = '-'? digit+
@@ -23,6 +22,7 @@ rule read =
   | "then" { THEN }
   | "else" { ELSE }
   | "fun" { FUN }
+  | "rec" {REC}
   | "->" { ARROW }
   | id { ID (Lexing.lexeme lexbuf) }
   | const { CONST (int_of_string (Lexing.lexeme lexbuf)) }
