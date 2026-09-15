@@ -85,11 +85,9 @@ let rec parse_pattern_list tokens =
   | ts -> Ok ([], ts)
 ;;
 
-(*Чуть не понятно, что делать с 1м аргументом, хотя должен сжираться 1ой веткой*)
-
-(* wtf *)
 let wrap_abs param body = List.fold_right (fun p acc -> Abs (p, acc)) param body
 
+(* wtf *)
 let rec parse_expr tokens =
   match tokens with
   | TLet :: _ ->

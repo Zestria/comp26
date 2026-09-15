@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2023-2024, Kakadu, bogban893, shamashaehmitov and garry2311 *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Frontend
 open Parser_LL
 open Printer_LL
@@ -42,6 +50,11 @@ let%expect_test "simple expressions" =
   [%expect {| Ok [BinOp ('||', UnOp (not, Bool true), Bool false)] |}]
 ;;
 
+let%expect_test "binOp expressions" =
+  test "1 * ((4 - 3) / 2)";
+  [%expect {| Ok [BinOp ('*', Int 1, BinOp ('/', BinOp ('-', Int 4, Int 3), Int 2))] |}]
+;;
+
 let%expect_test "if expressions" =
   test "if x then y else z";
   [%expect {| Ok [If (Var x, Var y, Var z)] |}];
@@ -76,12 +89,14 @@ let%expect_test "CPS factorial" =
   test
     "let rec fact_cps n k = if n <= 1 then k 1 else fact_cps (n - 1) (fun m -> k (n * \
      m)) in fact_cps 5 (fun x -> x)";
-  [%expect {| Ok [Let (Rec, Var fact_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), App (Var k, Int 1), App (App (Var fact_cps, BinOp ('-', Var n, Int 1)), Abs (Var m, App (Var k, BinOp ('*', Var n, Var m))))))), App (App (Var fact_cps, Int 5), Abs (Var x, Var x)))] |}]
+  [%expect
+    {| Ok [Let (Rec, Var fact_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), App (Var k, Int 1), App (App (Var fact_cps, BinOp ('-', Var n, Int 1)), Abs (Var m, App (Var k, BinOp ('*', Var n, Var m))))))), App (App (Var fact_cps, Int 5), Abs (Var x, Var x)))] |}]
 ;;
 
 let%expect_test "CPS fibonacci" =
   test
     "let rec fib_cps n k = if n <= 1 then k n else fib_cps (n - 1) (fun a -> fib_cps (n \
      - 2) (fun b -> k (a + b))) in fib_cps 10 (fun x -> x)";
-  [%expect {| Ok [Let (Rec, Var fib_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), App (Var k, Var n), App (App (Var fib_cps, BinOp ('-', Var n, Int 1)), Abs (Var a, App (App (Var fib_cps, BinOp ('-', Var n, Int 2)), Abs (Var b, App (Var k, BinOp ('+', Var a, Var b))))))))), App (App (Var fib_cps, Int 10), Abs (Var x, Var x)))] |}]
+  [%expect
+    {| Ok [Let (Rec, Var fib_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), App (Var k, Var n), App (App (Var fib_cps, BinOp ('-', Var n, Int 1)), Abs (Var a, App (App (Var fib_cps, BinOp ('-', Var n, Int 2)), Abs (Var b, App (Var k, BinOp ('+', Var a, Var b))))))))), App (App (Var fib_cps, Int 10), Abs (Var x, Var x)))] |}]
 ;;
