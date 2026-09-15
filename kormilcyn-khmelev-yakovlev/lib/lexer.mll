@@ -6,8 +6,7 @@ open Parser
 let white = [' ' '\t']+
 let digit = ['0'-'9']
 let const = '-'? digit+
-let letter = ['a'-'z' 'A'-'Z']
-let id = letter+ (*TODO: ID like in OCaml*)
+let id = ['a'-'z' '_'] ['A'-'Z' 'a'-'z' '0'-'9' '_' '\'']*
 
 rule read =
   parse
@@ -23,6 +22,8 @@ rule read =
   | "if" { IF }
   | "then" { THEN }
   | "else" { ELSE }
+  | "fun" { FUN }
+  | "->" { ARROW }
   | id { ID (Lexing.lexeme lexbuf) }
   | const { CONST (int_of_string (Lexing.lexeme lexbuf)) }
   | eof { EOF }
