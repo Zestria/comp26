@@ -8,10 +8,16 @@
 
 open Frontend
 open Parser_LL
-open Printer_LL
+open Printer
 
 let test src =
-  match parse_string_LL src with
+  let parsed = parse_string_LL src in
+  (* Compare the shared syntax; the original LR grammar also accepts empty input. *)
+  (match parsed, Parse.parse src with
+   | Ok expected, Ok actual when expected = actual -> ()
+   | Error _, _ -> ()
+   | _ -> failwith (Printf.sprintf "Parsers disagree on %S" src));
+  match parsed with
   | Ok prog -> Printf.printf "Ok [%s]\n" (print_ast prog)
   | Error (`lexer_error msg | `parse_error msg) -> Printf.printf "Error: %s\n" msg
 ;;

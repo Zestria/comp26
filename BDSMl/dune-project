@@ -2,6 +2,8 @@
 
 (name BDSMl)
 
+(using menhir 3.0)
+
 (generate_opam_files)
 
 (authors "Filichkin Bogdan, Dalyshe sami")
@@ -16,6 +18,9 @@
  (depends
   ocaml
   dune
+  (menhir :build)
+  base
+  (ppx_expect :with-test)
   (angstrom
    (= "0.16.0"))
   qcheck

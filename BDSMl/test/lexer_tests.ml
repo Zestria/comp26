@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open Frontend
-open Lexer_LL
+open Lexer
 
 let show_token = function
   | TEOF -> "TEOF"
@@ -44,7 +44,10 @@ let show_token = function
 ;;
 
 let test src =
-  match tokenize src with
+  let tokens = tokenize src in
+  if Lexer_LR.tokenize src <> tokens
+  then failwith (Printf.sprintf "Lexers disagree on %S" src);
+  match tokens with
   | Ok toks ->
     let tok_strs = List.map show_token toks in
     Printf.printf "Ok [%s]\n" (String.concat "; " tok_strs)

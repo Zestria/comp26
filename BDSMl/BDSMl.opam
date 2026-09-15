@@ -7,6 +7,9 @@ license: "LGPL-3.0-or-later"
 depends: [
   "ocaml"
   "dune" {>= "3.24"}
+  "menhir" {build}
+  "base"
+  "ppx_expect" {with-test}
   "angstrom" {= "0.16.0"}
   "qcheck"
   "bisect_ppx_ng"
