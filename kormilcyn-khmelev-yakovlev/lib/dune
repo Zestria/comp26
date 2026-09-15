@@ -1,8 +1,7 @@
 (library
  (name kormilcyn_khmelev_yakovlev_lib)
  (public_name shmel.Lib)
- (wrapped false)
- (modules Ast Printast Parser Lexer)
+ (modules Ast Printast Parser Lexer Main)
  (preprocess
   (pps ppx_deriving.show))
  (instrumentation
