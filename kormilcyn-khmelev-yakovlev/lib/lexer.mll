@@ -2,17 +2,22 @@
 open Parser
 }
 
-let white = [' ' '\t']+
+let white = [' ' '\t' '\n' '\r']+
 let digit = ['0'-'9']
-let const = '-'? digit+
+let const = digit+
 let id = ['a'-'z' '_'] ['A'-'Z' 'a'-'z' '0'-'9' '_' '\'']*
 
 rule read =
   parse
   | white { read lexbuf }
   | "<=" { LE}
+  | "<" { LT}
+  | ">=" { GE}
+  | ">" { GT}
   | "*" { TIMES }
+  | "/" { DIVISION }
   | "+" { PLUS }
+  | "-" { MINUS }
   | "(" { LPAREN }
   | ")" { RPAREN }
   | "let" { LET }
