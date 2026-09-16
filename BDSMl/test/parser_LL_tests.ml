@@ -17,7 +17,16 @@ let render src =
 ;;
 
 let check ~name src expected =
-  let actual = render src in
+  let parsed = parse_string_LL src in
+  (match parsed, Parse.parse src with
+   | Ok exp_ast, Ok act_ast when exp_ast = act_ast -> ()
+   | Error _, _ -> ()
+   | _ -> failwith (Printf.sprintf "[%s] Parsers disagree on %S" name src));
+  let actual =
+    match parsed with
+    | Ok prog -> Printf.sprintf "Ok [%s]" (print_ast prog)
+    | Error (`lexer_error msg | `parse_error msg) -> Printf.sprintf "Error: %s" msg
+  in
   if String.trim actual <> String.trim expected
   then
     failwith
