@@ -12,11 +12,27 @@
   open Common
   open Lexing
 
-  let error lexbuf msg =
-    let pos = lexbuf.lex_start_p in
-    Printf.eprintf "Lexing error at line %d, column %d: %s\n"
-      pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1) msg;
-    exit 1
+  type error =
+    { pos : Lexing.position
+    ; msg : string
+    }
+
+  let pp_error ppf { pos; msg } =
+    Format.fprintf
+      ppf
+      "Lexing error at line %d, column %d: %s"
+      pos.pos_lnum
+      (pos.pos_cnum - pos.pos_bol + 1)
+      msg
+  ;;
+
+  exception Lexing_error of error
+
+  let fail lexbuf fmt =
+    Printf.ksprintf
+      (fun msg -> raise (Lexing_error { pos = lexbuf.lex_start_p; msg }))
+      fmt
+  ;;
 
   let lex_string lexbuf s =
     let len = String.length s in
@@ -27,8 +43,8 @@
         match s.[i] with
         | '\\' ->
             let next = i + 1 in
-            if next >= len - 1 then
-              error lexbuf "unexpected end of string after escape"
+            if next >= len - 1
+            then fail lexbuf "unexpected end of string after escape"
             else
               (match s.[next] with
                | '"'  -> Buffer.add_char buf '"'
@@ -36,7 +52,7 @@
                | 't'  -> Buffer.add_char buf '\t'
                | 'r'  -> Buffer.add_char buf '\r'
                | '\\' -> Buffer.add_char buf '\\'
-               | c    -> error lexbuf (Printf.sprintf "unknown escape '\\%c'" c));
+               | c    -> fail lexbuf "unknown escape '\\%c'" c);
               loop (next + 1)
         | c ->
             Buffer.add_char buf c;
@@ -57,10 +73,11 @@ let string_char = [^ '"' '\\']
 let escape_seq  = '\\' ( '"' | 'n' | 't' | 'r' | '\\' )
 let string_body = (string_char | escape_seq)*
 let newline     = '\n' | "\r\n"
-let whitespace  = (' ' | '\t' | newline)+
+let whitespace  = [' ' '\t']+
 
 rule token = parse
   | whitespace        { token lexbuf }
+  | newline           { Lexing.new_line lexbuf; token lexbuf }
   | "(*"              { comment 0 lexbuf; token lexbuf }
   | "if"              { IF }
   | "then"            { THEN }
@@ -71,7 +88,12 @@ rule token = parse
   | "fun"             { FUN }
   | "->"              { RIGHTARROW }
   | identifier as id  { IDENT id }
-  | int_lit as num    { INT (int_of_string num) }
+  | int_lit as num
+      { INT
+          (match int_of_string num with
+           | n -> n
+           | exception Failure _ -> fail lexbuf "integer literal is out of range")
+      }
   (* | float_lit as f    { FLOAT (float_of_string f) } *)
   (* | '"' string_body '"' as s *)
                       (* { STRING (lex_string lexbuf s) } *)
@@ -88,21 +110,25 @@ rule token = parse
   | '('               { LPAREN }
   | ')'               { RPAREN }
   | eof               { EOF }
-  | _ as c            { error lexbuf (Printf.sprintf "unexpected character '%c'" c) }
+  | _ as c            { fail lexbuf "unexpected character '%c'" c }
 
 and comment depth = parse
   | "(*"      { comment (depth + 1) lexbuf }
   | "*)"      { if depth = 0 then () else comment (depth - 1) lexbuf }
-  | eof       { error lexbuf "unclosed comment" }
+  | newline   { Lexing.new_line lexbuf; comment depth lexbuf }
+  | eof       { fail lexbuf "unclosed comment" }
   | _         { comment depth lexbuf }
 
 {
-  let token_stream channel =
-    let lexbuf = from_channel channel in
-    let rec next () =
+  let tokenize src : (token list, error) result =
+    let lexbuf = from_string src in
+    let rec next acc =
       match token lexbuf with
-      | EOF -> []
-      | tok -> tok :: next ()
+      | EOF -> List.rev acc
+      | tok -> next (tok :: acc)
     in
-    next ()
+    match next [] with
+    | toks -> Ok toks
+    | exception Lexing_error e -> Error e
+  ;;
 }
