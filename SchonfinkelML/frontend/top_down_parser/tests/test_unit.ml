@@ -6,20 +6,15 @@
 
 [@@@ocaml.text "/*"]
 
-(** Unit tests for the top-down parser: source -> AST table, plus the operator
-    table it is driven by. *)
+(** Inline tests for the top-down parser: source -> AST, plus the operator
+    table it is driven by.
+
+    Every check is a [let%test], so the runner is what reports a failure and
+    the predicates below only have to answer yes or no. *)
 
 open Frontend.Common
 module P = Top_down.Parser
 module Operators = Top_down.Operators
-
-let failures = ref 0
-let total = ref 0
-
-let report_fail name ~expected ~actual =
-  incr failures;
-  Printf.printf "FAIL: %s\n  expected: %s\n  actual:   %s\n%!" name expected actual
-;;
 
 (* The table of a test, written in the syntax of [--ops]. *)
 let table src =
@@ -28,189 +23,201 @@ let table src =
   | Error msg -> failwith ("the tests use an invalid operator table: " ^ msg)
 ;;
 
-let check_expr name ?ops src expected =
-  incr total;
+(* --- The predicates the tests are written with --- *)
+
+(* The expression a source parses to, or [false] when it does not parse. *)
+let check_expr ?ops src expected =
   match P.parse_expr ?ops src with
-  | Ok e when e = expected -> ()
-  | Ok e ->
-    report_fail name ~expected:(string_of_expr expected) ~actual:(string_of_expr e)
-  | Error err ->
-    report_fail
-      name
-      ~expected:(string_of_expr expected)
-      ~actual:("error: " ^ P.string_of_error err)
+  | Ok e -> e = expected
+  | Error _ -> false
 ;;
 
-let check_error name ?ops src =
-  incr total;
+let check_error ?ops src =
   match P.parse_expr ?ops src with
-  | Error _ -> ()
-  | Ok e -> report_fail name ~expected:"parse error" ~actual:(string_of_expr e)
+  | Error _ -> true
+  | Ok _ -> false
 ;;
 
-let check_error_at name ?ops src expected_offset =
-  incr total;
-  match P.parse_expr ?ops src with
-  | Error e when e.pos.pos_cnum = expected_offset -> ()
-  | Error e ->
-    report_fail
-      name
-      ~expected:(string_of_int expected_offset)
-      ~actual:(string_of_int e.pos.pos_cnum)
-  | Ok e -> report_fail name ~expected:"parse error" ~actual:(string_of_expr e)
+let check_table src expected =
+  match Operators.of_string src with
+  | Ok t -> String.equal (Operators.string_of t) expected
+  | Error _ -> false
 ;;
 
-let check_error_at_pos name ?ops src ~line ~col =
-  incr total;
-  let expected = Printf.sprintf "%d:%d" line col in
-  let actual (e : P.error) =
-    Printf.sprintf "%d:%d" e.pos.pos_lnum (e.pos.pos_cnum - e.pos.pos_bol + 1)
-  in
-  match P.parse_expr ?ops src with
-  | Error e when e.pos.pos_lnum = line && e.pos.pos_cnum - e.pos.pos_bol + 1 = col -> ()
-  | Error e -> report_fail name ~expected ~actual:(actual e)
-  | Ok e -> report_fail name ~expected ~actual:(string_of_expr e)
+let check_bad_table src =
+  match Operators.of_string src with
+  | Error _ -> true
+  | Ok _ -> false
 ;;
 
-let check_does_not_raise name src =
-  incr total;
-  let raised = ref None in
-  (try ignore (P.parse_expr src) with
-   | exn -> raised := Some (Printexc.to_string exn));
-  match !raised with
-  | None -> ()
-  | Some s -> report_fail name ~expected:"Ok/Error without exceptions" ~actual:s
+(* printing a table and reading it back gives the same table *)
+let check_round_trip src =
+  match Operators.of_string src with
+  | Error _ -> false
+  | Ok t ->
+    (match Operators.of_string (Operators.string_of t) with
+     | Ok t' -> t' = t
+     | Error _ -> false)
+;;
+
+let does_not_raise src =
+  try
+    ignore (P.parse_expr src);
+    true
+  with
+  | _ -> false
 ;;
 
 (* --- Literals and identifiers --- *)
 
-let () =
-  check_expr "integer literal" "42" (econsti 42);
-  check_expr "identifier" "x" (Ident "x");
-  check_expr "identifier with digits and a quote" "x1'_2" (Ident "x1'_2");
-  check_expr "uppercase identifier" "Foo" (Ident "Foo")
-;;
+let%test "integer literal" = check_expr "42" (econsti 42)
+let%test "identifier" = check_expr "x" (Ident "x")
+let%test "identifier with digits and a quote" = check_expr "x1'_2" (Ident "x1'_2")
+let%test "uppercase identifier" = check_expr "Foo" (Ident "Foo")
 
 (* --- Application --- *)
 
-let () =
-  let x = Ident "x"
-  and y = Ident "y"
-  and z = Ident "z"
-  and f = Ident "f" in
-  let g = Ident "g" in
-  check_expr "application is left-associative" "x y z" (eapp (eapp x y) z);
-  check_expr "application with parens" "f (g x)" (eapp f (eapp g x));
-  check_expr
-    "application of several atoms"
-    "f 1 2"
-    (eapp (eapp f (econsti 1)) (econsti 2));
-  check_expr "application binds tighter than plus" "f x + y" (eadd (eapp f x) y)
+let%test "application is left-associative" =
+  check_expr "x y z" (eapp (eapp (Ident "x") (Ident "y")) (Ident "z"))
+;;
+
+let%test "application with parens" =
+  check_expr "f (g x)" (eapp (Ident "f") (eapp (Ident "g") (Ident "x")))
+;;
+
+let%test "application of several atoms" =
+  check_expr "f 1 2" (eapp (eapp (Ident "f") (econsti 1)) (econsti 2))
+;;
+
+let%test "application binds tighter than plus" =
+  check_expr "f x + y" (eadd (eapp (Ident "f") (Ident "x")) (Ident "y"))
 ;;
 
 (* --- Operators --- *)
 
-let () =
-  let a = Ident "a"
-  and b = Ident "b"
-  and c = Ident "c"
-  and x = Ident "x" in
-  check_expr
-    "* binds tighter than +"
-    "1 + 2 * 3"
-    (eadd (econsti 1) (emul (econsti 2) (econsti 3)));
-  check_expr
-    "* binds tighter than + (2)"
-    "1 * 2 + 3"
-    (eadd (emul (econsti 1) (econsti 2)) (econsti 3));
-  check_expr
-    "- is left-associative"
-    "1 - 2 - 3"
-    (esub (esub (econsti 1) (econsti 2)) (econsti 3));
-  check_expr
-    "+ is left-associative"
-    "1 + 2 + 3"
-    (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
-  check_expr
-    "parens change the order"
-    "(1 + 2) * 3"
-    (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "division" "1 / 2" (ediv (econsti 1) (econsti 2));
-  check_expr "unary minus" "- x" (euminus x);
-  check_expr "unary minus below application" "- f x" (euminus (eapp (Ident "f") x));
-  check_expr "binary and unary minus" "1 - -2" (esub (econsti 1) (euminus (econsti 2)));
-  check_expr "binary minus" "1 - 2" (esub (econsti 1) (econsti 2));
-  check_expr "comparison <" "a < b" (elt a b);
-  check_expr "comparison >" "a > b" (egt a b);
-  check_expr "comparison =" "a = b" (eeq a b);
-  check_expr "comparison is below +" "a < b + c" (elt a (eadd b c));
-  check_expr "comparisons are left-associative" "a = b = c" (eeq (eeq a b) c);
-  (* The lexer has no two-character operators, so these are only errors. *)
-  check_error "no <=" "a <= b";
-  check_error "no >=" "a >= b"
+let%test "* binds tighter than +" =
+  check_expr "1 + 2 * 3" (eadd (econsti 1) (emul (econsti 2) (econsti 3)))
 ;;
+
+let%test "* binds tighter than + (2)" =
+  check_expr "1 * 2 + 3" (eadd (emul (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "- is left-associative" =
+  check_expr "1 - 2 - 3" (esub (esub (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "+ is left-associative" =
+  check_expr "1 + 2 + 3" (eadd (eadd (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "parens change the order" =
+  check_expr "(1 + 2) * 3" (emul (eadd (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "division" = check_expr "1 / 2" (ediv (econsti 1) (econsti 2))
+let%test "unary minus" = check_expr "- x" (euminus (Ident "x"))
+
+let%test "unary minus below application" =
+  check_expr "- f x" (euminus (eapp (Ident "f") (Ident "x")))
+;;
+
+let%test "binary and unary minus" =
+  check_expr "1 - -2" (esub (econsti 1) (euminus (econsti 2)))
+;;
+
+let%test "binary minus" = check_expr "1 - 2" (esub (econsti 1) (econsti 2))
+let%test "comparison <" = check_expr "a < b" (elt (Ident "a") (Ident "b"))
+let%test "comparison >" = check_expr "a > b" (egt (Ident "a") (Ident "b"))
+let%test "comparison =" = check_expr "a = b" (eeq (Ident "a") (Ident "b"))
+
+let%test "comparison is below +" =
+  check_expr "a < b + c" (elt (Ident "a") (eadd (Ident "b") (Ident "c")))
+;;
+
+let%test "comparisons are left-associative" =
+  check_expr "a = b = c" (eeq (eeq (Ident "a") (Ident "b")) (Ident "c"))
+;;
+
+(* The lexer has no two-character operators, so these are only errors. *)
+let%test "no <=" = check_error "a <= b"
+let%test "no >=" = check_error "a >= b"
 
 (* --- if / fun --- *)
 
-let () =
-  let x = Ident "x"
-  and y = Ident "y" in
-  check_expr "if" "if x then 1 else 2" (eif x (econsti 1) (econsti 2));
+let%test "if" = check_expr "if x then 1 else 2" (eif (Ident "x") (econsti 1) (econsti 2))
+
+let%test "if branches extend to the right" =
   check_expr
-    "if branches extend to the right"
     "if x then 1 else 2 + 3"
-    (eif x (econsti 1) (eadd (econsti 2) (econsti 3)));
+    (eif (Ident "x") (econsti 1) (eadd (econsti 2) (econsti 3)))
+;;
+
+let%test "if with a comparison condition" =
   check_expr
-    "if with a comparison condition"
     "if a < b then f x else g y"
-    (eif (elt (Ident "a") (Ident "b")) (eapp (Ident "f") x) (eapp (Ident "g") y));
+    (eif
+       (elt (Ident "a") (Ident "b"))
+       (eapp (Ident "f") (Ident "x"))
+       (eapp (Ident "g") (Ident "y")))
+;;
+
+let%test "nested if" =
   check_expr
-    "nested if"
     "if x then if y then 1 else 2 else 3"
-    (eif x (eif y (econsti 1) (econsti 2)) (econsti 3));
-  check_expr "fun" "fun x -> x" (elambda "x" x);
-  check_expr
-    "fun with two parameters"
-    "fun x y -> x + y"
-    (elambda "x" (elambda "y" (eadd x y)));
-  check_expr
-    "fun with an explicit fun"
-    "fun x -> fun y -> x"
-    (elambda "x" (elambda "y" x));
-  check_expr
-    "fun body extends to the right"
-    "fun x -> x + 1"
-    (elambda "x" (eadd x (econsti 1)))
+    (eif (Ident "x") (eif (Ident "y") (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "fun" = check_expr "fun x -> x" (elambda "x" (Ident "x"))
+
+let%test "fun with two parameters" =
+  check_expr "fun x y -> x + y" (elambda "x" (elambda "y" (eadd (Ident "x") (Ident "y"))))
+;;
+
+let%test "fun with an explicit fun" =
+  check_expr "fun x -> fun y -> x" (elambda "x" (elambda "y" (Ident "x")))
+;;
+
+let%test "fun body extends to the right" =
+  check_expr "fun x -> x + 1" (elambda "x" (eadd (Ident "x") (econsti 1)))
 ;;
 
 (* --- let --- *)
 
-let () =
-  let x = Ident "x"
-  and f = Ident "f" in
-  check_expr "let" "let x = 1 in x" (elet "x" (econsti 1) x);
+let%test "let" = check_expr "let x = 1 in x" (elet "x" (econsti 1) (Ident "x"))
+
+let%test "let with fun" =
   check_expr
-    "let with fun"
     "let f = fun x -> x in f 2"
-    (elet "f" (elambda "x" x) (eapp f (econsti 2)));
+    (elet "f" (elambda "x" (Ident "x")) (eapp (Ident "f") (econsti 2)))
+;;
+
+let%test "let with parameter sugar" =
   check_expr
-    "let with parameter sugar"
     "let f x = x + 1 in f 2"
-    (elet "f" (elambda "x" (eadd x (econsti 1))) (eapp f (econsti 2)));
-  check_expr "let rec" "let rec f x = f x in f" (eletrec "f" (elambda "x" (eapp f x)) f);
+    (elet "f" (elambda "x" (eadd (Ident "x") (econsti 1))) (eapp (Ident "f") (econsti 2)))
+;;
+
+let%test "let rec" =
   check_expr
-    "nested let"
+    "let rec f x = f x in f"
+    (eletrec "f" (elambda "x" (eapp (Ident "f") (Ident "x"))) (Ident "f"))
+;;
+
+let%test "nested let" =
+  check_expr
     "let x = 1 in let y = 2 in x + y"
-    (elet "x" (econsti 1) (elet "y" (econsti 2) (eadd x (Ident "y"))))
+    (elet "x" (econsti 1) (elet "y" (econsti 2) (eadd (Ident "x") (Ident "y"))))
 ;;
 
 (* --- Comments and whitespace --- *)
 
-let () =
-  check_expr "comments" "(* c *) 1 (* d *)" (econsti 1);
-  check_expr "newlines" "1\n+\n2" (eadd (econsti 1) (econsti 2));
-  check_expr "nested comments" "(* a (* b *) c *) 1" (econsti 1);
-  check_expr "extra spaces and parens" "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
+let%test "comments" = check_expr "(* c *) 1 (* d *)" (econsti 1)
+let%test "newlines" = check_expr "1\n+\n2" (eadd (econsti 1) (econsti 2))
+let%test "nested comments" = check_expr "(* a (* b *) c *) 1" (econsti 1)
+
+let%test "extra spaces and parens" =
+  check_expr "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
 ;;
 
 (* --- Names and keywords ---
@@ -218,30 +225,34 @@ let () =
    A keyword is only a keyword when it is a whole token: the lexer takes the
    longest match, so a name may start with one. *)
 
-let () =
-  check_expr "a name may start with let" "letter" (Ident "letter");
-  check_expr "the same name in parens" "(letter)" (Ident "letter");
-  check_expr "letters" "letters" (Ident "letters");
-  check_expr "letx is a name" "letx" (Ident "letx");
-  check_expr "letinx is one name" "letinx" (Ident "letinx");
-  check_expr "ifn is a name" "ifn" (Ident "ifn");
-  check_expr "two names separated by a space" "f x" (eapp (Ident "f") (Ident "x"));
-  (* Nothing glues: what is not a boundary for the lexer is application or an
-     error for the parser. *)
-  check_expr "letx=1inx" "letx=1inx" (eeq (Ident "letx") (eapp (econsti 1) (Ident "inx")));
-  check_expr
-    "ifn<1then0else1"
-    "ifn<1then0else1"
-    (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")));
-  check_error "no boundary after ->" "funx->x";
-  check_error "no boundary after in" "let x = 1 inx"
+let%test "a name may start with let" = check_expr "letter" (Ident "letter")
+let%test "the same name in parens" = check_expr "(letter)" (Ident "letter")
+let%test "letters" = check_expr "letters" (Ident "letters")
+let%test "letx is a name" = check_expr "letx" (Ident "letx")
+let%test "letinx is one name" = check_expr "letinx" (Ident "letinx")
+let%test "ifn is a name" = check_expr "ifn" (Ident "ifn")
+
+let%test "two names separated by a space" =
+  check_expr "f x" (eapp (Ident "f") (Ident "x"))
 ;;
+
+(* Nothing glues: what is not a boundary for the lexer is application or an
+   error for the parser. *)
+let%test "letx=1inx" =
+  check_expr "letx=1inx" (eeq (Ident "letx") (eapp (econsti 1) (Ident "inx")))
+;;
+
+let%test "ifn<1then0else1" =
+  check_expr "ifn<1then0else1" (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")))
+;;
+
+let%test "no boundary after ->" = check_error "funx->x"
+let%test "no boundary after in" = check_error "let x = 1 inx"
 
 (* --- CPS factorial and fibonacci --- *)
 
-let () =
+let%test "CPS factorial" =
   check_expr
-    "CPS factorial"
     "let rec fact n k = if n = 0 then k 1 else fact (n - 1) (fun r -> k (n * r)) in fact \
      5 (fun x -> x)"
     (eletrec
@@ -256,9 +267,11 @@ let () =
                 (eapp
                    (eapp (Ident "fact") (esub (Ident "n") (econsti 1)))
                    (elambda "r" (eapp (Ident "k") (emul (Ident "n") (Ident "r"))))))))
-       (eapp (eapp (Ident "fact") (econsti 5)) (elambda "x" (Ident "x"))));
+       (eapp (eapp (Ident "fact") (econsti 5)) (elambda "x" (Ident "x"))))
+;;
+
+let%test "CPS fibonacci" =
   check_expr
-    "CPS fibonacci"
     "let rec fib n k = if n < 2 then k n else fib (n - 1) (fun a -> fib (n - 2) (fun b \
      -> k (a + b))) in fib 10 (fun x -> x)"
     (eletrec
@@ -282,131 +295,131 @@ let () =
 
 (* --- The operator table --- *)
 
-let () =
-  let a = Ident "a"
-  and b = Ident "b"
-  and c = Ident "c"
-  and x = Ident "x" in
-  (* Associativity is data: the same source reads differently. *)
+(* Associativity is data: the same source reads differently. *)
+let%test "left +" =
   check_expr
     ~ops:(table "left 6 +")
-    "left +"
     "1 + 2 + 3"
-    (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
+    (eadd (eadd (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "right +" =
   check_expr
     ~ops:(table "right 6 +")
-    "right +"
     "1 + 2 + 3"
-    (eadd (econsti 1) (eadd (econsti 2) (econsti 3)));
-  (* So is precedence: here [+] is the tighter of the two. *)
+    (eadd (econsti 1) (eadd (econsti 2) (econsti 3)))
+;;
+
+(* So is precedence: here [+] is the tighter of the two. *)
+let%test "+ tighter than *" =
   check_expr
     ~ops:(table "left 9 +; left 7 *")
-    "+ tighter than *"
     "1 + 2 * 3"
-    (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
-  (* The precedence of a prefix operator decides how much it takes. *)
+    (emul (eadd (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+(* The precedence of a prefix operator decides how much it takes. *)
+let%test "a tight prefix -" =
   check_expr
     ~ops:(table "prefix 9 -; left 6 +")
-    "a tight prefix -"
     "- a + b"
-    (eadd (euminus a) b);
+    (eadd (euminus (Ident "a")) (Ident "b"))
+;;
+
+let%test "a loose prefix -" =
   check_expr
     ~ops:(table "prefix 3 -; left 6 +")
-    "a loose prefix -"
     "- a + b"
-    (euminus (eadd a b));
-  (* Arity is data as well: without a prefix [-] there is no unary minus. *)
-  check_error ~ops:(table "left 6 -") "no prefix minus" "- a";
-  check_error ~ops:(table "prefix 9 -") "no infix minus" "a - b";
-  (* nonassoc forbids chaining an operator with itself, and with an operator of
-     the same precedence. *)
-  check_expr ~ops:(table "left 4 =") "= chained as left" "a = b = c" (eeq (eeq a b) c);
-  check_error ~ops:(table "nonassoc 4 =") "= chained as nonassoc" "a = b = c";
-  check_error_at ~ops:(table "nonassoc 4 =") "position of a chained =" "a = b = c" 6;
-  check_error ~ops:(table "nonassoc 4 = <") "= and < chained" "a = b < c";
-  (* A table without an operator is a table without that operator. *)
-  check_error ~ops:(table "left 6 +") "no multiplication" "a * b";
-  (* The table only describes operators: [=] of a binding is still a token. *)
+    (euminus (eadd (Ident "a") (Ident "b")))
+;;
+
+(* Arity is data as well: without a prefix [-] there is no unary minus. *)
+let%test "no prefix minus" = check_error ~ops:(table "left 6 -") "- a"
+let%test "no infix minus" = check_error ~ops:(table "prefix 9 -") "a - b"
+
+(* nonassoc forbids chaining an operator with itself, and with an operator of
+   the same precedence. *)
+let%test "= chained as left" =
+  check_expr
+    ~ops:(table "left 4 =")
+    "a = b = c"
+    (eeq (eeq (Ident "a") (Ident "b")) (Ident "c"))
+;;
+
+let%test "= chained as nonassoc" = check_error ~ops:(table "nonassoc 4 =") "a = b = c"
+
+let%test "position of a chained =" =
+  match P.parse_expr ~ops:(table "nonassoc 4 =") "a = b = c" with
+  | Error e -> e.pos.pos_cnum = 6
+  | Ok _ -> false
+;;
+
+let%test "= and < chained" = check_error ~ops:(table "nonassoc 4 = <") "a = b < c"
+
+(* A table without an operator is a table without that operator. *)
+let%test "no multiplication" = check_error ~ops:(table "left 6 +") "a * b"
+
+(* The table only describes operators: [=] of a binding is still a token. *)
+let%test "the table does not touch let" =
   check_expr
     ~ops:(table "right 6 +")
-    "the table does not touch let"
     "let x = 1 in x + x"
-    (elet "x" (econsti 1) (eadd x x))
+    (elet "x" (econsti 1) (eadd (Ident "x") (Ident "x")))
 ;;
 
 (* --- The syntax of a table, as given to [--ops] --- *)
 
-let () =
-  let check_table name src expected =
-    incr total;
-    match Operators.of_string src with
-    | Ok t when String.equal (Operators.string_of t) expected -> ()
-    | Ok t -> report_fail name ~expected ~actual:(Operators.string_of t)
-    | Error msg -> report_fail name ~expected ~actual:("error: " ^ msg)
-  in
-  let check_bad_table name src =
-    incr total;
-    match Operators.of_string src with
-    | Error _ -> ()
-    | Ok t -> report_fail name ~expected:"a table error" ~actual:(Operators.string_of t)
-  in
-  check_table "an empty table" "" "";
-  check_table "one group" "left 6 + -" "left 6 + -";
+let%test "an empty table" = check_table "" ""
+let%test "one group" = check_table "left 6 + -" "left 6 + -"
+
+let%test "the default table" =
   check_table
-    "the default table"
     "left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
-    (Operators.string_of Operators.default);
-  check_table "spaces and tabs" "  left \t 6\t+  " "left 6 +";
-  check_table "an empty group" "left 6 +;" "left 6 +";
-  check_table "one spelling, two fixities" "prefix 9 -; left 6 -" "prefix 9 -; left 6 -";
-  check_bad_table "unknown fixity" "fat 6 +";
-  check_bad_table "no precedence" "left";
-  check_bad_table "no operators" "left 6";
-  check_bad_table "precedence is not a number" "left + 6";
-  check_bad_table "unknown operator" "left 6 ^";
-  check_bad_table "the same spelling twice" "left 6 +; right 6 +";
-  check_bad_table "the same spelling twice as a prefix" "prefix 9 -; prefix 8 -";
-  (* printing a table and reading it back gives the same table *)
-  List.iter
-    (fun src ->
-       incr total;
-       match Operators.of_string src with
-       | Error msg ->
-         report_fail ("pp round-trip of " ^ src) ~expected:"a table" ~actual:msg
-       | Ok t ->
-         let expected = Operators.string_of t in
-         (match Operators.of_string expected with
-          | Ok t' when t' = t -> ()
-          | Ok t' ->
-            report_fail
-              ("pp round-trip of " ^ src)
-              ~expected
-              ~actual:(Operators.string_of t')
-          | Error msg -> report_fail ("pp round-trip of " ^ src) ~expected ~actual:msg))
-    [ ""
-    ; "left 6 +"
-    ; "prefix 9 -"
-    ; "left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
-    ; "nonassoc 4 ="
-    ; "prefix 9 -; left 6 -"
-    ];
-  (* a spelling can be looked up as an infix and as a prefix operator *)
-  incr total;
+    (Operators.string_of Operators.default)
+;;
+
+let%test "spaces and tabs" = check_table "  left \t 6\t+  " "left 6 +"
+let%test "an empty group" = check_table "left 6 +;" "left 6 +"
+
+let%test "one spelling, two fixities" =
+  check_table "prefix 9 -; left 6 -" "prefix 9 -; left 6 -"
+;;
+
+let%test "unknown fixity" = check_bad_table "fat 6 +"
+let%test "no precedence" = check_bad_table "left"
+let%test "no operators" = check_bad_table "left 6"
+let%test "precedence is not a number" = check_bad_table "left + 6"
+let%test "unknown operator" = check_bad_table "left 6 ^"
+let%test "the same spelling twice" = check_bad_table "left 6 +; right 6 +"
+let%test "the same spelling twice as a prefix" = check_bad_table "prefix 9 -; prefix 8 -"
+
+(* printing a table and reading it back gives the same table *)
+let%test "pp round-trip of an empty table" = check_round_trip ""
+let%test "pp round-trip of left 6 +" = check_round_trip "left 6 +"
+let%test "pp round-trip of prefix 9 -" = check_round_trip "prefix 9 -"
+
+let%test "pp round-trip of the default table" =
+  check_round_trip "left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
+;;
+
+let%test "pp round-trip of nonassoc 4 =" = check_round_trip "nonassoc 4 ="
+let%test "pp round-trip of prefix 9 -; left 6 -" = check_round_trip "prefix 9 -; left 6 -"
+
+(* a spelling can be looked up as an infix and as a prefix operator *)
+let%test "find_infix/find_prefix on -" =
   let t = table "prefix 9 -; left 6 -" in
-  (match Operators.find_infix t MINUS, Operators.find_prefix t MINUS with
-   | Some i, Some p when i.Operators.prec = 6 && p.Operators.prec = 9 -> ()
-   | _ ->
-     report_fail
-       "find_infix/find_prefix on -"
-       ~expected:"precedences 6 and 9"
-       ~actual:"something else");
-  incr total;
+  match Operators.find_infix t MINUS, Operators.find_prefix t MINUS with
+  | Some i, Some p -> i.Operators.prec = 6 && p.Operators.prec = 9
+  | _ -> false
+;;
+
+let%test "lookups of an absent operator" =
   match
     ( Operators.find_infix (table "prefix 9 -") PLUS
     , Operators.find_prefix (table "left 6 +") PLUS )
   with
-  | None, None -> ()
-  | _ -> report_fail "lookups of an absent operator" ~expected:"None" ~actual:"Some"
+  | None, None -> true
+  | _ -> false
 ;;
 
 (* --- Errors ---
@@ -418,39 +431,50 @@ let () =
    [Lexing.new_line] yet, so the line of a position is always 1 and a position
    is read as a character offset. *)
 
-let () =
-  check_error "empty input" "";
-  check_error "whitespace only" "   ";
-  check_error "let without in" "let x = 1";
-  check_error "if without else" "if x then 1";
-  check_error "unclosed paren" "(1";
-  check_error "extra paren" "1)";
-  check_error "unit is not supported" "()";
-  check_error "empty parens" "( )";
-  check_error "let without a name" "let = 1 in x";
-  check_error "keyword as a name" "let rec = 1 in x";
-  check_error "dangling plus" "1 +";
-  check_error "keyword as an expression" "in";
-  (* the one lexing failure that is a value and not an exit *)
-  check_error "literal overflow" "99999999999999999999";
-  check_error_at "position of a missing in" "let x = 1" 9;
-  check_error_at "position of the end of the input" "1 +" 3;
-  check_error_at_pos "position of a missing in" "let x = 1" ~line:1 ~col:10;
-  check_error_at_pos "position of a dangling operator" "1 +" ~line:1 ~col:4;
-  List.iter
-    (fun src -> check_does_not_raise ("does not raise on " ^ String.escaped src) src)
-    [ "(((((("
-    ; "letx=1inx"
-    ; "let rec"
-    ; "-->"
-    ; String.make 100 '('
-    ; String.make 100 '-'
-    ; String.make 1000 'x'
-    ]
+let%test "empty input" = check_error ""
+let%test "whitespace only" = check_error "   "
+let%test "let without in" = check_error "let x = 1"
+let%test "if without else" = check_error "if x then 1"
+let%test "unclosed paren" = check_error "(1"
+let%test "extra paren" = check_error "1)"
+let%test "unit is not supported" = check_error "()"
+let%test "empty parens" = check_error "( )"
+let%test "let without a name" = check_error "let = 1 in x"
+let%test "keyword as a name" = check_error "let rec = 1 in x"
+let%test "dangling plus" = check_error "1 +"
+let%test "keyword as an expression" = check_error "in"
+
+(* the one lexing failure that is a value and not an exit *)
+let%test "literal overflow" = check_error "99999999999999999999"
+
+let%test "offset of a missing in" =
+  match P.parse_expr "let x = 1" with
+  | Error e -> e.pos.pos_cnum = 9
+  | Ok _ -> false
 ;;
 
-if !failures = 0
-then Printf.printf "unit: %d checks passed\n%!" !total
-else (
-  Printf.printf "unit: %d of %d checks failed\n%!" !failures !total;
-  exit 1)
+let%test "offset of the end of the input" =
+  match P.parse_expr "1 +" with
+  | Error e -> e.pos.pos_cnum = 3
+  | Ok _ -> false
+;;
+
+let%test "position of a missing in" =
+  match P.parse_expr "let x = 1" with
+  | Error e -> e.pos.pos_lnum = 1 && e.pos.pos_cnum - e.pos.pos_bol + 1 = 10
+  | Ok _ -> false
+;;
+
+let%test "position of a dangling operator" =
+  match P.parse_expr "1 +" with
+  | Error e -> e.pos.pos_lnum = 1 && e.pos.pos_cnum - e.pos.pos_bol + 1 = 4
+  | Ok _ -> false
+;;
+
+let%test "does not raise on ((((((" = does_not_raise "(((((("
+let%test "does not raise on letx=1inx" = does_not_raise "letx=1inx"
+let%test "does not raise on let rec" = does_not_raise "let rec"
+let%test "does not raise on -->" = does_not_raise "-->"
+let%test "does not raise on 100 parens" = does_not_raise (String.make 100 '(')
+let%test "does not raise on 100 minuses" = does_not_raise (String.make 100 '-')
+let%test "does not raise on 1000 letters" = does_not_raise (String.make 1000 'x')
