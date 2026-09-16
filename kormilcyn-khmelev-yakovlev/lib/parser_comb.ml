@@ -62,14 +62,7 @@ let make_parser ~extended =
       (take_while is_ident_char)
     >>= fun s -> if (not extended) && List.mem s keywords then fail "keyword" else return s
   in
-  let integer =
-    lift2
-      (fun sign digits ->
-        let n = int_of_string digits in
-        if sign then -n else n)
-      (option false (char '-' *> return true))
-      (take_while1 is_digit)
-  in
+  let integer = take_while1 is_digit >>| int_of_string in
   let keyword s =
     spaces
     *> string s
@@ -83,7 +76,17 @@ let make_parser ~extended =
       | _ -> spaces
   in
   fix (fun expr ->
-    let atom ~var_name =
+    let rec unary_atom ~var_name () =
+      spaces
+      *> choice
+           [ (char '-' *> peek_char
+              >>= function
+              | Some c when (not (is_space c)) && c <> ')' ->
+                unary_atom ~var_name () >>| fun e -> Ast.Neg e
+              | _ -> fail "not a unary minus")
+           ; atom ~var_name
+           ]
+    and atom ~var_name =
       spaces
       *> choice
            [ char '(' *> spaces *> expr <* spaces <* char ')'
@@ -150,9 +153,13 @@ let make_parser ~extended =
       lift2
         (fun head args -> List.fold_left (fun l r -> Ast.App (l, r)) head args)
         (atom ~var_name:binder_name)
-        (many (atom ~var_name:identifier))
+        (many (unary_atom ~var_name:identifier ()))
     in
-    let mult = chainl1 app mult_op in
+    let unary =
+      fix (fun unary ->
+        choice [ (spaces *> char '-' *> unary >>| fun e -> Ast.Neg e); app ])
+    in
+    let mult = chainl1 unary mult_op in
     let add = chainl1 mult add_op in
     let cmp = chainl1 add cmp_op in
     choice

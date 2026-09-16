@@ -15,6 +15,7 @@ let rec pp fmt = function
   | Abs (x, body) -> fprintf fmt "(fun %s -> %a)" x pp body
   | Const n when n < 0 -> fprintf fmt "(%d)" n
   | Const n -> fprintf fmt "%d" n
+  | Neg e -> fprintf fmt "(-%a)" pp e
   | If (c, t, e) -> fprintf fmt "(if %a then %a else %a)" pp c pp t pp e
   | Let (n, e1, e2) -> fprintf fmt "(let %s = %a in %a)" n pp e1 pp e2
   | LetRec (f, p, b, inb) -> fprintf fmt "(let rec %s %s = %a in %a)" f p pp b pp inb
