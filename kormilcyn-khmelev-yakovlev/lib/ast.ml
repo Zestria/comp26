@@ -25,6 +25,7 @@ type expr =
   | Abs of name * expr
   | App of expr * expr
   | Const of int
+  | Neg of expr
   | BinOp of binop * expr * expr
   | If of expr * expr * expr
   | Let of name * expr * expr
