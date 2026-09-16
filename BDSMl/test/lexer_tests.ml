@@ -43,137 +43,125 @@ let show_token = function
   | TSemisemi -> "TSemisemi"
 ;;
 
-let test src =
+let render src =
   let tokens = tokenize src in
   if Lexer_LR.tokenize src <> tokens
   then failwith (Printf.sprintf "Lexers disagree on %S" src);
   match tokens with
   | Ok toks ->
     let tok_strs = List.map show_token toks in
-    Printf.printf "Ok [%s]\n" (String.concat "; " tok_strs)
-  | Error (`lexer_error msg) -> Printf.printf "Error: %s\n" msg
+    Printf.sprintf "Ok [%s]" (String.concat "; " tok_strs)
+  | Error (`lexer_error msg) -> Printf.sprintf "Error: %s" msg
 ;;
 
-let%expect_test "empty & whitespace" =
-  test "";
-  [%expect {| Ok [TEOF] |}];
-  test "   \t\n  \n";
-  [%expect {| Ok [TEOF] |}]
+let case ~name src expected =
+  Alcotest.test_case name `Quick (fun () ->
+    let actual = render src in
+    Alcotest.(check string) src expected actual)
 ;;
 
-(* --- Числа --- *)
-
-let%expect_test "numbers" =
-  test "0";
-  [%expect {| Ok [TInt(0); TEOF] |}];
-  test "42";
-  [%expect {| Ok [TInt(42); TEOF] |}];
-  test "123";
-  [%expect {| Ok [TInt(123); TEOF] |}];
-  test "999999999999999999999999999";
-  [%expect {| Error: 1:1: integer literal '999999999999999999999999999' out of range |}]
+let empty_and_whitespace_tests =
+  [ case ~name:"empty" "" "Ok [TEOF]"; case ~name:"whitespace" "   \t\n  \n" "Ok [TEOF]" ]
 ;;
 
-let%expect_test "identifiers" =
-  test "x";
-  [%expect {| Ok [TIdent("x"); TEOF] |}];
-  test "x1";
-  [%expect {| Ok [TIdent("x1"); TEOF] |}];
-  test "_";
-  [%expect {| Ok [TUnderscore; TEOF] |}];
-  test "_foo";
-  [%expect {| Ok [TIdent("_foo"); TEOF] |}];
-  test "fooBar";
-  [%expect {| Ok [TIdent("fooBar"); TEOF] |}]
+let number_tests =
+  [ case ~name:"zero" "0" "Ok [TInt(0); TEOF]"
+  ; case ~name:"42" "42" "Ok [TInt(42); TEOF]"
+  ; case ~name:"123" "123" "Ok [TInt(123); TEOF]"
+  ; case
+      ~name:"overflow"
+      "999999999999999999999999999"
+      "Error: 1:1: integer literal '999999999999999999999999999' out of range"
+  ]
 ;;
 
-let%expect_test "keywords" =
-  test "true false if then else let rec in fun not";
-  [%expect {| Ok [TTrue; TFalse; TIF; TThen; TElse; TLet; TRec; TIn; TFun; TNot; TEOF] |}]
+let identifier_tests =
+  [ case ~name:"x" "x" "Ok [TIdent(\"x\"); TEOF]"
+  ; case ~name:"x1" "x1" "Ok [TIdent(\"x1\"); TEOF]"
+  ; case ~name:"underscore" "_" "Ok [TUnderscore; TEOF]"
+  ; case ~name:"_foo" "_foo" "Ok [TIdent(\"_foo\"); TEOF]"
+  ; case ~name:"fooBar" "fooBar" "Ok [TIdent(\"fooBar\"); TEOF]"
+  ]
 ;;
 
-let%expect_test "maximal munch for keywords" =
-  test "iffy";
-  [%expect {| Ok [TIdent("iffy"); TEOF] |}];
-  test "inlet";
-  [%expect {| Ok [TIdent("inlet"); TEOF] |}];
-  test "lettuce";
-  [%expect {| Ok [TIdent("lettuce"); TEOF] |}];
-  test "trueish";
-  [%expect {| Ok [TIdent("trueish"); TEOF] |}];
-  test "funny";
-  [%expect {| Ok [TIdent("funny"); TEOF] |}];
-  test "recover";
-  [%expect {| Ok [TIdent("recover"); TEOF] |}];
-  test "thenable";
-  [%expect {| Ok [TIdent("thenable"); TEOF] |}];
-  test "nothing";
-  [%expect {| Ok [TIdent("nothing"); TEOF] |}]
+let keyword_tests =
+  [ case
+      ~name:"all keywords"
+      "true false if then else let rec in fun not"
+      "Ok [TTrue; TFalse; TIF; TThen; TElse; TLet; TRec; TIn; TFun; TNot; TEOF]"
+  ]
 ;;
 
-let%expect_test "parens and unit" =
-  test "()";
-  [%expect {| Ok [TUnit; TEOF] |}];
-  test "(x)";
-  [%expect {| Ok [TLParen; TIdent("x"); TRParen; TEOF] |}];
-  test "( )";
-  [%expect {| Ok [TLParen; TRParen; TEOF] |}]
+let maximal_munch_tests =
+  [ case ~name:"iffy" "iffy" "Ok [TIdent(\"iffy\"); TEOF]"
+  ; case ~name:"inlet" "inlet" "Ok [TIdent(\"inlet\"); TEOF]"
+  ; case ~name:"lettuce" "lettuce" "Ok [TIdent(\"lettuce\"); TEOF]"
+  ; case ~name:"trueish" "trueish" "Ok [TIdent(\"trueish\"); TEOF]"
+  ; case ~name:"funny" "funny" "Ok [TIdent(\"funny\"); TEOF]"
+  ; case ~name:"recover" "recover" "Ok [TIdent(\"recover\"); TEOF]"
+  ; case ~name:"thenable" "thenable" "Ok [TIdent(\"thenable\"); TEOF]"
+  ; case ~name:"nothing" "nothing" "Ok [TIdent(\"nothing\"); TEOF]"
+  ]
 ;;
 
-let%expect_test "operators" =
-  test "+";
-  [%expect {| Ok [TPlus; TEOF] |}];
-  test "-";
-  [%expect {| Ok [TMinus; TEOF] |}];
-  test "->";
-  [%expect {| Ok [TArrow; TEOF] |}];
-  test "*";
-  [%expect {| Ok [TStar; TEOF] |}];
-  test "/";
-  [%expect {| Ok [TSlash; TEOF] |}];
-  test "=";
-  [%expect {| Ok [TEqual; TEOF] |}];
-  test "<>";
-  [%expect {| Ok [TNotEqual; TEOF] |}];
-  test "<";
-  [%expect {| Ok [TLess; TEOF] |}];
-  test "<=";
-  [%expect {| Ok [TELess; TEOF] |}];
-  test ">";
-  [%expect {| Ok [TMore; TEOF] |}];
-  test ">=";
-  [%expect {| Ok [TEMore; TEOF] |}];
-  test "&&";
-  [%expect {| Ok [TAnd; TEOF] |}];
-  test "||";
-  [%expect {| Ok [TOr; TEOF] |}];
-  test ";;";
-  [%expect {| Ok [TSemisemi; TEOF] |}]
+let parens_and_unit_tests =
+  [ case ~name:"unit" "()" "Ok [TUnit; TEOF]"
+  ; case ~name:"paren ident" "(x)" "Ok [TLParen; TIdent(\"x\"); TRParen; TEOF]"
+  ; case ~name:"paren space" "( )" "Ok [TLParen; TRParen; TEOF]"
+  ]
 ;;
 
-let%expect_test "expressions" =
-  test "-5";
-  [%expect {| Ok [TMinus; TInt(5); TEOF] |}];
-  test "1+2*3";
-  [%expect {| Ok [TInt(1); TPlus; TInt(2); TStar; TInt(3); TEOF] |}]
+let operator_tests =
+  [ case ~name:"plus" "+" "Ok [TPlus; TEOF]"
+  ; case ~name:"minus" "-" "Ok [TMinus; TEOF]"
+  ; case ~name:"arrow" "->" "Ok [TArrow; TEOF]"
+  ; case ~name:"star" "*" "Ok [TStar; TEOF]"
+  ; case ~name:"slash" "/" "Ok [TSlash; TEOF]"
+  ; case ~name:"equal" "=" "Ok [TEqual; TEOF]"
+  ; case ~name:"not equal" "<>" "Ok [TNotEqual; TEOF]"
+  ; case ~name:"less" "<" "Ok [TLess; TEOF]"
+  ; case ~name:"less-equal" "<=" "Ok [TELess; TEOF]"
+  ; case ~name:"more" ">" "Ok [TMore; TEOF]"
+  ; case ~name:"more-equal" ">=" "Ok [TEMore; TEOF]"
+  ; case ~name:"and" "&&" "Ok [TAnd; TEOF]"
+  ; case ~name:"or" "||" "Ok [TOr; TEOF]"
+  ; case ~name:"semisemi" ";;" "Ok [TSemisemi; TEOF]"
+  ]
 ;;
 
-let%expect_test "lexer errors" =
-  test "&";
-  [%expect {| Error: 1:1: unexpected '&' (expected '&&') |}];
-  test "|";
-  [%expect {| Error: 1:1: unexpected '|' (expected '||') |}];
-  test ";";
-  [%expect {| Error: 1:1: unexpected character ';' |}];
-  test "@";
-  [%expect {| Error: 1:1: unexpected character '@' |}];
-  test "$";
-  [%expect {| Error: 1:1: unexpected character '$' |}]
+let expression_tests =
+  [ case ~name:"unary minus" "-5" "Ok [TMinus; TInt(5); TEOF]"
+  ; case ~name:"arithmetic" "1+2*3" "Ok [TInt(1); TPlus; TInt(2); TStar; TInt(3); TEOF]"
+  ]
 ;;
 
-let%expect_test "error positions" =
-  test "\n\n@";
-  [%expect {| Error: 3:1: unexpected character '@' |}];
-  test "ab @";
-  [%expect {| Error: 1:4: unexpected character '@' |}]
+let lexer_error_tests =
+  [ case ~name:"single &" "&" "Error: 1:1: unexpected '&' (expected '&&')"
+  ; case ~name:"single |" "|" "Error: 1:1: unexpected '|' (expected '||')"
+  ; case ~name:"semicolon" ";" "Error: 1:1: unexpected character ';'"
+  ; case ~name:"at sign" "@" "Error: 1:1: unexpected character '@'"
+  ; case ~name:"dollar sign" "$" "Error: 1:1: unexpected character '$'"
+  ]
+;;
+
+let error_position_tests =
+  [ case ~name:"newlines before error" "\n\n@" "Error: 3:1: unexpected character '@'"
+  ; case ~name:"error after tokens" "ab @" "Error: 1:4: unexpected character '@'"
+  ]
+;;
+
+let () =
+  Alcotest.run
+    "lexer"
+    [ "empty & whitespace", empty_and_whitespace_tests
+    ; "numbers", number_tests
+    ; "identifiers", identifier_tests
+    ; "keywords", keyword_tests
+    ; "maximal munch for keywords", maximal_munch_tests
+    ; "parens and unit", parens_and_unit_tests
+    ; "operators", operator_tests
+    ; "expressions", expression_tests
+    ; "lexer errors", lexer_error_tests
+    ; "error positions", error_position_tests
+    ]
 ;;

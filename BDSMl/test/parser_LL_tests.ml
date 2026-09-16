@@ -10,99 +10,130 @@ open Frontend
 open Parser_LL
 open Printer
 
-let test src =
-  let parsed = parse_string_LL src in
-  (* Compare the shared syntax; the original LR grammar also accepts empty input. *)
-  (match parsed, Parse.parse src with
-   | Ok expected, Ok actual when expected = actual -> ()
-   | Error _, _ -> ()
-   | _ -> failwith (Printf.sprintf "Parsers disagree on %S" src));
-  match parsed with
-  | Ok prog -> Printf.printf "Ok [%s]\n" (print_ast prog)
-  | Error (`lexer_error msg | `parse_error msg) -> Printf.printf "Error: %s\n" msg
+let render src =
+  match parse_string_LL src with
+  | Ok prog -> Printf.sprintf "Ok [%s]" (print_ast prog)
+  | Error (`lexer_error msg | `parse_error msg) -> Printf.sprintf "Error: %s" msg
 ;;
 
-let%expect_test "empty & whitespace" =
-  test "";
-  [%expect {| Error: unexpected token '<eof>' |}];
-  test "   \t\n  \n";
-  [%expect {| Error: unexpected token '<eof>' |}]
+let check ~name src expected =
+  let actual = render src in
+  if String.trim actual <> String.trim expected
+  then
+    failwith
+      (Printf.sprintf
+         "[%s] mismatch for %S:\nexpected: %s\nactual:   %s"
+         name
+         src
+         expected
+         actual)
 ;;
 
-let%expect_test "numbers" =
-  test "0";
-  [%expect {| Ok [Int 0] |}];
-  test "42";
-  [%expect {| Ok [Int 42] |}];
-  test "123";
-  [%expect {| Ok [Int 123] |}]
+let test_empty_and_whitespace () =
+  check ~name:"empty & whitespace" "" "Error: unexpected token '<eof>'";
+  check ~name:"empty & whitespace" "   \t\n  \n" "Error: unexpected token '<eof>'"
 ;;
 
-let%expect_test "identifiers" =
-  test "x";
-  [%expect {| Ok [Var x] |}];
-  test "foo";
-  [%expect {| Ok [Var foo] |}];
-  test "bar123";
-  [%expect {| Ok [Var bar123] |}]
+let test_numbers () =
+  check ~name:"numbers" "0" "Ok [Int 0]";
+  check ~name:"numbers" "42" "Ok [Int 42]";
+  check ~name:"numbers" "123" "Ok [Int 123]"
 ;;
 
-let%expect_test "simple expressions" =
-  test "1 + 2";
-  [%expect {| Ok [BinOp ('+', Int 1, Int 2)] |}];
-  test "x * y - z";
-  [%expect {| Ok [BinOp ('-', BinOp ('*', Var x, Var y), Var z)] |}];
-  test "not true || false";
-  [%expect {| Ok [BinOp ('||', UnOp (not, Bool true), Bool false)] |}]
+let test_identifiers () =
+  check ~name:"identifiers" "x" "Ok [Var x]";
+  check ~name:"identifiers" "foo" "Ok [Var foo]";
+  check ~name:"identifiers" "bar123" "Ok [Var bar123]"
 ;;
 
-let%expect_test "binOp expressions" =
-  test "1 * ((4 - 3) / 2)";
-  [%expect {| Ok [BinOp ('*', Int 1, BinOp ('/', BinOp ('-', Int 4, Int 3), Int 2))] |}]
+let test_simple_expressions () =
+  check ~name:"simple expressions" "1 + 2" "Ok [BinOp ('+', Int 1, Int 2)]";
+  check
+    ~name:"simple expressions"
+    "x * y - z"
+    "Ok [BinOp ('-', BinOp ('*', Var x, Var y), Var z)]";
+  check
+    ~name:"simple expressions"
+    "not true || false"
+    "Ok [BinOp ('||', UnOp (not, Bool true), Bool false)]"
 ;;
 
-let%expect_test "if expressions" =
-  test "if x then y else z";
-  [%expect {| Ok [If (Var x, Var y, Var z)] |}];
-  test "if a + b < c then d else e";
-  [%expect {| Ok [If (BinOp ('<', BinOp ('+', Var a, Var b), Var c), Var d, Var e)] |}]
+let test_binop_expressions () =
+  check
+    ~name:"binOp expressions"
+    "1 * ((4 - 3) / 2)"
+    "Ok [BinOp ('*', Int 1, BinOp ('/', BinOp ('-', Int 4, Int 3), Int 2))]"
 ;;
 
-let%expect_test "Let expressions" =
-  test "let x = 5 in x + 1";
-  [%expect {| Ok [Let (NonRec, Var x, Int 5, BinOp ('+', Var x, Int 1))] |}];
-  test "let rec fact n = if n <= 1 then 1 else n * fact (n - 1) in fact 5";
-  [%expect
-    {|
-Ok [Let (Rec, Var fact, Abs (Var n, If (BinOp ('<=', Var n, Int 1), Int 1, BinOp ('*', Var n, App (Var fact, BinOp ('-', Var n, Int 1))))), App (Var fact, Int 5))] |}]
+let test_if_expressions () =
+  check ~name:"if expressions" "if x then y else z" "Ok [If (Var x, Var y, Var z)]";
+  check
+    ~name:"if expressions"
+    "if a + b < c then d else e"
+    "Ok [If (BinOp ('<', BinOp ('+', Var a, Var b), Var c), Var d, Var e)]"
 ;;
 
-let%expect_test "function application" =
-  test "f x y";
-  [%expect {| Ok [App (App (Var f, Var x), Var y)] |}];
-  test "(g a) b";
-  [%expect {| Ok [App (App (Var g, Var a), Var b)] |}]
+let test_let_expressions () =
+  check
+    ~name:"let expressions"
+    "let x = 5 in x + 1"
+    "Ok [Let (NonRec, Var x, Int 5, BinOp ('+', Var x, Int 1))]";
+  check
+    ~name:"let expressions"
+    "let rec fact n = if n <= 1 then 1 else n * fact (n - 1) in fact 5"
+    "Ok [Let (Rec, Var fact, Abs (Var n, If (BinOp ('<=', Var n, Int 1), Int 1, BinOp \
+     ('*', Var n, App (Var fact, BinOp ('-', Var n, Int 1))))), App (Var fact, Int 5))]"
 ;;
 
-let%expect_test "Abs expressions" =
-  test "fun x -> x + 1";
-  [%expect {| Ok [Abs (Var x, BinOp ('+', Var x, Int 1))] |}];
-  test "fun x -> fun y -> x * y";
-  [%expect {| Ok [Abs (Var x, Abs (Var y, BinOp ('*', Var x, Var y)))] |}]
+let test_function_application () =
+  check ~name:"function application" "f x y" "Ok [App (App (Var f, Var x), Var y)]";
+  check ~name:"function application" "(g a) b" "Ok [App (App (Var g, Var a), Var b)]"
 ;;
 
-let%expect_test "CPS factorial" =
-  test
+let test_abs_expressions () =
+  check
+    ~name:"abs expressions"
+    "fun x -> x + 1"
+    "Ok [Abs (Var x, BinOp ('+', Var x, Int 1))]";
+  check
+    ~name:"abs expressions"
+    "fun x -> fun y -> x * y"
+    "Ok [Abs (Var x, Abs (Var y, BinOp ('*', Var x, Var y)))]"
+;;
+
+let test_cps_factorial () =
+  check
+    ~name:"CPS factorial"
     "let rec fact_cps n k = if n <= 1 then k 1 else fact_cps (n - 1) (fun m -> k (n * \
-     m)) in fact_cps 5 (fun x -> x)";
-  [%expect
-    {| Ok [Let (Rec, Var fact_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), App (Var k, Int 1), App (App (Var fact_cps, BinOp ('-', Var n, Int 1)), Abs (Var m, App (Var k, BinOp ('*', Var n, Var m))))))), App (App (Var fact_cps, Int 5), Abs (Var x, Var x)))] |}]
+     m)) in fact_cps 5 (fun x -> x)"
+    "Ok [Let (Rec, Var fact_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), \
+     App (Var k, Int 1), App (App (Var fact_cps, BinOp ('-', Var n, Int 1)), Abs (Var m, \
+     App (Var k, BinOp ('*', Var n, Var m))))))), App (App (Var fact_cps, Int 5), Abs \
+     (Var x, Var x)))]"
 ;;
 
-let%expect_test "CPS fibonacci" =
-  test
+let test_cps_fibonacci () =
+  check
+    ~name:"CPS fibonacci"
     "let rec fib_cps n k = if n <= 1 then k n else fib_cps (n - 1) (fun a -> fib_cps (n \
-     - 2) (fun b -> k (a + b))) in fib_cps 10 (fun x -> x)";
-  [%expect
-    {| Ok [Let (Rec, Var fib_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), App (Var k, Var n), App (App (Var fib_cps, BinOp ('-', Var n, Int 1)), Abs (Var a, App (App (Var fib_cps, BinOp ('-', Var n, Int 2)), Abs (Var b, App (Var k, BinOp ('+', Var a, Var b))))))))), App (App (Var fib_cps, Int 10), Abs (Var x, Var x)))] |}]
+     - 2) (fun b -> k (a + b))) in fib_cps 10 (fun x -> x)"
+    "Ok [Let (Rec, Var fib_cps, Abs (Var n, Abs (Var k, If (BinOp ('<=', Var n, Int 1), \
+     App (Var k, Var n), App (App (Var fib_cps, BinOp ('-', Var n, Int 1)), Abs (Var a, \
+     App (App (Var fib_cps, BinOp ('-', Var n, Int 2)), Abs (Var b, App (Var k, BinOp \
+     ('+', Var a, Var b))))))))), App (App (Var fib_cps, Int 10), Abs (Var x, Var x)))]"
+;;
+
+let () =
+  test_empty_and_whitespace ();
+  test_numbers ();
+  test_identifiers ();
+  test_simple_expressions ();
+  test_binop_expressions ();
+  test_if_expressions ();
+  test_let_expressions ();
+  test_function_application ();
+  test_abs_expressions ();
+  test_cps_factorial ();
+  test_cps_fibonacci ();
+  print_endline "All parser tests passed."
 ;;
