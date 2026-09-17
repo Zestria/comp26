@@ -19,6 +19,7 @@
   ocaml
   dune
   (menhir :build)
+  benchmark
   base
   (ppx_expect :with-test)
   (angstrom

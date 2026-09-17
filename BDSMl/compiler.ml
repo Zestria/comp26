@@ -6,7 +6,13 @@
 
 [@@@ocaml.text "/*"]
 
-let () =
+open Frontend
+
+type parser_kind =
+  | LL
+  | LR
+
+let emit_demo_llvm () =
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
   let () = assert (Llvm_executionengine.initialize ()) in
@@ -57,4 +63,98 @@ let () =
   in
   prepare_main ();
   Llvm.print_module "out.ll" the_module
+;;
+
+let binop_of_name = function
+  | "plus" -> Ast.Plus
+  | "minus" -> Ast.Minus
+  | "mul" -> Ast.Mult
+  | "div" -> Ast.Div
+  | "equal" -> Ast.Equal
+  | "not-equal" -> Ast.NotEqual
+  | "greater" -> Ast.More
+  | "less" -> Ast.Less
+  | "greater-equal" -> Ast.EMore
+  | "less-equal" -> Ast.ELess
+  | "and" -> Ast.And
+  | "or" -> Ast.Or
+  | name -> raise (Arg.Bad ("unknown operator: " ^ name))
+;;
+
+let associativity_of_name = function
+  | "left" -> Parser_LL.Left
+  | "right" -> Parser_LL.Right
+  | name -> raise (Arg.Bad ("unknown associativity: " ^ name))
+;;
+
+let parse_associativity_override value =
+  match String.split_on_char ':' value with
+  | [ operator; associativity ] ->
+    binop_of_name operator, associativity_of_name associativity
+  | _ ->
+    raise
+      (Arg.Bad
+         "expected OPERATOR:left or OPERATOR:right (for example minus:right)")
+;;
+
+let print_ll_error = function
+  | `lexer_error message | `parse_error message -> message
+;;
+
+let run_frontend parser overrides source =
+  let result =
+    match parser with
+    | LR ->
+      if overrides <> []
+      then Error "--operator-assoc is supported only by the LL parser"
+      else Parse.parse source
+    | LL ->
+      let config =
+        List.fold_left
+          (fun config (operator, associativity) ->
+            Parser_LL.with_associativity config operator associativity)
+          Parser_LL.default_config
+          (List.rev overrides)
+      in
+      (match Parser_LL.parse_string_LL ~config source with
+       | Ok program -> Ok program
+       | Error error -> Error (print_ll_error error))
+  in
+  match result with
+  | Ok program -> print_endline (Printer.print_ast program)
+  | Error message ->
+    prerr_endline message;
+    exit 2
+;;
+
+let () =
+  let parser = ref LL in
+  let source = ref None in
+  let overrides = ref [] in
+  let options =
+    [ ( "--parser"
+      , Arg.Symbol
+          ([ "ll"; "lr" ], function
+            | "ll" -> parser := LL
+            | "lr" -> parser := LR
+            | _ -> assert false)
+      , " Select the parser (default: ll)" )
+    ; ( "--operator-assoc"
+      , Arg.String
+          (fun value -> overrides := parse_associativity_override value :: !overrides)
+      , "OPERATOR:left|right Override an LL operator, e.g. minus:right" )
+    ; ( "--parse"
+      , Arg.String (fun value -> source := Some value)
+      , "SOURCE Parse SOURCE and print its AST" )
+    ]
+  in
+  Arg.parse options (fun _ -> raise (Arg.Bad "unexpected positional argument")) "BDSMl";
+  match !source with
+  | Some source -> run_frontend !parser !overrides source
+  | None ->
+    if !overrides <> []
+    then (
+      prerr_endline "--operator-assoc requires --parse";
+      exit 2)
+    else emit_demo_llvm ()
 ;;

@@ -13,4 +13,14 @@ type error =
   | `parse_error of string
   ]
 
-val parse_string_LL : string -> (program, [> error ]) result
+type associativity =
+  | Left
+  | Right
+
+type config
+
+val default_config : config
+
+val with_associativity : config -> binop -> associativity -> config
+
+val parse_string_LL : ?config:config -> string -> (program, [> error ]) result

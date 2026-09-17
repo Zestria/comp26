@@ -1,5 +1,6 @@
   $ clang-18 -c runtime.c -o runtime.o
-  $ ../compiler.exe --help
+  $ ../compiler.exe --help > /dev/null
+  $ ../compiler.exe
 
   $ cat out.ll | grep -E 'source_filename|target datalayout|ModuleID' --invert-match
   target triple = "x86_64-pc-linux-gnu"
@@ -18,3 +19,12 @@
   $ clang-18 out.ll runtime.o -o demo1.exe
   $ echo "Press $(./demo1.exe) to pay respect"
   Press F to pay respect
+
+  $ ../compiler.exe --parse '8 - 3 - 1'
+  BinOp ('-', BinOp ('-', Int 8, Int 3), Int 1)
+  $ ../compiler.exe --parse '8 - 3 - 1' --operator-assoc minus:right
+  BinOp ('-', Int 8, BinOp ('-', Int 3, Int 1))
+  $ ../compiler.exe --parse 'true || false || true'
+  BinOp ('||', Bool true, BinOp ('||', Bool false, Bool true))
+  $ ../compiler.exe --parse 'true || false || true' --operator-assoc or:left
+  BinOp ('||', BinOp ('||', Bool true, Bool false), Bool true)

@@ -2,3 +2,4 @@
 /_coverage
 BDSMl.install
 
+# Benchmark artifacts are listed in benchmark/.gitignore.

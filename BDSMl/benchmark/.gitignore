@@ -1,0 +1,4 @@
+benchmark_results.csv
+benchmark_summary.csv
+__pycache__/
+.matplotlib/

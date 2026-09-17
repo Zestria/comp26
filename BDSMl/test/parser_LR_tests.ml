@@ -39,6 +39,10 @@ let regression_tests () =
     ; "8 / 2 / 2", BinOp (Div, BinOp (Div, Int 8, Int 2), Int 2)
     ; "1 < 2 = true", BinOp (Equal, BinOp (Less, Int 1, Int 2), Bool true)
     ; "true || false && true", BinOp (Or, Bool true, BinOp (And, Bool false, Bool true))
+    ; ( "true || false || true"
+      , BinOp (Or, Bool true, BinOp (Or, Bool false, Bool true)) )
+    ; ( "true && false && true"
+      , BinOp (And, Bool true, BinOp (And, Bool false, Bool true)) )
     ; ( "let x = let y = 1 in y in x"
       , Let (NonRec, PVar "x", Let (NonRec, PVar "y", Int 1, Var "y"), Var "x") )
     ; ( "if true then if false then 1 else 2 else 3"
@@ -51,6 +55,18 @@ let regression_tests () =
     ; StrEval Unit
     ];
   expect_program "let () = ();;" [ StrLet (NonRec, PUnit, Unit) ];
+  let right_minus =
+    Parser_LL.with_associativity Parser_LL.default_config Minus Parser_LL.Right
+  in
+  (match Parser_LL.parse_string_LL ~config:right_minus "8 - 3 - 1" with
+   | Ok [ StrEval (BinOp (Minus, Int 8, BinOp (Minus, Int 3, Int 1))) ] -> ()
+   | _ -> failwith "LL associativity override for minus was ignored");
+  let left_or =
+    Parser_LL.with_associativity Parser_LL.default_config Or Parser_LL.Left
+  in
+  (match Parser_LL.parse_string_LL ~config:left_or "true || false || true" with
+   | Ok [ StrEval (BinOp (Or, BinOp (Or, Bool true, Bool false), Bool true)) ] -> ()
+   | _ -> failwith "LL associativity override for or was ignored");
   List.iter
     (fun source ->
       match Parser_LL.parse_string_LL source, Parse.parse source with

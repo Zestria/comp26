@@ -14,6 +14,28 @@ type error =
   | `parse_error of string
   ]
 
+type associativity =
+  | Left
+  | Right
+
+type config = { associativity : binop -> associativity }
+
+let default_config =
+  { associativity =
+      (function
+        | And | Or -> Right
+        | Plus | Minus | Mult | Div | Equal | NotEqual | More | Less | EMore | ELess ->
+          Left)
+  }
+;;
+
+let with_associativity config target associativity =
+  { associativity =
+      (fun operator ->
+        if operator = target then associativity else config.associativity operator)
+  }
+;;
+
 let token_to_string = function
   | TUnit -> "()"
   | TInt x -> string_of_int x
@@ -88,19 +110,19 @@ let rec parse_pattern_list tokens =
 let wrap_abs param body = List.fold_right (fun p acc -> Abs (p, acc)) param body
 
 (* wtf *)
-let rec parse_expr tokens =
+let rec parse_expr config tokens =
   match tokens with
   | TLet :: _ ->
-    let* (rec_flag, pat, value), ts = parse_let_header tokens in
+    let* (rec_flag, pat, value), ts = parse_let_header config tokens in
     let* (), ts = expect TIn ts in
-    let* body, ts = parse_expr ts in
+    let* body, ts = parse_expr config ts in
     Ok (Let (rec_flag, pat, value, body), ts)
   | TIF :: ts ->
-    let* cond, ts = parse_expr ts in
+    let* cond, ts = parse_expr config ts in
     let* (), ts = expect TThen ts in
-    let* e_then, ts = parse_expr ts in
+    let* e_then, ts = parse_expr config ts in
     let* (), ts = expect TElse ts in
-    let* e_else, ts = parse_expr ts in
+    let* e_else, ts = parse_expr config ts in
     Ok (If (cond, e_then, e_else), ts)
   | TFun :: ts ->
     let* params, ts = parse_pattern_list ts in
@@ -108,12 +130,12 @@ let rec parse_expr tokens =
     then Error (`parse_error "'fun' expects at least one parameter")
     else
       let* (), ts = expect TArrow ts in
-      let* body, ts = parse_expr ts in
+      let* body, ts = parse_expr config ts in
       Ok (wrap_abs params body, ts)
-  | ts -> parse_or ts
+  | ts -> parse_binary config 0 ts
 
 (* wtf *)
-and parse_let_header tokens =
+and parse_let_header config tokens =
   match tokens with
   | TLet :: ts ->
     let rec_flag, ts =
@@ -124,7 +146,7 @@ and parse_let_header tokens =
     let* pat, ts = parse_pattern ts in
     let* params, ts = parse_pattern_list ts in
     let* (), ts = expect TEqual ts in
-    let* value, ts = parse_expr ts in
+    let* value, ts = parse_expr config ts in
     Ok ((rec_flag, pat, wrap_abs params value), ts)
   | t :: _ -> Error (`parse_error ("expected 'let', got '" ^ token_to_string t ^ "'"))
   | [] -> Error (`parse_error "unexpected end of input")
@@ -144,88 +166,94 @@ and op_of_token = function
   | TOr -> Some Or
   | _ -> None
 
-(* all wtf *)
-and parse_binop parse_next allowed tokens =
-  let* left, ts = parse_next tokens in
-  let rec loop acc ts =
-    match ts with
-    | tok :: rest ->
-      (match op_of_token tok with
-       | Some op when List.mem op allowed ->
-         let* right, ts' = parse_next rest in
-         loop (BinOp (op, acc, right)) ts'
-       | _ -> Ok (acc, ts))
-    | [] -> Ok (acc, ts)
+and precedence = function
+  | Or -> 10
+  | And -> 20
+  | Equal | NotEqual | More | Less | EMore | ELess -> 30
+  | Plus | Minus -> 40
+  | Mult | Div -> 50
+
+and parse_binary config min_precedence tokens =
+  let* left, tokens = parse_unary config tokens in
+  let rec loop left tokens =
+    match tokens with
+    | token :: rest ->
+      (match op_of_token token with
+       | Some operator when precedence operator >= min_precedence ->
+         let operator_precedence = precedence operator in
+         let next_precedence =
+           match config.associativity operator with
+           | Left -> operator_precedence + 1
+           | Right -> operator_precedence
+         in
+         let* right, rest = parse_binary config next_precedence rest in
+         loop (BinOp (operator, left, right)) rest
+       | _ -> Ok (left, tokens))
+    | [] -> Ok (left, [])
   in
-  loop left ts
+  loop left tokens
 
-and parse_or ts = parse_binop parse_and [ Or ] ts
-and parse_and ts = parse_binop parse_cmp [ And ] ts
-and parse_cmp ts = parse_binop parse_add [ Equal; NotEqual; More; Less; EMore; ELess ] ts
-and parse_add ts = parse_binop parse_mul [ Plus; Minus ] ts
-and parse_mul ts = parse_binop parse_unary [ Mult; Div ] ts
-
-and parse_unary = function
+and parse_unary config = function
   | TMinus :: ts ->
-    let* e, ts = parse_unary ts in
+    let* e, ts = parse_unary config ts in
     Ok (UnOp (Neg, e), ts)
   | TNot :: ts ->
-    let* e, ts = parse_unary ts in
+    let* e, ts = parse_unary config ts in
     Ok (UnOp (Not, e), ts)
-  | ts -> parse_app ts
+  | ts -> parse_app config ts
 
 and is_atom_start = function
   | TInt _ | TIdent _ | TTrue | TFalse | TUnit | TLParen -> true
   | _ -> false
 
-and parse_app tokens =
-  let* f, ts = parse_atom tokens in
+and parse_app config tokens =
+  let* f, ts = parse_atom config tokens in
   let rec loop acc ts =
     match ts with
     | t :: _ when is_atom_start t ->
-      let* arg, ts' = parse_atom ts in
+      let* arg, ts' = parse_atom config ts in
       loop (App (acc, arg)) ts'
     | _ -> Ok (acc, ts)
   in
   loop f ts
 
-and parse_atom = function
+and parse_atom config = function
   | TInt n :: ts -> Ok (Int n, ts)
   | TTrue :: ts -> Ok (Bool true, ts)
   | TFalse :: ts -> Ok (Bool false, ts)
   | TUnit :: ts -> Ok (Unit, ts)
   | TIdent s :: ts -> Ok (Var s, ts)
   | TLParen :: ts ->
-    let* e, ts = parse_expr ts in
+    let* e, ts = parse_expr config ts in
     let* (), ts = expect TRParen ts in
     Ok (e, ts)
   | t :: _ -> Error (`parse_error ("unexpected token '" ^ token_to_string t ^ "'"))
   | [] -> Error (`parse_error "unexpected end of input")
 ;;
 
-let parse_structure_item tokens =
+let parse_structure_item config tokens =
   match tokens with
   | TLet :: _ ->
-    let* (rec_flag, pat, value), ts = parse_let_header tokens in
+    let* (rec_flag, pat, value), ts = parse_let_header config tokens in
     (match ts with
      | TIn :: ts ->
-       let* body, ts = parse_expr ts in
+       let* body, ts = parse_expr config ts in
        Ok (StrEval (Let (rec_flag, pat, value, body)), ts)
      | _ -> Ok (StrLet (rec_flag, pat, value), ts))
   | _ ->
-    let* e, ts = parse_expr tokens in
+    let* e, ts = parse_expr config tokens in
     Ok (StrEval e, ts)
 ;;
 
-let rec parse_items tokens =
-  let* item, ts = parse_structure_item tokens in
+let rec parse_items config tokens =
+  let* item, ts = parse_structure_item config tokens in
   match ts with
   | TEOF :: _ -> Ok [ item ]
   | TSemisemi :: rest ->
     (match rest with
      | TEOF :: _ -> Ok [ item ]
      | _ ->
-       let* items = parse_items rest in
+       let* items = parse_items config rest in
        Ok (item :: items))
   | t :: _ ->
     Error
@@ -234,10 +262,16 @@ let rec parse_items tokens =
   | [] -> Error (`parse_error "unexpected end of input")
 ;;
 
-let parse (tokens : token list) : (program, [> error ]) result = parse_items tokens
+let parse ?(config = default_config) (tokens : token list) : (program, [> error ]) result =
+  parse_items config tokens
+;;
 
-let parse_string_LL (src : string) : (program, [> error | Lexer.error ]) result =
+let parse_string_LL
+      ?(config = default_config)
+      (src : string)
+  : (program, [> error | Lexer.error ]) result
+  =
   match Lexer.tokenize src with
   | Error e -> Error e
-  | Ok tokens -> (parse tokens :> (program, [> error | Lexer.error ]) result)
+  | Ok tokens -> (parse ~config tokens :> (program, [> error | Lexer.error ]) result)
 ;;

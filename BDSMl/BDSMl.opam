@@ -8,6 +8,7 @@ depends: [
   "ocaml"
   "dune" {>= "3.24"}
   "menhir" {build}
+  "benchmark"
   "base"
   "ppx_expect" {with-test}
   "angstrom" {= "0.16.0"}
