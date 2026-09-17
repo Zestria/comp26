@@ -1,7 +1,7 @@
 (executable
  (name test_qc)
  (modules test_qc)
- (libraries qcheck angstrom frontend)
+ (libraries qcheck angstrom)
  (preprocess
   (pps ppx_deriving_qcheck ppx_deriving.show)))
 
@@ -9,5 +9,19 @@
  (alias runtest)
  (deps
   (:< test_qc.exe))
+ (action
+  (run %{<})))
+
+(executable
+ (name test_qc_bottom_up)
+ (modules test_qc_bottom_up)
+ (libraries frontend qcheck)
+ (preprocess
+  (pps ppx_deriving_qcheck)))
+
+(rule
+ (alias runtest)
+ (deps
+  (:< test_qc_bottom_up.exe))
  (action
   (run %{<})))
