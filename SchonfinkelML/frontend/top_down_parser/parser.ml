@@ -53,21 +53,20 @@ let cur_pos ctx = snd ctx.toks.(ctx.pos)
 let advance ctx = if ctx.pos < Array.length ctx.toks - 1 then ctx.pos <- ctx.pos + 1
 
 let fail ctx msg : (_, error) result = Error { pos = cur_pos ctx; msg }
+let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
 
-let expect ctx tok what =
+let expect ctx tok =
   if cur ctx = tok
   then (
     advance ctx;
     Ok ())
-  else fail ctx (Printf.sprintf "expected '%s'" what)
+  else fail ctx (Printf.sprintf "expected '%s'" (pp_tok tok))
 ;;
 
 let is_keyword = function
   | Ast.LET | Ast.REC | Ast.IN | Ast.IF | Ast.THEN | Ast.ELSE | Ast.FUN -> true
   | _ -> false
 ;;
-
-let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
 
 let expect_ident ctx =
   match cur ctx with
@@ -76,7 +75,8 @@ let expect_ident ctx =
     Ok name
   | tok ->
     if is_keyword tok
-    then fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" (pp_tok tok))
+    then
+      fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" (pp_tok tok))
     else fail ctx "expected an identifier"
 ;;
 
@@ -184,7 +184,7 @@ and p_atom ctx =
     then fail ctx "the unit value () is not supported"
     else
       let* e = p_expr ctx in
-      let* () = expect ctx Ast.RPAREN ")" in
+      let* () = expect ctx Ast.RPAREN in
       Ok e
   | Ast.UNIT -> fail ctx "the unit value () is not supported"
   | Ast.EOF -> fail ctx "expected an expression"
@@ -193,7 +193,7 @@ and p_atom ctx =
     fail ctx (Printf.sprintf "unexpected %s '%s'" what (pp_tok tok))
 
 and p_let ctx =
-  let* () = expect ctx Ast.LET "let" in
+  let* () = expect ctx Ast.LET in
   let is_rec =
     if cur ctx = Ast.REC
     then (
@@ -203,29 +203,29 @@ and p_let ctx =
   in
   let* name = expect_ident ctx in
   let params = p_params ctx in
-  let* () = expect ctx Ast.EQ "=" in
+  let* () = expect ctx Ast.EQ in
   let* value = p_expr ctx in
-  let* () = expect ctx Ast.IN "in" in
+  let* () = expect ctx Ast.IN in
   let* body = p_expr ctx in
   let value = desugar_params params value in
   Ok (if is_rec then Ast.eletrec name value body else Ast.elet name value body)
 
 and p_if ctx =
-  let* () = expect ctx Ast.IF "if" in
+  let* () = expect ctx Ast.IF in
   let* cond = p_expr ctx in
-  let* () = expect ctx Ast.THEN "then" in
+  let* () = expect ctx Ast.THEN in
   let* then_branch = p_expr ctx in
-  let* () = expect ctx Ast.ELSE "else" in
+  let* () = expect ctx Ast.ELSE in
   let* else_branch = p_expr ctx in
   Ok (Ast.eif cond then_branch else_branch)
 
 and p_fun ctx =
-  let* () = expect ctx Ast.FUN "fun" in
+  let* () = expect ctx Ast.FUN in
   let params = p_params ctx in
   if params = []
   then fail ctx "expected a parameter after 'fun'"
   else
-    let* () = expect ctx Ast.RIGHTARROW "->" in
+    let* () = expect ctx Ast.RIGHTARROW in
     let* body = p_expr ctx in
     Ok (desugar_params params body)
 ;;
