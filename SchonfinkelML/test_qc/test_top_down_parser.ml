@@ -122,12 +122,10 @@ let gen_table_src =
 
 let arb_table_src = QCheck.make ~print:String.escaped gen_table_src
 
-(* Sources for the totality property.  [Frontend.Lexer] still leaves the process
-   on a character it does not know and on a comment that is not closed, so the
-   property cannot be run over [QCheck.string].  These are words of the accepted
-   language, always separated by a space -- which keeps the lexer happy, since
-   no two of them can glue into a comment opener -- while still giving the
-   parser plenty of nonsense to reject. *)
+(* Sources for the totality property: words of the accepted language, always
+   separated by a space -- no two of them can glue into a comment opener -- while
+   still giving the parser plenty of nonsense to reject.  These sources are
+   lexer-clean, so what they exercise is the parser on its own. *)
 let lexer_words =
   [ "x"
   ; "y"

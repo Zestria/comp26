@@ -11,12 +11,14 @@ module Lexer = Frontend.Lexer
 
 let ( let* ) = Result.bind
 
-type error =
-  { pos : Lexing.position
-  ; msg : string
-  }
+(** The parser reports the errors of the lexer as they are: one [pos] and one
+   [msg] is all either of them has to say. *)
+type error = Lexer.error
 
-let pp_error ppf { pos; msg } =
+(** [Lexer.pp_error] calls every message it prints a lexing error, and a source
+   that is merely unparsable is not one; the position is spelled out here
+   instead, so that the two of them read alike up to that word. *)
+let pp_error ppf ({ pos; msg } : error) =
   Format.fprintf ppf "%d:%d: %s" pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1) msg
 ;;
 
@@ -32,8 +34,7 @@ let tokenize src =
     | _ -> loop ((tok, pos) :: acc)
   in
   try loop [] with
-  | Failure _ ->
-    Error { pos = lexbuf.Lexing.lex_start_p; msg = "integer literal is out of range" }
+  | Lexer.Lexing_error e -> Error e
 ;;
 
 type ctx =
@@ -51,7 +52,7 @@ let cur_pos ctx = snd ctx.toks.(ctx.pos)
    [ctx.pos] is always a valid index. *)
 let advance ctx = if ctx.pos < Array.length ctx.toks - 1 then ctx.pos <- ctx.pos + 1
 
-let fail ctx msg = Error { pos = cur_pos ctx; msg }
+let fail ctx msg : (_, error) result = Error { pos = cur_pos ctx; msg }
 
 let expect ctx tok what =
   if cur ctx = tok
@@ -61,16 +62,12 @@ let expect ctx tok what =
   else fail ctx (Printf.sprintf "expected '%s'" what)
 ;;
 
-let keyword_spelling = function
-  | Ast.LET -> Some "let"
-  | Ast.REC -> Some "rec"
-  | Ast.IN -> Some "in"
-  | Ast.IF -> Some "if"
-  | Ast.THEN -> Some "then"
-  | Ast.ELSE -> Some "else"
-  | Ast.FUN -> Some "fun"
-  | _ -> None
+let is_keyword = function
+  | Ast.LET | Ast.REC | Ast.IN | Ast.IF | Ast.THEN | Ast.ELSE | Ast.FUN -> true
+  | _ -> false
 ;;
+
+let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
 
 let expect_ident ctx =
   match cur ctx with
@@ -78,10 +75,9 @@ let expect_ident ctx =
     advance ctx;
     Ok name
   | tok ->
-    (match keyword_spelling tok with
-     | Some kw ->
-       fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" kw)
-     | None -> fail ctx "expected an identifier")
+    if is_keyword tok
+    then fail ctx (Printf.sprintf "expected an identifier, found keyword '%s'" (pp_tok tok))
+    else fail ctx "expected an identifier"
 ;;
 
 (** Names and parameters are read greedily: they end at the first token that is
@@ -193,12 +189,8 @@ and p_atom ctx =
   | Ast.UNIT -> fail ctx "the unit value () is not supported"
   | Ast.EOF -> fail ctx "expected an expression"
   | tok ->
-    (match keyword_spelling tok with
-     | Some kw -> fail ctx (Printf.sprintf "unexpected keyword '%s'" kw)
-     | None ->
-       fail
-         ctx
-         (Printf.sprintf "unexpected token '%s'" (Format.asprintf "%a" Ast.pp_token tok)))
+    let what = if is_keyword tok then "keyword" else "token" in
+    fail ctx (Printf.sprintf "unexpected %s '%s'" what (pp_tok tok))
 
 and p_let ctx =
   let* () = expect ctx Ast.LET "let" in

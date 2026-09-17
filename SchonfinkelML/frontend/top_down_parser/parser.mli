@@ -12,18 +12,22 @@
     precedence are data: the table can be redefined from the command line.
 
     Reading the source is done by [tokenize], which is here as well: it pairs
-    every token of [Frontend.Lexer] with the position it starts at. *)
+    every token of [Frontend.Lexer] with the position it starts at, and reports
+    what [Frontend.Lexer] rejects instead of raising it. *)
 
-type error =
-  { pos : Lexing.position
-  ; msg : string
-  }
+(** What went wrong: a position and a message, as the lexer has it. *)
+type error = Frontend.Lexer.error
 
+(** Errors print as [line:column: message], whether they came from lexing or
+    from parsing; [Frontend.Lexer.pp_error] says more about the format. *)
 val pp_error : Format.formatter -> error -> unit
+
 val string_of_error : error -> string
 
 (** [tokenize src] is the tokens of [src] in order, each paired with the position
-    it starts at, ending with [EOF].  A position is read as a character offset. *)
+    it starts at, ending with [EOF]. A character the lexer does not know, a comment that is not
+    closed and an integer literal that does not fit are [Error]s, so this raises
+    nothing. *)
 val tokenize : string -> ((Frontend.Common.token * Lexing.position) list, error) result
 
 (** Parse one expression, allowing only whitespace and comments after it.
