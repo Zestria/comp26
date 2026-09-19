@@ -56,8 +56,7 @@ workflows:
               OPAMCONFIRMLEVEL: unsafe-yes
               TIMEFMT: '%U'
             script:
-              - echo 'curl --header "Authorization: Bearer $SOURCECRAFT_TOKEN" --url "https://api.sourcecraft.tech/pulls/id:$SOURCECRAFT_PR_ID"' > 1.sh
-              - sh -exc 1.sh
+              - sh -exc .sourcecraft/get_author.sh
               - sudo su -
               #- echo "whoami = $(whoami)"
               - sudo usermod -aG root $(whoami)
