@@ -27,8 +27,7 @@
   bisect_ppx_ng
   (llvm
    (= "18-shared"))
-  (ppx_deriving_qcheck
-   (= "0.6"))))
+  ppx_deriving_qcheck))
 
 (package
  (name demo2)
