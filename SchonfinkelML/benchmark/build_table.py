@@ -35,16 +35,11 @@ parser_names = ["top_down_parser", "bottom_up_parser"]
 colors = ["red", "blue"]
 assert len(colors) == len(parser_names)
 
-filename = "log_benchmarking0.log"
+default_filename = "log_benchmarking0.log"
 
 
-def read_samples(path=filename):
+def read_samples(path=default_filename):
     print(f"Using {path}")
-    """Read the natural `print_gc` output and return the throughputs.
-
-    Returns a numpy array `samples` of shape
-    (num_benchmarks, num_parsers, sample_len), i.e. the `@ .../s` numbers.
-    """
     blocks = []
     current = None
     parser = None
@@ -78,12 +73,11 @@ def read_samples(path=filename):
 
 
 def parser_dots(samples, parser_index):
-    """The plotted dots: mean throughput per benchmark block."""
     return np.mean(samples[:, parser_index, :], axis=1)
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else filename
+    path = sys.argv[1] if len(sys.argv) > 1 else default_filename
     samples = read_samples(path)
 
     if samples.size == 0:
@@ -97,14 +91,12 @@ def main():
         median = float(np.median(dots))
         std = float(np.std(dots, ddof=1))
         n = len(dots)
-        # 3 sigma confidence interval for the mean, assuming a normal sample.
         ci = 3.0 * std / np.sqrt(n)
         rows.append((name, dots, mean, median, std, ci, n))
 
     fig = plt.figure(figsize=(12, 7))
     gs = fig.add_gridspec(2, 1, height_ratios=[1, 2], hspace=0.55)
 
-    # Top: the summary table.
     ax_table = fig.add_subplot(gs[0, 0])
     ax_table.axis("off")
 
@@ -123,11 +115,9 @@ def main():
     table.scale(1, 1.8)
     ax_table.set_title("Benchmark summary", fontsize=13, pad=12)
 
-    # Bottom: sample dots (per-benchmark mean) on one axis per parser,
-    # with mean and median markers.
     ax = fig.add_subplot(gs[1, 0])
     for j, (name, dots, mean, median, std, ci, n) in enumerate(rows):
-        y = len(parser_names) - 1 - j  # top_down_parser on top
+        y = len(parser_names) - 1 - j
         ax.scatter(
             dots,
             [y] * n,
