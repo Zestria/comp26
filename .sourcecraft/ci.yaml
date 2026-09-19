@@ -1,0 +1,92 @@
+
+on:
+  # push:
+  #   - workflows: [ sample-workflow ]
+  #     filter:
+  #       branches: [ master ]
+  #       paths: [ "!.sourcecraft/**" ]
+  pull_request:
+    - workflows: [ compile-and-review ]
+      # filter:
+      #   paths: [ "!.sourcecraft/**" ]
+      #   source_branches: "feature"
+      #   target_branches: "master"
+
+workflows:
+  sample-workflow:
+    tasks:
+      - name: sample-task
+        cubes:
+          - name: install
+            image:
+              name: kakadu18/ocaml:rukaml5.5
+            env:
+              OPAMROOT: /home/opam/.opam
+              OPAMCONFIRMLEVEL: unsafe-yes
+            script:
+              - sudo su -
+              - echo "I am $(whoami)"
+              - sudo usermod -aG root $(whoami)
+              - opam repo set-url default https://se.math.spbu.ru/opam
+              - opam update
+              - cd $SOURCECRAFT_WORKSPACE
+              - git config --global --add safe.directory .
+
+              - cd $(yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml)
+              - opam install . --deps-only --with-test --with-doc --yes # --verbose
+              - opam exec -- dune build @install
+              #- opam pin add zanuda --dev-repo -y
+              - opam exec -- dune b @check
+              #- opam exec -- zanuda -dir .
+              #- opam exec -- zanuda -dir . -ordjsonl results.json
+              #- cat results.json
+              #- opam exec -- dune exec ./validate.exe -- 1.json
+              #- opam exec -- dune exec ./validate.exe -- results.json
+
+  compile-and-review:
+    tasks:
+      - name: task-PR-check
+        cubes:
+          - name: install
+            image:
+              name: kakadu18/ocaml:rukaml5.5
+              #entrypoint: "/bin/bash"
+            env:
+              OPAMROOT: /home/opam/.opam
+              OPAMCONFIRMLEVEL: unsafe-yes
+              TIMEFMT: '%U'
+            script:
+              - sudo su -
+              #- echo "whoami = $(whoami)"
+              - sudo usermod -aG root $(whoami)
+              - echo "SOURCECRAFT_ROOT_DIRECTORY = $SOURCECRAFT_ROOT_DIRECTORY"
+              - echo "SOURCECRAFT_WORKSPACE = $SOURCECRAFT_WORKSPACE"
+              - opam repo set-url default https://se.math.spbu.ru/opam
+              - /usr/bin/time -f "%U" opam update
+              - cd $SOURCECRAFT_WORKSPACE
+              - git config --global --add safe.directory .
+              - cd $(yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml)
+              - echo "Installing deps..."
+              - /usr/bin/time -f "%U"  opam install . --deps-only --with-test --with-doc --yes # --verbose
+              - echo "Building..."
+              - /usr/bin/time -f "%U"  opam exec -- dune build @install
+              #- echo "Pinning Zanuda..."
+              #- /usr/bin/time -f "%U"  opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
+              - opam exec -- dune b @check
+              #- opam exec -- zanuda -dir . -ordjsonl results.json -osarif sarif.json
+              #- cat results.json
+              #- opam exec -- dune exec ./validate.exe -- 1.json
+              #- opam exec -- dune exec ./validate.exe -- sarif.json
+              #- cp -v sarif.json $SOURCECRAFT_WORKSPACE/result.sarif
+
+          - name: scan-result-uploader
+            image:
+              name: sourcecraft/scan-result-uploader:0.6.0
+            script:
+              - ls -l $SOURCECRAFT_WORKSPACE
+              # - pwd
+              # - cp handcrafted.json result.sarif -v
+              # - cat result.sarif
+              # - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
+              # - /app/bin/scan-result-uploader
+        # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
