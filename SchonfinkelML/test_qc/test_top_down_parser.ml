@@ -31,6 +31,7 @@ and surface_pp e =
   match e with
   | Ident s -> s
   | Const (LitInt n) -> string_of_int n
+  | Const LitUnit -> "()"
   | Abstr (x, body) -> "fun " ^ x ^ " -> " ^ surface_pp body
   | Let (Recursive, x, v, body) ->
     "let rec " ^ x ^ " = " ^ surface_pp v ^ " in " ^ surface_pp body

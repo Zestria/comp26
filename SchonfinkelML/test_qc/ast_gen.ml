@@ -18,21 +18,20 @@ let rec gen_expr n =
     Gen.oneof
       [ Gen.map (fun i -> Const (LitInt i)) gen_int; Gen.map (fun s -> Ident s) gen_name ]
   else (
-    let half = n / 2 in
-    let gen_sub = gen_expr half in
-    Gen.oneof_weighted
-      [ 1, Gen.map (fun i -> Const (LitInt i)) gen_int
-      ; 2, Gen.map (fun s -> Ident s) gen_name
-      ; 3, Gen.map3 (fun op a b -> eapp (eapp (Ident op) a) b) gen_op gen_sub gen_sub
-      ; 3, Gen.map2 (fun a b -> eapp a b) gen_sub gen_sub
-      ; 2, Gen.map3 (fun c t e -> eif c t e) gen_sub gen_sub gen_sub
-      ; 2, Gen.map2 (fun x v -> elet x v (Ident x)) gen_name gen_sub
-      ; 1, Gen.map2 (fun x v -> eletrec x v (Ident x)) gen_name gen_sub
-      ; 2, Gen.map2 (fun x body -> elambda x body) gen_name gen_sub
+    let gen_half = gen_expr (n / 2) in
+    let gen_third = gen_expr (n / 3) in
+    let gen_pred = gen_expr (pred n) in
+    Gen.oneof
+      [ Gen.map3 (fun op a b -> eapp (eapp (Ident op) a) b) gen_op gen_half gen_half
+      ; Gen.map2 (fun a b -> eapp a b) gen_half gen_half
+      ; Gen.map3 (fun c t e -> eif c t e) gen_third gen_third gen_third
+      ; Gen.map3 (fun x e1 e2 -> elet x e1 e2) gen_name gen_half gen_half
+      ; Gen.map3 (fun x e1 e2 -> eletrec x e1 e2) gen_name gen_half gen_half
+      ; Gen.map2 (fun x body -> elambda x body) gen_name gen_pred
       ])
 ;;
 
-let gen_expr_sized = Gen.sized gen_expr
+let gen_expr_sized = Gen.sized_size (Gen.int_bound 30) gen_expr
 
 (* A table is a sequence of words, which is what [--ops] takes.  Every word
    carries the space that separates it from the next one, so that the
