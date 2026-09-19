@@ -38,5 +38,5 @@ let () =
            ])
       files
   in
-  tabulate samples
+  print_gc samples
 ;;
