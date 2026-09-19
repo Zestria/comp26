@@ -42,10 +42,10 @@ let () =
   Arg.parse specs anon usage_msg;
   Format.printf "Begin\n";
   let rec helper n cfg =
-    Format.printf "Generating file number %d...\n" n;
     if n >= cfg.filecount
     then ()
     else (
+      Format.printf "Generating file number %d...\n" n;
       write_generated_file ~n ~st ~dir:"./examples" ~gen;
       helper (n + 1) cfg)
   in

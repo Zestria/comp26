@@ -2,7 +2,6 @@ module Gen = QCheck.Gen
 open Frontend.Common
 
 let binop_ops = [ "+"; "-"; "*"; "/"; "<"; ">"; "=" ]
-let is_binop op = List.mem op binop_ops
 
 let names =
   [ "x"; "y"; "z"; "f"; "g"; "h"; "n"; "k"; "r"; "fact"; "fib"; "foo"; "bar"; "accum" ]

@@ -1,42 +1,42 @@
 open Benchmark
 open Top_down
 
-let () =
-  (* let top_down_parser = Top_down.Parser.parse_expr in *)
-  ()
+let top_down_parser =
+  fun s ->
+  match Top_down.Parser.parse_expr s with
+  | Ok v -> v
+  | Error e ->
+    Format.printf "Error: %a\n" Top_down.Parser.pp_error e;
+    assert false
 ;;
 
-(* let () = *)
-(*   let res = *)
-(*     throughputN *)
-(*       ~repeat:3 *)
-(*       3 *)
-(*       [ "ba", (fun () -> ba a), () *)
-(*       ; "ba_u", (fun () -> ba_u a), () *)
-(*       ; "ba_cl", ba_cl, () *)
-(*       ; "ba_gen", (fun () -> ba_gen a), () *)
-(*       ; "set_ba", (fun () -> set_ba a), () *)
-(*       ; "arr", (fun () -> arr b), () *)
-(*       ; "arr_u", (fun () -> arr_u b), () *)
-(*       ; "arr_cl", arr_cl, () *)
-(*       ; "list", (fun () -> list c), () *)
-(*       ; "set_arr", (fun () -> set_arr b), () *)
-(*       ] *)
-(*   in *)
-(*   print_endline "Sum of elements or set all elements to 3.:"; *)
-(*   tabulate res; *)
-(*   print_gc res; *)
-(*   let res = *)
-(*     throughputN *)
-(*       ~repeat:3 *)
-(*       3 *)
-(*       [ "ba", ba_alloc, () *)
-(*       ; "set_ba", set_ba_alloc, () *)
-(*       ; "arr", arr_alloc, () *)
-(*       ; "set_arr", set_arr_alloc, () *)
-(*       ] *)
-(*   in *)
-(*   print_endline "With allocation:"; *)
-(*   tabulate res; *)
-(*   print_gc res *)
-(* ;; *)
+let bottom_up_parser =
+  fun s -> Frontend.Bottom_up_parser.program Frontend.Lexer.token (Lexing.from_string s)
+;;
+
+let read_file p =
+  let ic = open_in p in
+  let s = really_input_string ic (in_channel_length ic) in
+  close_in ic;
+  s
+;;
+
+let files = (fun i -> Printf.sprintf "examples/ast_expression_%d.txt" i) |> List.init 100
+
+let () =
+  let t = 1 in
+  let repeat = 2 in
+  let samples =
+    List.concat_map
+      (fun path ->
+         let content = read_file path in
+         throughputN
+           ~repeat
+           t
+           [ "top_down_parser", (fun s -> ignore (top_down_parser s)), content
+           ; "bottom_up_parser", (fun s -> ignore (bottom_up_parser s)), content
+           ])
+      files
+  in
+  tabulate samples
+;;

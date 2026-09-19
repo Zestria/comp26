@@ -71,6 +71,11 @@ let egt a b = App (App (Ident ">", a), b)
 let eeq a b = App (App (Ident "=", a), b)
 let euminus a = App (Ident "-", a)
 
+let is_binop = function
+  | "+" | "-" | "*" | "/" | "<" | ">" | "=" -> true
+  | _ -> false
+;;
+
 let pp_literal ppf = function
   | LitInt i -> Format.fprintf ppf "%d" i
   | LitUnit -> Format.fprintf ppf "()"
@@ -110,6 +115,8 @@ let pp_token ppf = function
 let rec pp_expr ppf = function
   | Ident x -> Format.fprintf ppf "%s" x
   | Const l -> pp_literal ppf l
+  | App (App (Ident op, e1), e2) when is_binop op ->
+    Format.fprintf ppf "@[%a %s %a@]" pp_atom_like e1 op pp_atom_like e2
   | App (e1, e2) -> Format.fprintf ppf "@[(%a %a)@]" pp_atom_like e1 pp_atom_like e2
   | Let (Recursive, x, e1, e2) ->
     Format.fprintf ppf "@[<2>let rec %s =@ %a@ in@ %a@]" x pp_expr e1 pp_expr e2
