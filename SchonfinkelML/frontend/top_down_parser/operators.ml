@@ -34,6 +34,8 @@ let token_of_sym = function
   | "=" -> Some Common.EQ
   | "<" -> Some Common.LT
   | ">" -> Some Common.GT
+  | "<=" -> Some Common.LE
+  | ">=" -> Some Common.GE
   | _ -> None
 ;;
 
@@ -41,6 +43,8 @@ let default =
   [ { sym = "="; tok = Common.EQ; fixity = Infix Left; prec = 4 }
   ; { sym = "<"; tok = Common.LT; fixity = Infix Left; prec = 4 }
   ; { sym = ">"; tok = Common.GT; fixity = Infix Left; prec = 4 }
+  ; { sym = "<="; tok = Common.LE; fixity = Infix Left; prec = 4 }
+  ; { sym = ">="; tok = Common.GE; fixity = Infix Left; prec = 4 }
   ; { sym = "+"; tok = Common.PLUS; fixity = Infix Left; prec = 6 }
   ; { sym = "-"; tok = Common.MINUS; fixity = Infix Left; prec = 6 }
   ; { sym = "*"; tok = Common.TIMES; fixity = Infix Left; prec = 7 }
@@ -64,7 +68,7 @@ let fixity_of_word = function
   | _ -> None
 ;;
 
-let known_operators = "+ - * / = < >"
+let known_operators = "+ - * / = < > <= >="
 
 (* Splits on every kind of space, dropping empty words, so that a table may be
    written on one line or spread over several. *)

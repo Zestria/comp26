@@ -105,6 +105,8 @@ rule token = parse
   | '*'               { TIMES }
   | '/'               { DIV }
   | '='               { EQ }
+  | "<="              { LE }
+  | ">="              { GE }
   | '<'               { LT }
   | '>'               { GT }
   | '('               { LPAREN }

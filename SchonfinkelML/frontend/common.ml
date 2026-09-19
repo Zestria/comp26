@@ -26,6 +26,8 @@ type token =
   | EQ
   | LT
   | GT
+  | LE
+  | GE
   | LPAREN
   | RPAREN
   | EOF
@@ -105,6 +107,8 @@ let pp_token ppf = function
   | EQ -> Format.fprintf ppf "="
   | LT -> Format.fprintf ppf "<"
   | GT -> Format.fprintf ppf ">"
+  | GE -> Format.fprintf ppf ">="
+  | LE -> Format.fprintf ppf "<="
   | LPAREN -> Format.fprintf ppf "("
   | RPAREN -> Format.fprintf ppf ")"
   | EOF -> Format.fprintf ppf "EOF"

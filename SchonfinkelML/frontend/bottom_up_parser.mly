@@ -14,14 +14,14 @@
 %token FUN RIGHTARROW
 %token UNIT
 %token PLUS MINUS TIMES DIV
-%token EQ LT GT
+%token EQ LT GT LE GE
 %token LPAREN RPAREN
 %token EOF
 
 %nonassoc IN RIGHTARROW
 %nonassoc THEN
 %nonassoc ELSE
-%left EQ LT GT
+%left EQ LT GT LE GE
 %left PLUS MINUS
 %left TIMES DIV
 %nonassoc UMINUS
@@ -50,6 +50,8 @@ expr:
   | a = expr; EQ; b = expr    { eeq a b }
   | a = expr; LT; b = expr    { elt a b }
   | a = expr; GT; b = expr    { egt a b }
+  | a = expr; LE; b = expr    { elte a b }
+  | a = expr; GE; b = expr    { egte a b }
   | a = expr; PLUS; b = expr  { eadd a b }
   | a = expr; MINUS; b = expr { esub a b }
   | a = expr; TIMES; b = expr { emul a b }
