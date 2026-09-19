@@ -139,9 +139,8 @@ let%test "comparisons are left-associative" =
   check_expr "a = b = c" (eeq (eeq (Ident "a") (Ident "b")) (Ident "c"))
 ;;
 
-(* The lexer has no two-character operators, so these are only errors. *)
-let%test "no <=" = check_error "a <= b"
-let%test "no >=" = check_error "a >= b"
+let%test "comparison <=" = check_expr "a <= b" (elte (Ident "a") (Ident "b"))
+let%test "comparison >=" = check_expr "a >= b" (egte (Ident "a") (Ident "b"))
 
 (* --- if / fun --- *)
 
@@ -374,7 +373,7 @@ let%test "one group" = check_table "left 6 + -" "left 6 + -"
 
 let%test "the default table" =
   check_table
-    "left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
+    "left 4 = < > <= >=; left 6 + -; left 7 * /; prefix 9 -"
     (Operators.string_of Operators.default)
 ;;
 
