@@ -160,13 +160,20 @@ let string_of t =
 
 let pp ppf t = Format.pp_print_string ppf (string_of t)
 
-let has_fixity wanted e =
-  match wanted, e.fixity with
-  | `Infix, Infix _ -> true
-  | `Prefix, Prefix -> true
-  | `Infix, Prefix -> false
-  | `Prefix, Infix _ -> false
+let rec find_infix t tok =
+  match t with
+  | [] -> None
+  | e :: rest ->
+    (match e.fixity with
+     | Infix _ when e.tok == tok -> Some e
+     | _ -> find_infix rest tok)
 ;;
 
-let find_infix t tok = List.find_opt (fun e -> e.tok = tok && has_fixity `Infix e) t
-let find_prefix t tok = List.find_opt (fun e -> e.tok = tok && has_fixity `Prefix e) t
+let rec find_prefix t tok =
+  match t with
+  | [] -> None
+  | e :: rest ->
+    (match e.fixity with
+     | Prefix when e.tok == tok -> Some e
+     | _ -> find_prefix rest tok)
+;;
