@@ -1,5 +1,3 @@
-(ocamllex lexer)
-
 (library
  (name frontend)
  (public_name MMML.frontend)
