@@ -1,5 +1,5 @@
 # Steps to generate plot
-1) Make sure you are in this working directory (benchmark dir)
+1) Make sure you are in this working directory (`cd benchmark`)
 2) Run `dune exec ./gen_benchmarks.exe` to generate example with which you will benchmark parsers. They will be in `/examples` dir
 2) Run `dune exec ./bench.exe` to run benchmarks.
 ## Make sure you are using best practices
@@ -10,7 +10,7 @@
   sudo cpupower frequency-set -d 800Mhz
   sudo cpupower frequency-set -u 4000Mhz
 ```
-- Remove turbo
+- Remove turbo (In my case i have intel CPU)
 ``` bash
 echo "1" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 ```

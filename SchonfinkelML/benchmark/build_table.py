@@ -36,6 +36,7 @@ colors = ["red", "blue"]
 assert len(colors) == len(parser_names)
 
 default_filename = "log_benchmarking0.log"
+default_output = "output_table0.png"
 
 
 def read_samples(path=default_filename):
@@ -78,6 +79,7 @@ def parser_dots(samples, parser_index):
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else default_filename
+    output_table = sys.argv[2] if len(sys.argv) > 2 else default_output
     samples = read_samples(path)
 
     if samples.size == 0:
@@ -177,7 +179,6 @@ def main():
     ax.grid(True, axis="x", alpha=0.3)
     ax.legend(loc="upper right", fontsize=8)
 
-    output_table = "output_table1.png"
     fig.savefig(output_table, bbox_inches="tight")
     print(f"\nTable saved to: {output_table}")
     plt.show()
