@@ -85,5 +85,21 @@ $ ../compiler.exe --help
   [(Ast.Binop (Ast.Eq, (Ast.Var "letx"), (Ast.Int 1)))]
 
   $ printf 'let x = ' | ../compiler.exe --parser topdown
-  compiler: : end_of_input
+  compiler: 1:9: syntax error
+  [1]
+
+  $ printf 'let x = in 5' | ../compiler.exe --parser topdown
+  compiler: 1:11: keyword in cannot be used as an identifier
+  [1]
+
+  $ printf '5 in x' | ../compiler.exe --parser topdown
+  compiler: 1:5: keyword in cannot be used as an identifier
+  [1]
+
+  $ printf '(* unterminated' | ../compiler.exe --parser topdown
+  compiler: 1:16: unterminated comment
+  [1]
+
+  $ printf 'let x = 1' | ../compiler.exe --parser bottomup --sticky
+  compiler: sticky mode is not supported by the bottom-up parser
   [1]

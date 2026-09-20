@@ -14,7 +14,12 @@
     falling back to the identifier rule.
 
     Precedence (low -> high): comparisons -> [+ -] -> [* / mod] ->
-    unary minus -> application. *)
+    unary minus -> application.
+
+    Errors are reported as ["line:col: message"].  Angstrom errors carry
+    no source position, so the parser tracks the furthest offset it ever
+    consumes and the most recent explicit failure (see the position
+    tracking helpers below) and formats them against the source string. *)
 
 open Angstrom
 
@@ -35,6 +40,56 @@ let is_digit = function
   | _ -> false
 ;;
 
+(* Error positions ---------------------------------------------------- *)
+
+(** Angstrom errors are plain strings with no source position attached, so
+    the parser tracks the furthest byte offset it ever consumes ([tracked])
+    and, for explicit failures, the failure message together with the
+    offset at which it was raised ([fail_at], keeping the furthest one).
+    When the whole parse fails, the recorded explicit failure is reported
+    if it happened at the furthest offset reached; otherwise a generic
+    "syntax error" is reported at that offset.  Offsets are converted to
+    [line:col] against the source string in {!parse_prog}. *)
+
+let max_pos = ref 0
+let best_fail = ref None
+
+let tracked p =
+  p
+  >>= fun x ->
+  pos
+  >>= fun n ->
+  max_pos := max !max_pos n;
+  return x
+;;
+
+let fail_at msg =
+  pos
+  >>= fun n ->
+  let () =
+    match !best_fail with
+    | Some (m, _) when m > n -> ()
+    | _ -> best_fail := Some (n, msg)
+  in
+  fail msg
+;;
+
+let line_col_of_offset source off =
+  let line = ref 1 and col = ref 0 in
+  (try
+     String.iteri
+       (fun i c ->
+         if i >= off
+         then raise Exit
+         else (
+           if c = '\n'
+           then (incr line; col := 0)
+           else incr col))
+       source
+   with Exit -> ());
+  (!line, !col + 1)
+;;
+
 (* Whitespace and comments -------------------------------------------- *)
 
 (** Non-nested comments: an opening ["(*"] up to a closing ["*)"].
@@ -49,55 +104,57 @@ let comment =
   *> fix (fun loop ->
          peek_char
          >>= (function
-           | None -> fail "unterminated comment"
+           | None -> fail_at "unterminated comment"
            | Some '*' ->
-             advance 1
+             tracked (advance 1)
              >>= fun () ->
              peek_char
              >>= (function
-               | Some ')' -> advance 1 *> return ()
-               | _ -> advance 1 *> loop)
-           | Some _ -> advance 1 *> loop))
+               | Some ')' -> tracked (advance 1) *> return ()
+               | _ -> tracked (advance 1) *> loop)
+           | Some _ -> tracked (advance 1) *> loop))
 ;;
 
 let skip_ws =
   fix (fun skip_ws ->
-      skip_many (satisfy is_ws) *> (comment *> skip_ws <|> return ()))
+      tracked
+        (skip_many (satisfy is_ws) *> (comment *> skip_ws <|> return ())))
 ;;
 
 (* Tokens -------------------------------------------------------------- *)
 
 (** Keyword that must not be a prefix of a longer identifier. *)
 let kw s =
-  string s
+  tracked (string s)
   *> peek_char
   >>= (function
-    | Some c when is_id_char c -> fail (s ^ " is a keyword and cannot start an identifier")
+    | Some c when is_id_char c ->
+      fail_at (s ^ " is a keyword and cannot start an identifier")
     | _ -> return ())
 ;;
 
 let keyword s = skip_ws *> kw s
 
-let sym s = skip_ws *> string s
+let sym s = skip_ws *> tracked (string s)
 
 let keywords =
   [ "let"; "rec"; "in"; "fun"; "if"; "then"; "else"; "mod"; "true"; "false" ]
 ;;
 
 let ident =
-  take_while1 is_id_char
+  tracked (take_while1 is_id_char)
   >>= fun s ->
   if List.mem s keywords
-  then fail ("keyword " ^ s ^ " cannot be used as an identifier")
+  then fail_at ("keyword " ^ s ^ " cannot be used as an identifier")
   else return s
 ;;
 
 let int_lit =
-  take_while1 is_digit
+  tracked (take_while1 is_digit)
   >>= fun s ->
   match int_of_string_opt s with
   | Some n -> return n
-  | None -> fail "integer literal is out of range"
+  | None -> fail_at "integer literal is out of range"
 ;;
 
 let plus_op = sym "+"
@@ -140,7 +197,7 @@ let program =
   skip_ws
   *> many
        (fix (fun expr ->
-            let parens = sym "(" *> expr <* skip_ws <* char ')' in
+            let parens = sym "(" *> expr <* skip_ws <* tracked (char ')') in
             let atom =
               skip_ws
               *> choice
@@ -159,7 +216,7 @@ let program =
             in
             let unary =
               fix (fun unary ->
-                  (skip_ws *> char '-' *> unary >>| fun e -> Ast.Neg e)
+                  (skip_ws *> tracked (char '-') *> unary >>| fun e -> Ast.Neg e)
                   <|> app)
             in
             let binop =
@@ -208,7 +265,16 @@ let program =
 ;;
 
 let parse_prog source =
+  max_pos := 0;
+  best_fail := None;
   match parse_string ~consume:Consume.All program source with
   | Ok prog -> Ok prog
-  | Error msg -> Error msg
+  | Error _ ->
+    let off, msg =
+      match !best_fail with
+      | Some (n, m) when n >= !max_pos -> (n, m)
+      | _ -> (!max_pos, "syntax error")
+    in
+    let line, col = line_col_of_offset source off in
+    Error (Format.sprintf "%d:%d: %s" line col msg)
 ;;

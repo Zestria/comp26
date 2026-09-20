@@ -7,9 +7,7 @@
     The backend (code generation) is not implemented yet and comes in
     later tasks. *)
 
-type parser_kind = Topdown | Bottomup
-
-type opts = { parser_kind : parser_kind; sticky : bool }
+type opts = { parser_kind : Parsing.Parse.parser_kind; sticky : bool }
 
 let usage =
   {|Usage: compiler.exe [OPTIONS] [FILE]
@@ -31,15 +29,15 @@ let fail_usage msg =
 ;;
 
 let parse_args argv =
-  let parser_kind = ref Topdown in
+  let parser_kind = ref Parsing.Parse.Topdown in
   let sticky = ref false in
   let file = ref None in
   let rec loop = function
     | [] -> ()
     | "--parser" :: k :: rest ->
       (match k with
-       | "topdown" -> parser_kind := Topdown
-       | "bottomup" -> parser_kind := Bottomup
+       | "topdown" -> parser_kind := Parsing.Parse.Topdown
+       | "bottomup" -> parser_kind := Parsing.Parse.Bottomup
        | _ -> fail_usage ("unknown parser: " ^ k));
       loop rest
     | "--parser" :: [] -> fail_usage "option '--parser' requires an argument"
@@ -75,31 +73,9 @@ let read_input = function
       exit 1)
 ;;
 
-let error_position lexbuf =
-  let p = Lexing.lexeme_start_p lexbuf in
-  let line = p.Lexing.pos_lnum in
-  let col = p.Lexing.pos_cnum - p.Lexing.pos_bol + 1 in
-  Format.sprintf "%d:%d" line col
-;;
-
-(* Bottom-up parser (menhir + ocamllex). *)
-let parse_bottomup source =
-  let lexbuf = Lexing.from_string source in
-  match Parsing.Parser.prog Parsing.Lexer.read lexbuf with
-  | prog -> Ok prog
-  | exception Parsing.Lexer.SyntaxError msg ->
-    Error (Format.sprintf "%s: %s" (error_position lexbuf) msg)
-  | exception Parsing.Parser.Error ->
-    Error (Format.sprintf "%s: syntax error" (error_position lexbuf))
-;;
-
 let run opts source =
-  let parse =
-    match opts.parser_kind with
-    | Bottomup -> parse_bottomup
-    | Topdown -> Parsing.Parser_topdown.parse_prog
-  in
-  match parse source with
+  let popts = { Parsing.Parse.sticky = opts.sticky } in
+  match Parsing.Parse.parse opts.parser_kind popts source with
   | Ok prog -> print_endline (Parsing.Ast.show_prog prog)
   | Error msg ->
     prerr_endline ("compiler: " ^ msg);
