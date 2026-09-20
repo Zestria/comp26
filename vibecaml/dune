@@ -1,0 +1,7 @@
+(executable
+ (public_name vibecamlc)
+ (package vibecaml)
+ (name compiler)
+ (modules compiler)
+ (instrumentation
+  (backend bisect_ppx_ng)))
