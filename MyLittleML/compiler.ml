@@ -94,16 +94,15 @@ let parse_bottomup source =
 ;;
 
 let run opts source =
-  match opts.parser_kind with
-  | Bottomup -> (
-    match parse_bottomup source with
-    | Ok prog -> print_endline (Parsing.Ast.show_prog prog)
-    | Error msg ->
-      prerr_endline ("compiler: " ^ msg);
-      exit 1)
-  | Topdown ->
-    (* Wired in a next commit (angstrom top-down parser). *)
-    Format.eprintf "compiler: top-down parsing is not implemented yet\n%!";
+  let parse =
+    match opts.parser_kind with
+    | Bottomup -> parse_bottomup
+    | Topdown -> Parsing.Parser_topdown.parse_prog
+  in
+  match parse source with
+  | Ok prog -> print_endline (Parsing.Ast.show_prog prog)
+  | Error msg ->
+    prerr_endline ("compiler: " ^ msg);
     exit 1
 ;;
 

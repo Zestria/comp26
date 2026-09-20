@@ -1,7 +1,8 @@
 (library
  (name parsing)
  (public_name MyLittleML.parsing)
- (modules ast pp parser lexer)
+ (modules ast pp parser lexer parser_topdown)
+ (libraries angstrom)
  (preprocess
   (pps ppx_deriving.show))
  (instrumentation
