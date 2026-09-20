@@ -8,6 +8,7 @@ depends: [
   "ocaml"
   "dune" {>= "3.24"}
   "menhir" {>= "20180523"}
+  "benchmark"
   "angstrom" {= "0.16.0"}
   "qcheck"
   "bisect_ppx_ng"
