@@ -9,8 +9,6 @@
 module Ast = Frontend.Common
 module Lexer = Frontend.Lexer
 
-let ( let* ) = Result.bind
-
 (** The parser reports the errors of the lexer as they are: one [pos] and one
    [msg] is all either of them has to say. *)
 type error = Lexer.error
@@ -189,16 +187,21 @@ let rec p_expr ctx =
 (** Precedence climbing: [p_binop ctx min_prec] reads an operand followed by all
    the operators of the table that bind at least as tight as [min_prec]. *)
 and p_binop ctx min_prec =
-  let* lhs = p_operand ctx in
-  p_infix ctx min_prec lhs
+  match p_operand ctx with
+  | Error err -> Error err
+  | Ok lhs -> p_infix ctx min_prec lhs
 
 and p_infix ctx min_prec lhs =
   match ctx.infix.(token_index (cur ctx)) with
   | Some e when e.Operators.prec >= min_prec ->
     advance ctx;
-    let* rhs = p_binop ctx (rhs_min_prec e) in
-    let* () = check_chaining ctx e in
-    p_infix ctx min_prec (Ast.eapp (Ast.eapp (Ast.Ident e.Operators.sym) lhs) rhs)
+    (match p_binop ctx (rhs_min_prec e) with
+     | Error err -> Error err
+     | Ok rhs ->
+       (match check_chaining ctx e with
+        | Error err -> Error err
+        | Ok () ->
+          p_infix ctx min_prec (Ast.eapp (Ast.eapp (Ast.Ident e.Operators.sym) lhs) rhs)))
   | _ -> Ok lhs
 
 (** A non-associative operator cannot be followed by an operator of the same
@@ -225,20 +228,24 @@ and p_operand ctx =
   match ctx.prefix.(token_index (cur ctx)) with
   | Some e ->
     advance ctx;
-    let* arg = p_binop ctx e.Operators.prec in
-    Ok (Ast.eapp (Ast.Ident e.Operators.sym) arg)
+    (match p_binop ctx e.Operators.prec with
+     | Error err -> Error err
+     | Ok arg -> Ok (Ast.eapp (Ast.Ident e.Operators.sym) arg))
   | None -> p_app ctx
 
 and p_app ctx =
-  let* head = p_atom ctx in
-  let rec p_arg acc =
-    match cur ctx with
-    | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN ->
-      let* arg = p_atom ctx in
-      p_arg (Ast.eapp acc arg)
-    | _ -> Ok acc
-  in
-  p_arg head
+  match p_atom ctx with
+  | Error err -> Error err
+  | Ok head ->
+    let rec p_arg acc =
+      match cur ctx with
+      | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN ->
+        (match p_atom ctx with
+         | Error err -> Error err
+         | Ok arg -> p_arg (Ast.eapp acc arg))
+      | _ -> Ok acc
+    in
+    p_arg head
 
 and p_atom ctx =
   match cur ctx with
@@ -252,10 +259,13 @@ and p_atom ctx =
     advance ctx;
     if cur ctx = Ast.RPAREN
     then fail ctx "the unit value () is not supported"
-    else
-      let* e = p_expr ctx in
-      let* () = expect ctx Ast.RPAREN in
-      Ok e
+    else (
+      match p_expr ctx with
+      | Error err -> Error err
+      | Ok e ->
+        (match expect ctx Ast.RPAREN with
+         | Error err -> Error err
+         | Ok () -> Ok e))
   | Ast.UNIT -> fail ctx "the unit value () is not supported"
   | Ast.EOF -> fail ctx "expected an expression"
   | tok ->
@@ -263,41 +273,72 @@ and p_atom ctx =
     fail ctx (Printf.sprintf "unexpected %s '%s'" what (pp_tok tok))
 
 and p_let ctx =
-  let* () = expect ctx Ast.LET in
-  let is_rec =
-    if cur ctx = Ast.REC
-    then (
-      advance ctx;
-      true)
-    else false
-  in
-  let* name = expect_ident ctx in
-  let params = p_params ctx in
-  let* () = expect ctx Ast.EQ in
-  let* value = p_expr ctx in
-  let* () = expect ctx Ast.IN in
-  let* body = p_expr ctx in
-  let value = desugar_params params value in
-  Ok (if is_rec then Ast.eletrec name value body else Ast.elet name value body)
+  match expect ctx Ast.LET with
+  | Error err -> Error err
+  | Ok () ->
+    let is_rec =
+      if cur ctx = Ast.REC
+      then (
+        advance ctx;
+        true)
+      else false
+    in
+    (match expect_ident ctx with
+     | Error err -> Error err
+     | Ok name ->
+       let params = p_params ctx in
+       (match expect ctx Ast.EQ with
+        | Error err -> Error err
+        | Ok () ->
+          (match p_expr ctx with
+           | Error err -> Error err
+           | Ok value ->
+             (match expect ctx Ast.IN with
+              | Error err -> Error err
+              | Ok () ->
+                (match p_expr ctx with
+                 | Error err -> Error err
+                 | Ok body ->
+                   let value = desugar_params params value in
+                   Ok
+                     (if is_rec
+                      then Ast.eletrec name value body
+                      else Ast.elet name value body))))))
 
 and p_if ctx =
-  let* () = expect ctx Ast.IF in
-  let* cond = p_expr ctx in
-  let* () = expect ctx Ast.THEN in
-  let* then_branch = p_expr ctx in
-  let* () = expect ctx Ast.ELSE in
-  let* else_branch = p_expr ctx in
-  Ok (Ast.eif cond then_branch else_branch)
+  match expect ctx Ast.IF with
+  | Error err -> Error err
+  | Ok () ->
+    (match p_expr ctx with
+     | Error err -> Error err
+     | Ok cond ->
+       (match expect ctx Ast.THEN with
+        | Error err -> Error err
+        | Ok () ->
+          (match p_expr ctx with
+           | Error err -> Error err
+           | Ok then_branch ->
+             (match expect ctx Ast.ELSE with
+              | Error err -> Error err
+              | Ok () ->
+                (match p_expr ctx with
+                 | Error err -> Error err
+                 | Ok else_branch -> Ok (Ast.eif cond then_branch else_branch))))))
 
 and p_fun ctx =
-  let* () = expect ctx Ast.FUN in
-  let params = p_params ctx in
-  if params = []
-  then fail ctx "expected a parameter after 'fun'"
-  else
-    let* () = expect ctx Ast.RIGHTARROW in
-    let* body = p_expr ctx in
-    Ok (desugar_params params body)
+  match expect ctx Ast.FUN with
+  | Error err -> Error err
+  | Ok () ->
+    let params = p_params ctx in
+    if params = []
+    then fail ctx "expected a parameter after 'fun'"
+    else (
+      match expect ctx Ast.RIGHTARROW with
+      | Error err -> Error err
+      | Ok () ->
+        (match p_expr ctx with
+         | Error err -> Error err
+         | Ok body -> Ok (desugar_params params body)))
 ;;
 
 let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
@@ -312,8 +353,10 @@ let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
   in
   try
     next ctx;
-    let* e = p_expr ctx in
-    if cur ctx = Ast.EOF then Ok e else fail ctx "unexpected input after the expression"
+    match p_expr ctx with
+    | Error err -> Error err
+    | Ok e ->
+      if cur ctx = Ast.EOF then Ok e else fail ctx "unexpected input after the expression"
   with
   | Lexer.Lexing_error e -> Error e
   | Stack_overflow -> fail ctx "expression is nested too deeply"
