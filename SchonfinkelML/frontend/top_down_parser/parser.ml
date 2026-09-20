@@ -120,7 +120,13 @@ let is_prefix = function
   | Operators.Infix _ -> false
 ;;
 
-let fail ctx msg : (_, error) result = Error { pos = cur_pos ctx; msg }
+exception Parse_error of error
+
+(* [fail] raises, and every parser function returns a plain value.  The public
+   [parse_expr] catches [Parse_error] at the boundary and hands back a [result],
+   so callers see what they saw before while the success path allocates no [Ok]
+   blocks. *)
+let fail ctx msg = raise (Parse_error { pos = cur_pos ctx; msg })
 let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
 
 (* [expect] only ever sees constant tokens -- keywords and punctuation -- whose
@@ -128,9 +134,7 @@ let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
    the polymorphic compare. *)
 let expect ctx tok =
   if cur ctx == tok
-  then (
-    advance ctx;
-    Ok ())
+  then advance ctx
   else fail ctx (Printf.sprintf "expected '%s'" (pp_tok tok))
 ;;
 
@@ -143,7 +147,7 @@ let expect_ident ctx =
   match cur ctx with
   | Ast.IDENT name ->
     advance ctx;
-    Ok name
+    name
   | tok ->
     if is_keyword tok
     then
@@ -177,99 +181,83 @@ let rhs_min_prec e =
 ;;
 
 let rec p_expr ctx =
-  if ctx.budget <= 0
-  then fail ctx "expression is too complex"
-  else (
-    ctx.budget <- ctx.budget - 1;
-    match cur ctx with
-    | Ast.LET -> p_let ctx
-    | Ast.IF -> p_if ctx
-    | Ast.FUN -> p_fun ctx
-    | _ -> p_binop ctx 0)
+  if ctx.budget <= 0 then fail ctx "expression is too complex";
+  ctx.budget <- ctx.budget - 1;
+  match cur ctx with
+  | Ast.LET -> p_let ctx
+  | Ast.IF -> p_if ctx
+  | Ast.FUN -> p_fun ctx
+  | _ -> p_binop ctx 0
 
 (** Precedence climbing: [p_binop ctx min_prec] reads an operand followed by all
    the operators of the table that bind at least as tight as [min_prec]. *)
 and p_binop ctx min_prec =
-  match p_operand ctx with
-  | Error err -> Error err
-  | Ok lhs -> p_infix ctx min_prec lhs
+  let lhs = p_operand ctx in
+  p_infix ctx min_prec lhs
 
 and p_infix ctx min_prec lhs =
   match ctx.infix.(token_index (cur ctx)) with
   | Some e when e.Operators.prec >= min_prec ->
     advance ctx;
-    (match p_binop ctx (rhs_min_prec e) with
-     | Error err -> Error err
-     | Ok rhs ->
-       (match check_chaining ctx e with
-        | Some err -> Error err
-        | None ->
-          p_infix ctx min_prec (Ast.eapp (Ast.eapp (Ast.Ident e.Operators.sym) lhs) rhs)))
-  | _ -> Ok lhs
+    let rhs = p_binop ctx (rhs_min_prec e) in
+    check_chaining ctx e;
+    p_infix ctx min_prec (Ast.eapp (Ast.eapp (Ast.Ident e.Operators.sym) lhs) rhs)
+  | _ -> lhs
 
 (** A non-associative operator cannot be followed by an operator of the same
-   precedence, so [a = b = c] is rejected rather than silently associated.
-   [None] is the common case, and it allocates nothing. *)
-and check_chaining ctx e : error option =
+   precedence, so [a = b = c] is rejected rather than silently associated. *)
+and check_chaining ctx e =
   match e.Operators.fixity with
   | Operators.Infix Operators.Nonassoc ->
     (match ctx.infix.(token_index (cur ctx)) with
      | Some next when next.Operators.prec = e.Operators.prec ->
-       let msg =
-         if next.Operators.sym = e.Operators.sym
-         then Printf.sprintf "operator '%s' is not associative" e.Operators.sym
-         else
-           Printf.sprintf
-             "operators '%s' and '%s' are not associative"
-             e.Operators.sym
-             next.Operators.sym
-       in
-       Some { pos = cur_pos ctx; msg }
-     | _ -> None)
-  | _ -> None
+       if next.Operators.sym = e.Operators.sym
+       then fail ctx (Printf.sprintf "operator '%s' is not associative" e.Operators.sym)
+       else
+         fail
+           ctx
+           (Printf.sprintf
+              "operators '%s' and '%s' are not associative"
+              e.Operators.sym
+              next.Operators.sym)
+     | _ -> ())
+  | _ -> ()
 
 and p_operand ctx =
   match ctx.prefix.(token_index (cur ctx)) with
   | Some e ->
     advance ctx;
-    (match p_binop ctx e.Operators.prec with
-     | Error err -> Error err
-     | Ok arg -> Ok (Ast.eapp (Ast.Ident e.Operators.sym) arg))
+    let arg = p_binop ctx e.Operators.prec in
+    Ast.eapp (Ast.Ident e.Operators.sym) arg
   | None -> p_app ctx
 
 and p_app ctx =
-  match p_atom ctx with
-  | Error err -> Error err
-  | Ok head ->
-    let rec p_arg acc =
-      match cur ctx with
-      | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN ->
-        (match p_atom ctx with
-         | Error err -> Error err
-         | Ok arg -> p_arg (Ast.eapp acc arg))
-      | _ -> Ok acc
-    in
-    p_arg head
+  let head = p_atom ctx in
+  let rec p_arg acc =
+    match cur ctx with
+    | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN ->
+      let arg = p_atom ctx in
+      p_arg (Ast.eapp acc arg)
+    | _ -> acc
+  in
+  p_arg head
 
 and p_atom ctx =
   match cur ctx with
   | Ast.INT n ->
     advance ctx;
-    Ok (Ast.econsti n)
+    Ast.econsti n
   | Ast.IDENT name ->
     advance ctx;
-    Ok (Ast.Ident name)
+    Ast.Ident name
   | Ast.LPAREN ->
     advance ctx;
     if cur ctx == Ast.RPAREN
     then fail ctx "the unit value () is not supported"
     else (
-      match p_expr ctx with
-      | Error err -> Error err
-      | Ok e ->
-        (match expect ctx Ast.RPAREN with
-         | Error err -> Error err
-         | Ok () -> Ok e))
+      let e = p_expr ctx in
+      expect ctx Ast.RPAREN;
+      e)
   | Ast.UNIT -> fail ctx "the unit value () is not supported"
   | Ast.EOF -> fail ctx "expected an expression"
   | tok ->
@@ -277,72 +265,39 @@ and p_atom ctx =
     fail ctx (Printf.sprintf "unexpected %s '%s'" what (pp_tok tok))
 
 and p_let ctx =
-  match expect ctx Ast.LET with
-  | Error err -> Error err
-  | Ok () ->
-    let is_rec =
-      if cur ctx == Ast.REC
-      then (
-        advance ctx;
-        true)
-      else false
-    in
-    (match expect_ident ctx with
-     | Error err -> Error err
-     | Ok name ->
-       let params = p_params ctx in
-       (match expect ctx Ast.EQ with
-        | Error err -> Error err
-        | Ok () ->
-          (match p_expr ctx with
-           | Error err -> Error err
-           | Ok value ->
-             (match expect ctx Ast.IN with
-              | Error err -> Error err
-              | Ok () ->
-                (match p_expr ctx with
-                 | Error err -> Error err
-                 | Ok body ->
-                   let value = desugar_params params value in
-                   Ok
-                     (if is_rec
-                      then Ast.eletrec name value body
-                      else Ast.elet name value body))))))
+  expect ctx Ast.LET;
+  let is_rec =
+    if cur ctx == Ast.REC
+    then (
+      advance ctx;
+      true)
+    else false
+  in
+  let name = expect_ident ctx in
+  let params = p_params ctx in
+  expect ctx Ast.EQ;
+  let value = p_expr ctx in
+  expect ctx Ast.IN;
+  let body = p_expr ctx in
+  let value = desugar_params params value in
+  if is_rec then Ast.eletrec name value body else Ast.elet name value body
 
 and p_if ctx =
-  match expect ctx Ast.IF with
-  | Error err -> Error err
-  | Ok () ->
-    (match p_expr ctx with
-     | Error err -> Error err
-     | Ok cond ->
-       (match expect ctx Ast.THEN with
-        | Error err -> Error err
-        | Ok () ->
-          (match p_expr ctx with
-           | Error err -> Error err
-           | Ok then_branch ->
-             (match expect ctx Ast.ELSE with
-              | Error err -> Error err
-              | Ok () ->
-                (match p_expr ctx with
-                 | Error err -> Error err
-                 | Ok else_branch -> Ok (Ast.eif cond then_branch else_branch))))))
+  expect ctx Ast.IF;
+  let cond = p_expr ctx in
+  expect ctx Ast.THEN;
+  let then_branch = p_expr ctx in
+  expect ctx Ast.ELSE;
+  let else_branch = p_expr ctx in
+  Ast.eif cond then_branch else_branch
 
 and p_fun ctx =
-  match expect ctx Ast.FUN with
-  | Error err -> Error err
-  | Ok () ->
-    let params = p_params ctx in
-    if params = []
-    then fail ctx "expected a parameter after 'fun'"
-    else (
-      match expect ctx Ast.RIGHTARROW with
-      | Error err -> Error err
-      | Ok () ->
-        (match p_expr ctx with
-         | Error err -> Error err
-         | Ok body -> Ok (desugar_params params body)))
+  expect ctx Ast.FUN;
+  let params = p_params ctx in
+  if params = [] then fail ctx "expected a parameter after 'fun'";
+  expect ctx Ast.RIGHTARROW;
+  let body = p_expr ctx in
+  desugar_params params body
 ;;
 
 let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
@@ -357,13 +312,10 @@ let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
   in
   try
     next ctx;
-    match p_expr ctx with
-    | Error err -> Error err
-    | Ok e ->
-      if cur ctx == Ast.EOF
-      then Ok e
-      else fail ctx "unexpected input after the expression"
+    let e = p_expr ctx in
+    if cur ctx == Ast.EOF then Ok e else fail ctx "unexpected input after the expression"
   with
-  | Lexer.Lexing_error e -> Error e
-  | Stack_overflow -> fail ctx "expression is nested too deeply"
+  | Parse_error err -> Error err
+  | Lexer.Lexing_error err -> Error err
+  | Stack_overflow -> Error { pos = cur_pos ctx; msg = "expression is nested too deeply" }
 ;;
