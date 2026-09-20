@@ -1,5 +1,7 @@
 (lang dune 3.24)
 
+(using menhir 2.1)
+
 (name MyLittleML)
 
 (generate_opam_files true)
@@ -19,6 +21,7 @@
  (depends
   ocaml
   dune
+  menhir
   (angstrom
    (= "0.16.0"))
   qcheck
