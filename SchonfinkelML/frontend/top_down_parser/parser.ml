@@ -22,19 +22,6 @@ let pp_error ppf ({ pos; msg } : error) =
 
 let string_of_error e = Format.asprintf "%a" pp_error e
 
-let tokenize src =
-  let lexbuf = Lexing.from_string src in
-  let rec loop acc =
-    let tok = Lexer.token lexbuf in
-    let pos = lexbuf.Lexing.lex_start_p in
-    match tok with
-    | Ast.EOF -> Ok (List.rev ((tok, pos) :: acc))
-    | _ -> loop ((tok, pos) :: acc)
-  in
-  try loop [] with
-  | Lexer.Lexing_error e -> Error e
-;;
-
 type ctx =
   { lexbuf : Lexing.lexbuf
   ; infix : Operators.entry option array
@@ -46,9 +33,8 @@ type ctx =
 
 let default_budget = 100_000
 
-(** [Lexer.token] leaves the position the token starts at in [lex_start_p],
-   which is what [tokenize] reads, so it is read here right after the call,
-   before the lexbuf moves on. *)
+(** [Lexer.token] leaves the position the token starts at in [lex_start_p]; it
+   is read right here, before the lexbuf moves on to the next token. *)
 let next ctx =
   ctx.tok <- Lexer.token ctx.lexbuf;
   ctx.tok_pos <- ctx.lexbuf.Lexing.lex_start_p
