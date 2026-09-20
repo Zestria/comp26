@@ -477,3 +477,12 @@ let%test "does not raise on -->" = does_not_raise "-->"
 let%test "does not raise on 100 parens" = does_not_raise (String.make 100 '(')
 let%test "does not raise on 100 minuses" = does_not_raise (String.make 100 '-')
 let%test "does not raise on 1000 letters" = does_not_raise (String.make 1000 'x')
+
+(* Lexing is interleaved with parsing: a lexing error is only reached when the
+   lexer gets there, so a parser error earlier in the source wins.  In
+   [1 ) %] the parser stops at [)] before the '%' is ever lexed. *)
+let%test "a parser error before a later lexing error" =
+  match P.parse_expr "1 ) %" with
+  | Error e -> e.pos.pos_cnum = 2
+  | Ok _ -> false
+;;

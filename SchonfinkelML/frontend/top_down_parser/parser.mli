@@ -33,6 +33,10 @@ val tokenize : string -> ((Frontend.Common.token * Lexing.position) list, error)
 (** Parse one expression, allowing only whitespace and comments after it.
     Operators are taken from [operators], [Operators.default] by default.
 
+    The source is read token by token as parsing goes, so a lexing error is
+    reported only when the lexer reaches it: an error the parser finds earlier
+    in the source comes first.
+
     [budget] bounds how many parser frames may be alive at once, and so the
     nesting the parser accepts; it is spent one unit per nested call and is
     [100_000] by default.  Going over it, or overflowing the stack, is reported

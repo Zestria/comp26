@@ -38,19 +38,33 @@ let tokenize src =
 ;;
 
 type ctx =
-  { toks : (Ast.token * Lexing.position) array
+  { lexbuf : Lexing.lexbuf
   ; ops : Operators.t
-  ; mutable pos : int
+  ; mutable tok : Ast.token
+  ; mutable tok_pos : Lexing.position
   ; mutable budget : int
   }
 
 let default_budget = 100_000
-let cur ctx = fst ctx.toks.(ctx.pos)
-let cur_pos ctx = snd ctx.toks.(ctx.pos)
 
-(** [tokenize] always ends with [EOF] and [advance] never moves past it, so
-   [ctx.pos] is always a valid index. *)
-let advance ctx = if ctx.pos < Array.length ctx.toks - 1 then ctx.pos <- ctx.pos + 1
+(** [Lexer.token] leaves the position the token starts at in [lex_start_p],
+   which is what [tokenize] reads, so it is read here right after the call,
+   before the lexbuf moves on. *)
+let next ctx =
+  ctx.tok <- Lexer.token ctx.lexbuf;
+  ctx.tok_pos <- ctx.lexbuf.Lexing.lex_start_p
+;;
+
+let cur ctx = ctx.tok
+let cur_pos ctx = ctx.tok_pos
+
+(** [Lexer.token] returns [EOF] without consuming anything, and [advance] does
+   not lex once it has seen it, so the parser never runs past the end. *)
+let advance ctx =
+  match ctx.tok with
+  | Ast.EOF -> ()
+  | _ -> next ctx
+;;
 
 let fail ctx msg : (_, error) result = Error { pos = cur_pos ctx; msg }
 let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
@@ -231,15 +245,19 @@ and p_fun ctx =
 ;;
 
 let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
-  match tokenize src with
-  | Error e -> Error e
-  | Ok toks ->
-    let ctx = { toks = Array.of_list toks; ops; pos = 0; budget = max_budget } in
-    (try
-       let* e = p_expr ctx in
-       if cur ctx = Ast.EOF
-       then Ok e
-       else fail ctx "unexpected input after the expression"
-     with
-     | Stack_overflow -> fail ctx "expression is nested too deeply")
+  let ctx =
+    { lexbuf = Lexing.from_string src
+    ; ops
+    ; tok = Ast.EOF
+    ; tok_pos = Lexing.dummy_pos
+    ; budget = max_budget
+    }
+  in
+  try
+    next ctx;
+    let* e = p_expr ctx in
+    if cur ctx = Ast.EOF then Ok e else fail ctx "unexpected input after the expression"
+  with
+  | Lexer.Lexing_error e -> Error e
+  | Stack_overflow -> fail ctx "expression is nested too deeply"
 ;;
