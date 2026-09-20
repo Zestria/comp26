@@ -122,8 +122,20 @@ let test_program () =
     [ Value (Recursive, fac, []) ]
 ;;
 
-let%test_unit "constants and collections" = test_constants_and_collections ()
-let%test_unit "operator precedence" = test_operator_precedence ()
-let%test_unit "functions and applications" = test_functions_and_applications ()
-let%test_unit "match expressions" = test_match ()
-let%test_unit "complete program" = test_program ()
+let run name test =
+  try
+    test ();
+    Printf.printf "ok: %s\n%!" name
+  with
+  | exception_ ->
+    Printf.eprintf "FAILED: %s\n%!" name;
+    raise exception_
+;;
+
+let () =
+  run "constants and collections" test_constants_and_collections;
+  run "operator precedence" test_operator_precedence;
+  run "functions and applications" test_functions_and_applications;
+  run "match expressions" test_match;
+  run "complete program" test_program
+;;

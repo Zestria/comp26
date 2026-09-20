@@ -1,5 +1,5 @@
-(library
- (name frontend_unit_tests)
+(test
+ (name pretty_printer_test)
  (package MMML)
  (modules lexer_test pretty_printer_test)
  (libraries MMML.frontend)
