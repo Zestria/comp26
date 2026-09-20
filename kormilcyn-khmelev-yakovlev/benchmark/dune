@@ -1,0 +1,7 @@
+(executable
+ (name benchmark)
+ (public_name shmel-benchmark)
+ (package shmel)
+ (libraries
+  shmel.Lib
+  unix))
