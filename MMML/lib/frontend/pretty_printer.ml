@@ -193,13 +193,6 @@ let rec pp_expr_at precedence formatter expression =
          Format.fprintf formatter "@,in@;<1 2>%a@]" (pp_expr_at control_precedence) body)
       formatter
       ()
-  | Function (first, rest) ->
-    parenthesize
-      (precedence > control_precedence)
-      (fun formatter () ->
-         Format.fprintf formatter "@[<v 2>function%a@]" pp_cases (first, rest))
-      formatter
-      ()
   | Match (scrutinee, first, rest) ->
     parenthesize
       (precedence > control_precedence)

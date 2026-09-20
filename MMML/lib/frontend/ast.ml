@@ -31,7 +31,6 @@ type expr =
   | Application of expr * expr
   | If_then_else of expr * expr * expr
   | Let_in of rec_flag * value_binding * value_binding list * expr
-  | Function of case * case list
   | Match of expr * case * case list
 
 and value_binding =

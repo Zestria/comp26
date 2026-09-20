@@ -78,7 +78,7 @@ let test_functions_and_applications () =
        [ application (var "g") [ var "x" ]; function_ [ pvar "y" ] (var "y") ])
 ;;
 
-(** Checks layout and pattern rendering in [match] and [function] cases. *)
+(** Checks layout and pattern rendering in [match] cases. *)
 let test_match () =
   let empty_case = { case_pattern = PList []; case_expression = int 0 } in
   let cons_case =
@@ -89,11 +89,7 @@ let test_match () =
   check_expr
     "match"
     "match xs with\n  | [] -> 0\n  | x :: xs -> x + 1"
-    (Match (var "xs", empty_case, [ cons_case ]));
-  check_expr
-    "function cases"
-    "function\n  | [] -> 0\n  | x :: xs -> x + 1"
-    (Function (empty_case, [ cons_case ]))
+    (Match (var "xs", empty_case, [ cons_case ]))
 ;;
 
 (** Checks stable multiline rendering of a complete CPS-factorial program. *)
