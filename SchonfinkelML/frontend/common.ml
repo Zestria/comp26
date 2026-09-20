@@ -53,6 +53,12 @@ type expr =
   | If of expr * expr * expr
   | Abstr of string * expr
 
+type structure_item =
+  | StrLet of let_flag * string * expr
+  | StrEval of expr
+
+type program = structure_item list
+
 (* Smart constructors, prefer them instead of ordinary ones *)
 
 let eletrec v e1 e2 = Let (Recursive, v, e1, e2)
@@ -107,8 +113,8 @@ let pp_token ppf = function
   | EQ -> Format.fprintf ppf "="
   | LT -> Format.fprintf ppf "<"
   | GT -> Format.fprintf ppf ">"
-  | GE -> Format.fprintf ppf ">="
   | LE -> Format.fprintf ppf "<="
+  | GE -> Format.fprintf ppf ">="
   | LPAREN -> Format.fprintf ppf "("
   | RPAREN -> Format.fprintf ppf ")"
   | EOF -> Format.fprintf ppf "EOF"
@@ -137,3 +143,19 @@ and pp_atom_like ppf e =
 ;;
 
 let string_of_expr e = Format.asprintf "%a" pp_expr e
+
+let pp_structure_item ppf = function
+  | StrLet (Recursive, x, e) ->
+    Format.fprintf ppf "let rec %s = %a" x pp_expr e
+  | StrLet (NotRecursive, x, e) ->
+    Format.fprintf ppf "let %s = %a" x pp_expr e
+  | StrEval e -> pp_expr ppf e
+;;
+
+let pp_program ppf items =
+  Format.pp_print_list
+    ~pp_sep:(fun ppf () -> Format.fprintf ppf "@\n")
+    pp_structure_item ppf items
+;;
+
+let string_of_program p = Format.asprintf "%a" pp_program p

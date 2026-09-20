@@ -28,19 +28,26 @@
 
 %type <Common.expr> expr app_expr atom
 
-%start <Common.expr> program
+%start <Common.program> program
 
 %%
 
 program:
-  | e = expr; EOF { e }
-  ;
+  | items = list(structure_item); EOF { items }
+;
+
+structure_item:
+  | LET; REC; f = IDENT; ps = IDENT*; EQ; e = expr
+      { StrLet (Recursive, f, curry ps e) }
+  | LET; x = IDENT; ps = IDENT*; EQ; e = expr
+      { StrLet (NotRecursive, x, curry ps e) }
+;
 
 expr:
   | LET; REC; f = IDENT; ps = IDENT*; EQ; e1 = expr; IN; e2 = expr
-      { eletrec f (curry ps e1) e2 }
+    { eletrec f (curry ps e1) e2 }
   | LET; x = IDENT; ps = IDENT*; EQ; e1 = expr; IN; e2 = expr
-      { elet x (curry ps e1) e2 }
+    { elet x (curry ps e1) e2 }
   | IF; c = expr; THEN; t = expr
       { eif c t eunit }
   | IF; c = expr; THEN; t = expr; ELSE; f = expr

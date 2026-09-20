@@ -91,12 +91,21 @@ let parse_common s =
   Frontend.Bottom_up_parser.program Frontend.Lexer.token (Lexing.from_string s)
 ;;
 
+let check_common_expr e =
+  let s = "let x = " ^ Frontend.Common.string_of_expr e in
+  match parse_common s with
+  | [ StrLet (NotRecursive, "x", e') ] -> e = e'
+  | _ -> false
+;;
+
 let _ =
   QCheck_runner.run_tests
+    ~verbose:true
     [ QCheck.(
-        Test.make arbitrary_common_expr (fun e ->
-          let s = Frontend.Common.string_of_expr e in
-          try parse_common s = e with
-          | _ -> false))
+        Test.make
+          ~name:"bottom-up round-trip (wrapped in let)"
+          ~count:1000
+          arbitrary_common_expr
+          check_common_expr)
     ]
 ;;
