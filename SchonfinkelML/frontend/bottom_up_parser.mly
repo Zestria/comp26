@@ -41,6 +41,10 @@ structure_item:
       { StrLet (Recursive, f, curry ps e) }
   | LET; x = IDENT; ps = IDENT*; EQ; e = expr
       { StrLet (NotRecursive, x, curry ps e) }
+  | LET; REC; f = IDENT; ps = IDENT*; EQ; e1 = expr; IN; e2 = expr
+      { StrEval (eletrec f (curry ps e1) e2) }
+  | LET; x = IDENT; ps = IDENT*; EQ; e1 = expr; IN; e2 = expr
+      { StrEval (elet x (curry ps e1) e2) }
 ;
 
 expr:
