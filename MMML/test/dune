@@ -11,4 +11,4 @@
  (name lexer_qcheck)
  (package MMML)
  (modules lexer_qcheck)
- (libraries MMML.frontend qcheck))
+ (libraries MMML.frontend qcheck))eat: add ast type and pretty-printer with tests)
