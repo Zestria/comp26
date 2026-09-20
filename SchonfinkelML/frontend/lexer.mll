@@ -120,17 +120,3 @@ and comment depth = parse
   | newline   { Lexing.new_line lexbuf; comment depth lexbuf }
   | eof       { fail lexbuf "unclosed comment" }
   | _         { comment depth lexbuf }
-
-{
-  let tokenize src : (token list, error) result =
-    let lexbuf = from_string src in
-    let rec next acc =
-      match token lexbuf with
-      | EOF -> List.rev acc
-      | tok -> next (tok :: acc)
-    in
-    match next [] with
-    | toks -> Ok toks
-    | exception Lexing_error e -> Error e
-  ;;
-}
