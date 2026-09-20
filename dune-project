@@ -134,22 +134,5 @@
  (documentation
   "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
 
-(package
- (name MML)
- (synopsis "A short LLVM project")
- (depends
-  ocaml
-  dune
-  (angstrom
-   (= "0.16.0"))
-  menhir
-  ppx_expect
-  qcheck
-  bisect_ppx_ng
-  ppx_deriving
-  (llvm
-   (= "18-shared"))
-  (ppx_deriving_qcheck
-   (= "0.6"))))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
