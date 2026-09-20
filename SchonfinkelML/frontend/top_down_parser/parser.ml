@@ -123,8 +123,11 @@ let is_prefix = function
 let fail ctx msg : (_, error) result = Error { pos = cur_pos ctx; msg }
 let pp_tok tok = Format.asprintf "%a" Ast.pp_token tok
 
+(* [expect] only ever sees constant tokens -- keywords and punctuation -- whose
+   representation is an immediate, so [==] is [=] here and skips the call into
+   the polymorphic compare. *)
 let expect ctx tok =
-  if cur ctx = tok
+  if cur ctx == tok
   then (
     advance ctx;
     Ok ())
@@ -199,30 +202,31 @@ and p_infix ctx min_prec lhs =
      | Error err -> Error err
      | Ok rhs ->
        (match check_chaining ctx e with
-        | Error err -> Error err
-        | Ok () ->
+        | Some err -> Error err
+        | None ->
           p_infix ctx min_prec (Ast.eapp (Ast.eapp (Ast.Ident e.Operators.sym) lhs) rhs)))
   | _ -> Ok lhs
 
 (** A non-associative operator cannot be followed by an operator of the same
-   precedence, so [a = b = c] is rejected rather than silently associated. *)
-(* MAYBE EASIER *)
-and check_chaining ctx e =
+   precedence, so [a = b = c] is rejected rather than silently associated.
+   [None] is the common case, and it allocates nothing. *)
+and check_chaining ctx e : error option =
   match e.Operators.fixity with
   | Operators.Infix Operators.Nonassoc ->
     (match ctx.infix.(token_index (cur ctx)) with
      | Some next when next.Operators.prec = e.Operators.prec ->
-       if next.Operators.sym = e.Operators.sym
-       then fail ctx (Printf.sprintf "operator '%s' is not associative" e.Operators.sym)
-       else
-         fail
-           ctx
-           (Printf.sprintf
-              "operators '%s' and '%s' are not associative"
-              e.Operators.sym
-              next.Operators.sym)
-     | _ -> Ok ())
-  | _ -> Ok ()
+       let msg =
+         if next.Operators.sym = e.Operators.sym
+         then Printf.sprintf "operator '%s' is not associative" e.Operators.sym
+         else
+           Printf.sprintf
+             "operators '%s' and '%s' are not associative"
+             e.Operators.sym
+             next.Operators.sym
+       in
+       Some { pos = cur_pos ctx; msg }
+     | _ -> None)
+  | _ -> None
 
 and p_operand ctx =
   match ctx.prefix.(token_index (cur ctx)) with
@@ -257,7 +261,7 @@ and p_atom ctx =
     Ok (Ast.Ident name)
   | Ast.LPAREN ->
     advance ctx;
-    if cur ctx = Ast.RPAREN
+    if cur ctx == Ast.RPAREN
     then fail ctx "the unit value () is not supported"
     else (
       match p_expr ctx with
@@ -277,7 +281,7 @@ and p_let ctx =
   | Error err -> Error err
   | Ok () ->
     let is_rec =
-      if cur ctx = Ast.REC
+      if cur ctx == Ast.REC
       then (
         advance ctx;
         true)
@@ -356,7 +360,9 @@ let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
     match p_expr ctx with
     | Error err -> Error err
     | Ok e ->
-      if cur ctx = Ast.EOF then Ok e else fail ctx "unexpected input after the expression"
+      if cur ctx == Ast.EOF
+      then Ok e
+      else fail ctx "unexpected input after the expression"
   with
   | Lexer.Lexing_error e -> Error e
   | Stack_overflow -> fail ctx "expression is nested too deeply"
