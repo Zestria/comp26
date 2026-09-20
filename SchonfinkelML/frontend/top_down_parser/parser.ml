@@ -39,7 +39,8 @@ let tokenize src =
 
 type ctx =
   { lexbuf : Lexing.lexbuf
-  ; ops : Operators.t
+  ; infix : Operators.entry option array
+  ; prefix : Operators.entry option array
   ; mutable tok : Ast.token
   ; mutable tok_pos : Lexing.position
   ; mutable budget : int
@@ -64,6 +65,61 @@ let advance ctx =
   match ctx.tok with
   | Ast.EOF -> ()
   | _ -> next ctx
+;;
+
+(* Operators are looked up by token index: an array read instead of a scan
+   with a predicate closure.  The tables are built once per [parse_expr];
+   [IDENT] and [INT] have indices too, they are simply never operators. *)
+
+let token_index (tok : Ast.token) =
+  match tok with
+  | Ast.IF -> 0
+  | Ast.THEN -> 1
+  | Ast.ELSE -> 2
+  | Ast.LET -> 3
+  | Ast.REC -> 4
+  | Ast.IN -> 5
+  | Ast.IDENT _ -> 6
+  | Ast.INT _ -> 7
+  | Ast.UNIT -> 8
+  | Ast.PLUS -> 9
+  | Ast.MINUS -> 10
+  | Ast.TIMES -> 11
+  | Ast.DIV -> 12
+  | Ast.EQ -> 13
+  | Ast.LT -> 14
+  | Ast.GT -> 15
+  | Ast.LPAREN -> 16
+  | Ast.RPAREN -> 17
+  | Ast.EOF -> 18
+  | Ast.FUN -> 19
+  | Ast.RIGHTARROW -> 20
+;;
+
+let token_slots = 21
+
+(* The first entry of the table wins for a token, as it did with
+   [List.find_opt]. *)
+let op_table ops keep =
+  let table = Array.make token_slots None in
+  List.iter
+    (fun (e : Operators.entry) ->
+       let i = token_index e.Operators.tok in
+       match table.(i) with
+       | Some _ -> ()
+       | None -> if keep e.Operators.fixity then table.(i) <- Some e)
+    ops;
+  table
+;;
+
+let is_infix = function
+  | Operators.Infix _ -> true
+  | Operators.Prefix -> false
+;;
+
+let is_prefix = function
+  | Operators.Prefix -> true
+  | Operators.Infix _ -> false
 ;;
 
 let fail ctx msg : (_, error) result = Error { pos = cur_pos ctx; msg }
@@ -137,7 +193,7 @@ and p_binop ctx min_prec =
   p_infix ctx min_prec lhs
 
 and p_infix ctx min_prec lhs =
-  match Operators.find_infix ctx.ops (cur ctx) with
+  match ctx.infix.(token_index (cur ctx)) with
   | Some e when e.Operators.prec >= min_prec ->
     advance ctx;
     let* rhs = p_binop ctx (rhs_min_prec e) in
@@ -151,7 +207,7 @@ and p_infix ctx min_prec lhs =
 and check_chaining ctx e =
   match e.Operators.fixity with
   | Operators.Infix Operators.Nonassoc ->
-    (match Operators.find_infix ctx.ops (cur ctx) with
+    (match ctx.infix.(token_index (cur ctx)) with
      | Some next when next.Operators.prec = e.Operators.prec ->
        if next.Operators.sym = e.Operators.sym
        then fail ctx (Printf.sprintf "operator '%s' is not associative" e.Operators.sym)
@@ -166,7 +222,7 @@ and check_chaining ctx e =
   | _ -> Ok ()
 
 and p_operand ctx =
-  match Operators.find_prefix ctx.ops (cur ctx) with
+  match ctx.prefix.(token_index (cur ctx)) with
   | Some e ->
     advance ctx;
     let* arg = p_binop ctx e.Operators.prec in
@@ -247,7 +303,8 @@ and p_fun ctx =
 let parse_expr ?(ops = Operators.default) ?(max_budget = default_budget) src =
   let ctx =
     { lexbuf = Lexing.from_string src
-    ; ops
+    ; infix = op_table ops is_infix
+    ; prefix = op_table ops is_prefix
     ; tok = Ast.EOF
     ; tok_pos = Lexing.dummy_pos
     ; budget = max_budget
