@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, vibecaml team *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Абстрактное синтаксическое дерево подмножества OCaml.
 
     Операторы представляются применением идентификатора оператора, поэтому
@@ -7,39 +15,48 @@ type identifier = string
 
 (** Константы, допустимые в исходной программе. *)
 type constant =
-  | Const_int of int
-  | Const_bool of bool
-  | Const_unit
+  | Const_int of int (** [42], [-1] *)
+  | Const_bool of bool (** [true], [false] *)
+  | Const_unit (** [()] *)
 
-(** [Recursive] соответствует [let rec], а [Non_recursive] — обычному [let]. *)
+(** [Recursive] соответствует [let rec], а [Non_recursive] --- обычному [let]. *)
 type rec_flag =
-  | Non_recursive
-  | Recursive
+  | Non_recursive (** [let] *)
+  | Recursive (** [let rec] *)
 
 (** Паттерны, допустимые в связываниях и аргументах функций. *)
 type pattern =
-  | Pat_wildcard
-  | Pat_var of identifier
-  | Pat_constant of constant
-  | Pat_tuple of pattern * pattern * pattern list
+  | Pat_wildcard (** [_] *)
+  | Pat_var of identifier (** [x], [( + )] *)
+  | Pat_constant of constant (** [1], [true], [()] *)
+  | Pat_tuple of pattern * pattern * pattern list (** [(p1, p2, ...)] *)
 
-(** Выражения языка. Кортежи содержат не менее двух элементов. *)
+(** Выражения языка.
+
+    Непустота списков выражена типом: у кортежа не меньше двух элементов, у
+    [fun] не меньше одного параметра, в группе [let ... and ...] не меньше одного
+    связывания. *)
 type expression =
-  | Expr_constant of constant
-  | Expr_ident of identifier
-  | Expr_let of rec_flag * value_binding list * expression
-  | Expr_fun of pattern list * expression
+  | Expr_constant of constant (** константа *)
+  | Expr_ident of identifier (** переменная или оператор: [x], [( + )] *)
+  | Expr_let of rec_flag * value_binding * value_binding list * expression
+  (** [let [rec] b1 and ... in e] *)
+  | Expr_fun of pattern * pattern list * expression (** [fun p1 ... pn -> e] *)
   | Expr_app of expression * expression
-  | Expr_if of expression * expression * expression
-  | Expr_tuple of expression * expression * expression list
+  (** [f x]; [f x y] --- это [Expr_app (Expr_app (f, x), y)] *)
+  | Expr_if of expression * expression * expression (** [if c then t else e] *)
+  | Expr_tuple of expression * expression * expression list (** [(e1, e2, ...)] *)
 
+(** Связывание [p = e] внутри [let]. *)
 and value_binding =
   { binding_pattern : pattern
   ; binding_expression : expression
   }
 
-(** Объявление значения верхнего уровня, в том числе группа [let rec ... and ...]. *)
-type structure_item = Structure_value of rec_flag * value_binding list
+(** Объявление верхнего уровня. *)
+type structure_item =
+  | Structure_value of rec_flag * value_binding * value_binding list
+  (** [let [rec] b1 and ...], в том числе группа [let rec ... and ...] *)
 
 (** Файл программы после разбора. *)
 type structure = structure_item list
