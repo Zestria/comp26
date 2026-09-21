@@ -1,5 +1,17 @@
 # Current performance of parser
 ![image info](images/parser_bench_result.png)
+## Test stand
+   OS: Void Linux
+
+   MACHINE: Linux schonfinkel x86_64 GNU/Linux
+
+   CPU: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
+
+   OCAML NATIVE COMPILER: 5.5.1
+
+   CPU TURBO: disabled
+
+   GCC VERSION: gcc (GCC) 14.2.1 20250405
 # Steps to generate plot
 1) Make sure you are in this working directory (`cd benchmark`)
 2) Run `dune exec ./gen_benchmarks.exe` to generate example with which you will benchmark parsers. They will be in `/examples` dir
