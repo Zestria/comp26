@@ -4,6 +4,10 @@
 
 open Ast
 
+(* Курсор изменяется только при потреблении неизменяемого массива токенов.
+   Это обычная модель состояния для нисходящего парсера. *)
+[@@@zanuda "-mutability_check"]
+
 type token_kind =
   | Int of string
   | Ident of string
@@ -103,14 +107,18 @@ let word_kind = function
    грамматики, поэтому все сообщения синтаксического анализатора однородны. *)
 let lex source =
   let length = String.length source in
+  let pair_at index =
+    if index + 1 < length then Some (source.[index], source.[index + 1]) else None
+  in
   let rec skip_comment start depth index =
     if index >= length
     then fail start "незакрытый комментарий"
-    else if index + 1 < length && String.sub source index 2 = "(*"
-    then skip_comment start (depth + 1) (index + 2)
-    else if index + 1 < length && String.sub source index 2 = "*)"
-    then if depth = 1 then index + 2 else skip_comment start (depth - 1) (index + 2)
-    else skip_comment start depth (index + 1)
+    else (
+      match pair_at index with
+      | Some ('(', '*') -> skip_comment start (depth + 1) (index + 2)
+      | Some ('*', ')') ->
+        if depth = 1 then index + 2 else skip_comment start (depth - 1) (index + 2)
+      | _ -> skip_comment start depth (index + 1))
   in
   let rec take_while predicate index =
     if index < length && predicate source.[index]
