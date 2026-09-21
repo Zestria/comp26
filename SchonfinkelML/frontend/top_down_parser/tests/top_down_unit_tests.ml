@@ -16,6 +16,7 @@ open Frontend.Common
 module P = Top_down.Parser
 module Operators = Top_down.Operators
 
+
 (* The table of a test, written in the syntax of [--ops]. *)
 let table src =
   match Operators.of_string src with
@@ -60,6 +61,8 @@ let check_round_trip src =
      | Error _ -> false)
 ;;
 
+(* Stress tests bounded by [?max_budget]: the parser must not raise even on
+   pathological inputs; it must return an [Error] instead. *)
 let does_not_raise src =
   try
     ignore (P.parse_expr src);
@@ -68,8 +71,9 @@ let does_not_raise src =
   | _ -> false
 ;;
 
-(* --- Literals and identifiers --- *)
+(* --- The operator table: custom tables via [~ops] ---
 
+<<<<<<< HEAD
 let%test "integer literal" = check_expr "42" (econsti 42)
 let%test "identifier" = check_expr "x" (Ident "x")
 let%test "identifier with digits and a quote" = check_expr "x1'_2" (Ident "x1'_2")
@@ -339,6 +343,9 @@ let%test "CPS fibonacci" =
 (* --- The operator table --- *)
 
 (* Associativity is data: the same source reads differently. *)
+=======
+   Associativity is data: the same source reads differently. *)
+>>>>>>> 09dd69f (test: separate common and top-down unit tests)
 let%test "left +" =
   check_expr
     ~ops:(table "left 6 +")
@@ -465,12 +472,17 @@ let%test "lookups of an absent operator" =
   | _ -> false
 ;;
 
-(* --- Errors ---
+let%test "if without else" = check_error "if x then 1"
+let%test "unit is not supported" = check_error "()"
+let%test "empty parens" = check_error "( )"
+
+(* --- Position-based error checks ---
 
    Everything that can go wrong is an [Error] here: the lexer raises
    [Lexing_error], and [parse_expr] catches it, so a source it refuses is a
    value rather than a crash. *)
 
+<<<<<<< HEAD
 let%test "empty input" = check_error ""
 let%test "whitespace only" = check_error "   "
 let%test "let without in" = check_error "let x = 1"
@@ -491,6 +503,8 @@ let%test "keyword as an expression" = check_error "in"
 (* the lexer refuses a literal that does not fit in an [int] *)
 let%test "literal overflow" = check_error "99999999999999999999"
 
+=======
+>>>>>>> 09dd69f (test: separate common and top-down unit tests)
 let%test "offset of a missing in" =
   match P.parse_expr "let x = 1" with
   | Error e -> e.pos.pos_cnum = 9
@@ -515,14 +529,6 @@ let%test "position of a dangling operator" =
   | Ok _ -> false
 ;;
 
-let%test "does not raise on ((((((" = does_not_raise "(((((("
-let%test "does not raise on letx=1inx" = does_not_raise "letx=1inx"
-let%test "does not raise on let rec" = does_not_raise "let rec"
-let%test "does not raise on -->" = does_not_raise "-->"
-let%test "does not raise on 100 parens" = does_not_raise (String.make 100 '(')
-let%test "does not raise on 100 minuses" = does_not_raise (String.make 100 '-')
-let%test "does not raise on 1000 letters" = does_not_raise (String.make 1000 'x')
-
 (* Lexing is interleaved with parsing: a lexing error is only reached when the
    lexer gets there, so a parser error earlier in the source wins.  In
    [1 ) %] the parser stops at [)] before the '%' is ever lexed. *)
@@ -531,3 +537,12 @@ let%test "a parser error before a later lexing error" =
   | Error e -> e.pos.pos_cnum = 2
   | Ok _ -> false
 ;;
+
+(* --- Stress tests bounded by [?max_budget] ---
+
+   The top-down parser bounds how many frames may be alive at once. Going
+   over the budget is reported as an error rather than crashing. These
+   pathological inputs have no bottom-up equivalent to compare against. *)
+
+let%test "does not raise on 100 parens" = does_not_raise (String.make 100 '(')
+let%test "does not raise on 100 minuses" = does_not_raise (String.make 100 '-')
