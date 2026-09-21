@@ -145,18 +145,6 @@ def main():
             linestyle=":",
             label="median" if j == 0 else None,
         )
-        ax.errorbar(
-            mean,
-            y,
-            xerr=ci,
-            fmt="none",
-            ecolor=colors[j],
-            elinewidth=2,
-            capsize=6,
-            capthick=2,
-            zorder=3,
-            label="ci (3*SE)" if j == 0 else None,
-        )
 
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["bottom_up", "top_down"], fontsize=12)

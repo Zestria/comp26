@@ -1,3 +1,5 @@
+# Current performance of parser
+![image info](images/parser_bench_result.png)
 # Steps to generate plot
 1) Make sure you are in this working directory (`cd benchmark`)
 2) Run `dune exec ./gen_benchmarks.exe` to generate example with which you will benchmark parsers. They will be in `/examples` dir
