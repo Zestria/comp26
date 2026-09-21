@@ -20,12 +20,10 @@ let binary operator left right = Expr_app (Expr_app (Expr_ident operator, left),
 
 (* Минус перед целой константой сворачивается в константу, как в OCaml:
    [-1] --- это число, [-x] --- применение [~-]. Скобки прозрачны, поэтому
-   [-(1)] тоже число. Исключение --- [min_int]: его отрицание не
-   представимо, поэтому оставляем честное применение [~-]. OCaml такой литерал
-   отвергает, но дерево корректно и печатается обратно. *)
+   [-(1)] тоже число. Отрицание [min_int] переполняется в него же: так
+   [-0x4000000000000000] даёт [min_int], как в OCaml. *)
 let negate = function
-  | Expr_constant (Const_int value) when value <> min_int ->
-    Expr_constant (Const_int (-value))
+  | Expr_constant (Const_int value) -> Expr_constant (Const_int (-value))
   | expression -> Expr_app (Expr_ident "~-", expression)
 ;;
 
@@ -112,7 +110,7 @@ expr:
       Expr_tuple (first, second, List.rev rest) }
   | l = expr op = infix_operator r = expr { binary op l r }
   | MINUS e = expr %prec prec_unary { negate e }
-  | MINUS INT_MIN_ABS { Expr_constant (Const_int min_int) }
+  | MINUS min_int_abs { Expr_constant (Const_int min_int) }
   | PLUS e = expr %prec prec_unary { plus e }
   | MINUSDOT e = expr %prec prec_unary { Expr_app (Expr_ident "~-.", e) }
   | PLUSDOT e = expr %prec prec_unary { Expr_app (Expr_ident "~+.", e) }
@@ -124,6 +122,13 @@ expr_comma_list:
     { let first, second, rest = items in
       first, second, e :: rest }
   | first = expr COMMA second = expr { first, second, [] }
+
+(* [4611686018427387904] допустим только под унарным минусом, в том числе
+   через скобки: [-(4611686018427387904)]. *)
+min_int_abs:
+  | INT_MIN_ABS { () }
+  | LPAREN min_int_abs RPAREN { () }
+  | BEGIN min_int_abs END { () }
 
 application:
   | f = simple_expr arguments = simple_expr+ { application f arguments }

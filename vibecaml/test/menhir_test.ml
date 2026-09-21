@@ -129,6 +129,11 @@ let () =
     ; "1_000 + 0x1F + 0o17 + 0b101"
     ; "4611686018427387903"
     ; "-4611686018427387904"
+    ; "-(4611686018427387904)"
+    ; "- begin (4611686018427387904) end"
+    ; "-0x4000000000000000"
+    ; "- (0x4000000000000000)"
+    ; "0x7FFFFFFFFFFFFFFF"
     ; "x' + _y + x1"
     ; "f (* комментарий (* вложенный *) *) x"
     ]
@@ -149,13 +154,12 @@ let () =
     ]
 ;;
 
-(* Отрицание [min_int] не представимо: остаётся применением [~-]. *)
+(* Известное отличие от OCaml: он отвергает [-(-4611686018427387904)], а у нас
+   отрицание [min_int] переполняется в него же. *)
 let () =
   let source = "- (-4611686018427387904)" in
-  match Menhir_frontend.parse_expr source with
-  | Ok (Expr_app (Expr_ident "~-", Expr_constant (Const_int value))) when value = min_int
-    -> ()
-  | Ok _ | Error _ -> fail "не то дерево: %s" source
+  if parse_expr source <> Expr_constant (Const_int min_int)
+  then fail "не то дерево: %s" source
 ;;
 
 (* Ошибочный вход даёт [Error] с позицией, а не исключение. *)
