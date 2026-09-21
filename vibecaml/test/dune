@@ -1,3 +1,4 @@
-(test
- (name frontend_test)
+(tests
+ (names frontend_test config_test)
+ (package vibecaml)
  (libraries vibecaml))

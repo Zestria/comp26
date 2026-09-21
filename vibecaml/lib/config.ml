@@ -1,4 +1,10 @@
-(** Настройки выбора парсера и экспериментального синтаксиса. *)
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, vibecaml team *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
 
 type parser =
   | Recursive_descent
@@ -14,6 +20,7 @@ type t =
   ; extensions : extensions
   ; dump_ast : bool
   ; dump_pretty_printed : bool
+  ; input_file : string option
   }
 
 let default_extensions = { glued_keywords = false; operator_declarations = false }
@@ -23,26 +30,27 @@ let default =
   ; extensions = default_extensions
   ; dump_ast = false
   ; dump_pretty_printed = false
+  ; input_file = None
   }
 ;;
 
-(** Разобрать значение флага [--parser]. *)
 let parser_of_string = function
   | "rd" -> Ok Recursive_descent
   | "menhir" -> Ok Menhir
   | value -> Error ("неизвестный парсер: " ^ value)
 ;;
 
-(** Разобрать аргументы командной строки без побочных эффектов. *)
+let is_option argument = String.length argument > 1 && argument.[0] = '-'
+
 let parse_arguments arguments =
   let length = Array.length arguments in
   let rec loop config index =
-    if index = length
+    if index >= length
     then Ok config
     else (
       match arguments.(index) with
       | "--parser" ->
-        if index + 1 = length
+        if index + 1 >= length
         then Error "после --parser ожидается значение"
         else (
           match parser_of_string arguments.(index + 1) with
@@ -56,7 +64,12 @@ let parse_arguments arguments =
         loop { config with extensions } (index + 1)
       | "--dump-ast" -> loop { config with dump_ast = true } (index + 1)
       | "--dump-pp" -> loop { config with dump_pretty_printed = true } (index + 1)
-      | option -> Error ("неизвестный аргумент: " ^ option))
+      | option when is_option option -> Error ("неизвестный аргумент: " ^ option)
+      | "" -> Error "пустое имя входного файла"
+      | file ->
+        (match config.input_file with
+         | Some first -> Error ("входной файл уже задан: " ^ first ^ ", лишний: " ^ file)
+         | None -> loop { config with input_file = Some file } (index + 1)))
   in
   loop default 1
 ;;
