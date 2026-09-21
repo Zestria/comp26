@@ -30,6 +30,8 @@ import sys
 
 sample_len = 2
 
+plt.rcParams["font.family"] = "sans-serif"
+plt.rcParams["font.sans-serif"] = ["Nimbus Sans"]
 
 parser_names = ["top_down_parser", "bottom_up_parser"]
 colors = ["red", "blue"]
@@ -96,8 +98,8 @@ def main():
         ci = 3.0 * std / np.sqrt(n)
         rows.append((name, dots, mean, median, std, ci, n))
 
-    fig = plt.figure(figsize=(12, 7))
-    gs = fig.add_gridspec(2, 1, height_ratios=[1, 2], hspace=0.55)
+    fig = plt.figure(figsize=(12, 5))
+    gs = fig.add_gridspec(2, 1, height_ratios=[1, 2], hspace=0.15)
 
     ax_table = fig.add_subplot(gs[0, 0])
     ax_table.axis("off")
@@ -113,9 +115,9 @@ def main():
         cellText=cell_text, colLabels=columns, loc="center", cellLoc="center"
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(11)
+    table.set_fontsize(14)
     table.scale(1, 1.8)
-    ax_table.set_title("Benchmark summary", fontsize=13, pad=12)
+    ax_table.set_title("Benchmark summary", fontsize=13, pad=24)
 
     ax = fig.add_subplot(gs[1, 0])
     for j, (name, dots, mean, median, std, ci, n) in enumerate(rows):
@@ -130,14 +132,14 @@ def main():
         )
         ax.plot(
             [mean, mean],
-            [y - 0.3, y + 0.3],
+            [y - 0.15, y + 0.15],
             color=colors[j],
-            linewidth=2,
+            linewidth=3,
             label="mean" if j == 0 else None,
         )
         ax.plot(
             [median, median],
-            [y - 0.3, y + 0.3],
+            [y - 0.2, y + 0.2],
             color=colors[j],
             linewidth=2,
             linestyle=":",
@@ -155,35 +157,21 @@ def main():
             zorder=3,
             label="ci (3*SE)" if j == 0 else None,
         )
-        ax.text(
-            mean,
-            y + 0.38,
-            f"mean={mean:.2f}",
-            color=colors[j],
-            ha="center",
-            fontsize=8,
-        )
-        ax.text(
-            median,
-            y - 0.45,
-            f"median={median:.2f}",
-            color=colors[j],
-            ha="center",
-            fontsize=8,
-        )
 
     ax.set_yticks([0, 1])
-    ax.set_yticklabels(["bottom_up_parser", "top_down_parser"])
-    ax.set_xlabel("Throughput (items/second)")
-    ax.set_title("Sample dots (per-benchmark mean)")
+    ax.set_yticklabels(["bottom_up", "top_down"], fontsize=12)
+    ax.set_xlabel("Throughput (items/second)", fontsize=12)
+    ax.set_title("Sample dots (per-benchmark mean)", fontsize=16)
     ax.grid(True, axis="x", alpha=0.3)
-    ax.legend(loc="upper right", fontsize=8)
-
-    fig.savefig(output_table, bbox_inches="tight")
-    print(f"\nTable saved to: {output_table}")
-    plt.show()
-
-    return 0
+    ax.legend(loc="upper right", fontsize=12)
+    try:
+        fig.savefig(output_table, bbox_inches="tight")
+        print(f"\nTable saved to: {output_table}")
+        plt.show()
+        return 0
+    except ValueError as e:
+        print(f"Unsupported format: {e}")
+        return 1
 
 
 if __name__ == "__main__":
