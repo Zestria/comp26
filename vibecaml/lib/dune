@@ -8,7 +8,10 @@
   menhir_parser
   menhir_lexer
   menhir_frontend)
- (modules_without_implementation parser_intf))
+ (modules_without_implementation parser_intf)
+ ; Лексер и парсер бросают исключения; наружу торчит только Menhir_frontend,
+ ; который переводит их в result.
+ (private_modules menhir_parser menhir_lexer))
 
 (ocamllex menhir_lexer)
 
