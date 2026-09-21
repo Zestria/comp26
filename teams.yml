@@ -7,10 +7,10 @@
 # Макисмум три тиммейта
 # Если планируете ничего не делать -- лучше не записывайтесь
 
-- demo:
-  - Kakadu
-  - Kakadu2
-  - Kakadu3
+- shMeL:
+  - kormyltsyn-roman-gmail-com
+  - yacknickovlev
+  - khmelevvova06
 
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
