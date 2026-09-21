@@ -75,6 +75,15 @@ let%test "identifier" = check_expr "x" (Ident "x")
 let%test "identifier with digits and a quote" = check_expr "x1'_2" (Ident "x1'_2")
 let%test "uppercase identifier" = check_expr "Foo" (Ident "Foo")
 
+(* --- Unit --- *)
+
+let%test "unit" = check_expr "()" eunit
+let%test "unit as an argument" = check_expr "f ()" (eapp (Ident "f") eunit)
+
+let%test "unit in if branches" =
+  check_expr "if x then () else ()" (eif (Ident "x") eunit eunit)
+;;
+
 (* --- Application --- *)
 
 let%test "application is left-associative" =
@@ -165,6 +174,41 @@ let%test "nested if" =
   check_expr
     "if x then if y then 1 else 2 else 3"
     (eif (Ident "x") (eif (Ident "y") (econsti 1) (econsti 2)) (econsti 3))
+;;
+
+let%test "if without else" = check_expr "if x then 1" (eif (Ident "x") (econsti 1) eunit)
+
+let%test "if without else with a unit branch" =
+  check_expr "if x then ()" (eif (Ident "x") eunit eunit)
+;;
+
+(* An [else] belongs to the innermost [if] that still wants one. *)
+let%test "an else goes to the inner if" =
+  check_expr
+    "if x then if y then 1 else 2"
+    (eif (Ident "x") (eif (Ident "y") (econsti 1) (econsti 2)) eunit)
+;;
+
+let%test "parens close an if without else" =
+  check_expr
+    "if x then (if y then 1) else 2"
+    (eif (Ident "x") (eif (Ident "y") (econsti 1) eunit) (econsti 2))
+;;
+
+let%test "if without else as a let body" =
+  check_expr
+    "let x = 1 in if x then x"
+    (elet "x" (econsti 1) (eif (Ident "x") (Ident "x") eunit))
+;;
+
+let%test "if without else as a fun body" =
+  check_expr "fun x -> if x then 1" (elambda "x" (eif (Ident "x") (econsti 1) eunit))
+;;
+
+(* Reading back what [Common.pp_expr] writes. *)
+let%test "the printed form parses back" =
+  let e = eif (Ident "x") (eif (Ident "y") (econsti 1) eunit) (econsti 2) in
+  P.parse_expr (string_of_expr e) = Ok e
 ;;
 
 let%test "fun" = check_expr "fun x -> x" (elambda "x" (Ident "x"))
@@ -423,27 +467,28 @@ let%test "lookups of an absent operator" =
 
 (* --- Errors ---
 
-   [Frontend.Lexer] is left as it was: on a character it does not know, and on a
-   comment that is not closed, it prints a message and exits the process.  Such
-   inputs cannot be tested at all -- the test binary would die instead of
-   reporting a failure -- so they are absent below.  Nor does the lexer call
-   [Lexing.new_line] yet, so the line of a position is always 1 and a position
-   is read as a character offset. *)
+   Everything that can go wrong is an [Error] here: the lexer raises
+   [Lexing_error], and [parse_expr] catches it, so a source it refuses is a
+   value rather than a crash. *)
 
 let%test "empty input" = check_error ""
 let%test "whitespace only" = check_error "   "
 let%test "let without in" = check_error "let x = 1"
-let%test "if without else" = check_error "if x then 1"
+let%test "if without then" = check_error "if x"
+let%test "if without a then branch" = check_error "if x then"
+let%test "if without a condition" = check_error "if then 1 else 2"
+let%test "else without a branch" = check_error "if x then 1 else"
+let%test "stray else" = check_error "1 else 2"
 let%test "unclosed paren" = check_error "(1"
 let%test "extra paren" = check_error "1)"
-let%test "unit is not supported" = check_error "()"
-let%test "empty parens" = check_error "( )"
+let%test "unclosed parens around a unit" = check_error "( ()"
+let%test "extra paren after a unit" = check_error "() )"
 let%test "let without a name" = check_error "let = 1 in x"
 let%test "keyword as a name" = check_error "let rec = 1 in x"
 let%test "dangling plus" = check_error "1 +"
 let%test "keyword as an expression" = check_error "in"
 
-(* the one lexing failure that is a value and not an exit *)
+(* the lexer refuses a literal that does not fit in an [int] *)
 let%test "literal overflow" = check_error "99999999999999999999"
 
 let%test "offset of a missing in" =
