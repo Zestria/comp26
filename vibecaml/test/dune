@@ -1,4 +1,4 @@
 (tests
- (names pprint_test config_test)
+ (names pprint_test config_test menhir_test)
  (package vibecaml)
  (libraries vibecaml compiler-libs.common qcheck-core))
