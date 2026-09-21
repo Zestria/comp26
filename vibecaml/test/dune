@@ -1,4 +1,4 @@
 (tests
- (names frontend_test config_test)
+ (names pprint_test config_test)
  (package vibecaml)
- (libraries vibecaml))
+ (libraries vibecaml compiler-libs.common qcheck-core))
