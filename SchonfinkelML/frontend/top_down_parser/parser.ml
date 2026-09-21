@@ -162,7 +162,7 @@ and p_app ctx =
   let* head = p_atom ctx in
   let rec p_arg acc =
     match cur ctx with
-    | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN ->
+    | Ast.INT _ | Ast.IDENT _ | Ast.LPAREN | Ast.UNIT ->
       let* arg = p_atom ctx in
       p_arg (Ast.eapp acc arg)
     | _ -> Ok acc
@@ -180,12 +180,16 @@ and p_atom ctx =
   | Ast.LPAREN ->
     advance ctx;
     if cur ctx = Ast.RPAREN
-    then fail ctx "the unit value () is not supported"
+    then (
+      advance ctx;
+      Ok Ast.eunit)
     else
       let* e = p_expr ctx in
       let* () = expect ctx Ast.RPAREN in
       Ok e
-  | Ast.UNIT -> fail ctx "the unit value () is not supported"
+  | Ast.UNIT ->
+    advance ctx;
+    Ok Ast.eunit
   | Ast.EOF -> fail ctx "expected an expression"
   | tok ->
     let what = if is_keyword tok then "keyword" else "token" in
@@ -214,9 +218,12 @@ and p_if ctx =
   let* cond = p_expr ctx in
   let* () = expect ctx Ast.THEN in
   let* then_branch = p_expr ctx in
-  let* () = expect ctx Ast.ELSE in
-  let* else_branch = p_expr ctx in
-  Ok (Ast.eif cond then_branch else_branch)
+  if cur ctx = Ast.ELSE
+  then (
+    advance ctx;
+    let* else_branch = p_expr ctx in
+    Ok (Ast.eif cond then_branch else_branch))
+  else Ok (Ast.eif cond then_branch Ast.eunit)
 
 and p_fun ctx =
   let* () = expect ctx Ast.FUN in
