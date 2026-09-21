@@ -99,9 +99,9 @@ let does_not_raise_both src =
 
 (* --- Literals and identifiers --- *)
 
-let%test "integer literal" = check_expr_both "42" (econsti 42)
-let%test "zero literal" = check_expr_both "52" (econsti 52)
-let%test "single-digit literal" = check_expr_both "67" (econsti 67)
+let%test "integer literal" = check_expr_both "67" (econsti 67)
+let%test "zero literal" = check_expr_both "0" (econsti 0)
+let%test "single-digit literal" = check_expr_both "7" (econsti 7)
 let%test "multi-digit literal" = check_expr_both "123456789" (econsti 123456789)
 let%test "identifier" = check_expr_both "x" (Ident "x")
 let%test "single-letter identifier" = check_expr_both "y" (Ident "y")
