@@ -104,3 +104,26 @@ and pp_expressions_tail separator ppf = function
       (pp_expressions_tail separator)
       rest
 ;;
+
+let pp_structure_item ppf = function
+  | Structure_value (rec_flag, bindings) ->
+    Format.fprintf
+      ppf
+      "let%s %a"
+      (match rec_flag with
+       | Non_recursive -> ""
+       | Recursive -> " rec")
+      pp_value_bindings
+      bindings
+;;
+
+let pp_structure ppf items =
+  List.iteri
+    (fun index item ->
+       if index > 0 then Format.fprintf ppf "\n";
+       pp_structure_item ppf item)
+    items
+;;
+
+let string_of_expression expression = Format.asprintf "%a" pp_expression expression
+let string_of_structure structure = Format.asprintf "%a" pp_structure structure

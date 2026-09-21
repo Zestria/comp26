@@ -30,3 +30,10 @@ coverage:
 	bisect-ppx-report html $(COVERAGE_OPTS)
 	bisect-ppx-report summary $(COVERAGE_OPTS)
 	@echo "Use 'xdg-open _coverage/index.html' to see coverage report"
+
+.PHONY: release test
+release:
+	opam exec -- dune build vibecaml/lib
+
+test:
+	opam exec -- dune runtest vibecaml
