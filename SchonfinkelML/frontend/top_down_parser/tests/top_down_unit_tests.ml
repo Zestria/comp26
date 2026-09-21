@@ -16,7 +16,6 @@ open Frontend.Common
 module P = Top_down.Parser
 module Operators = Top_down.Operators
 
-
 (* The table of a test, written in the syntax of [--ops]. *)
 let table src =
   match Operators.of_string src with

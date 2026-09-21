@@ -123,23 +123,20 @@ let test_roundtrip (p : parser) =
     ~count:1000
     arb_expr
     (fun e ->
-      match p.parse_expr (surface_pp e) with
-      | Ok e' -> e = e'
-      | Error () -> false)
+       match p.parse_expr (surface_pp e) with
+       | Ok e' -> e = e'
+       | Error () -> false)
 ;;
 
 (* [surface_pp] is canonical: one pass through parse/pp stabilises the AST. *)
 let test_idempotence (p : parser) =
-  QCheck.Test.make
-    ~name:(p.name ^ " idempotence pp/parse")
-    arb_expr
-    (fun e ->
-      match p.parse_expr (surface_pp e) with
-      | Error () -> false
-      | Ok e' ->
-        (match p.parse_expr (surface_pp e') with
-         | Error () -> false
-         | Ok e'' -> e' = e''))
+  QCheck.Test.make ~name:(p.name ^ " idempotence pp/parse") arb_expr (fun e ->
+    match p.parse_expr (surface_pp e) with
+    | Error () -> false
+    | Ok e' ->
+      (match p.parse_expr (surface_pp e') with
+       | Error () -> false
+       | Ok e'' -> e' = e''))
 ;;
 
 (* --- Top-down-specific properties: operator table --- *)
@@ -161,9 +158,9 @@ let test_totality_lexable =
     ~name:"top-down totality and error position bounds, lexable sources"
     arb_source
     (fun s ->
-      match P.parse_expr s with
-      | Ok _ -> true
-      | Error err -> err.pos.pos_cnum >= 0 && err.pos.pos_cnum <= String.length s)
+       match P.parse_expr s with
+       | Ok _ -> true
+       | Error err -> err.pos.pos_cnum >= 0 && err.pos.pos_cnum <= String.length s)
 ;;
 
 let test_right_plus_assoc =
@@ -171,14 +168,14 @@ let test_right_plus_assoc =
     ~name:"top-down table: right 6 + is right-associative"
     arb_triple
     (fun (a, b, c) ->
-      P.parse_expr
-        ~ops:ops_right_plus
-        (Printf.sprintf
-           "%s + %s + %s"
-           (surface_operand a)
-           (surface_operand b)
-           (surface_operand c))
-      = Ok (eadd a (eadd b c)))
+       P.parse_expr
+         ~ops:ops_right_plus
+         (Printf.sprintf
+            "%s + %s + %s"
+            (surface_operand a)
+            (surface_operand b)
+            (surface_operand c))
+       = Ok (eadd a (eadd b c)))
 ;;
 
 let test_plus_tighter_than_mul =
@@ -186,14 +183,14 @@ let test_plus_tighter_than_mul =
     ~name:"top-down table: + can be made tighter than *"
     arb_triple
     (fun (a, b, c) ->
-      P.parse_expr
-        ~ops:ops_plus_tighter
-        (Printf.sprintf
-           "%s + %s * %s"
-           (surface_operand a)
-           (surface_operand b)
-           (surface_operand c))
-      = Ok (emul (eadd a b) c))
+       P.parse_expr
+         ~ops:ops_plus_tighter
+         (Printf.sprintf
+            "%s + %s * %s"
+            (surface_operand a)
+            (surface_operand b)
+            (surface_operand c))
+       = Ok (emul (eadd a b) c))
 ;;
 
 let test_nonassoc_eq =
@@ -201,17 +198,17 @@ let test_nonassoc_eq =
     ~name:"top-down table: nonassoc 4 = rejects chaining"
     arb_triple
     (fun (a, b, c) ->
-      match
-        P.parse_expr
-          ~ops:ops_nonassoc_eq
-          (Printf.sprintf
-             "%s = %s = %s"
-             (surface_operand a)
-             (surface_operand b)
-             (surface_operand c))
-      with
-      | Error _ -> true
-      | Ok _ -> false)
+       match
+         P.parse_expr
+           ~ops:ops_nonassoc_eq
+           (Printf.sprintf
+              "%s = %s = %s"
+              (surface_operand a)
+              (surface_operand b)
+              (surface_operand c))
+       with
+       | Error _ -> true
+       | Ok _ -> false)
 ;;
 
 (* [Operators.of_string] is total, and printing then reading back a table is
@@ -221,9 +218,9 @@ let test_table_roundtrip =
     ~name:"top-down table: of_string is total, pp round-trips"
     arb_table_src
     (fun src ->
-      match Operators.of_string src with
-      | Error _ -> true
-      | Ok t -> Operators.of_string (Operators.string_of t) = Ok t)
+       match Operators.of_string src with
+       | Error _ -> true
+       | Ok t -> Operators.of_string (Operators.string_of t) = Ok t)
 ;;
 
 (* --- Run all tests --- *)

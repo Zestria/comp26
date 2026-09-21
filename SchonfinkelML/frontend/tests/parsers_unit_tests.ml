@@ -35,7 +35,9 @@ let check_expr_both ?ops src expected =
     match Top_down.parse_expr ?ops src with
     | Ok e -> e = expected
     | Error _ ->
-      Printf.eprintf "[top-down]  %S: expected %s, got a parse error\n" src
+      Printf.eprintf
+        "[top-down]  %S: expected %s, got a parse error\n"
+        src
         (string_of_expr expected);
       false
   in
@@ -48,7 +50,9 @@ let check_expr_both ?ops src expected =
       (match parse_expr_bottom_up src with
        | Ok e -> e = expected
        | Error () ->
-         Printf.eprintf "[bottom-up] %S: expected %s, got a parse error\n" src
+         Printf.eprintf
+           "[bottom-up] %S: expected %s, got a parse error\n"
+           src
            (string_of_expr expected);
          false)
   in
@@ -60,7 +64,9 @@ let check_error_both ?ops src =
     match Top_down.parse_expr ?ops src with
     | Error _ -> true
     | Ok e ->
-      Printf.eprintf "[top-down]  %S: expected a parse error, got %s\n" src
+      Printf.eprintf
+        "[top-down]  %S: expected a parse error, got %s\n"
+        src
         (string_of_expr e);
       false
   in
@@ -71,7 +77,9 @@ let check_error_both ?ops src =
       (match parse_expr_bottom_up src with
        | Error () -> true
        | Ok e ->
-         Printf.eprintf "[bottom-up] %S: expected a parse error, got %s\n" src
+         Printf.eprintf
+           "[bottom-up] %S: expected a parse error, got %s\n"
+           src
            (string_of_expr e);
          false)
   in
@@ -79,7 +87,13 @@ let check_error_both ?ops src =
 ;;
 
 let does_not_raise_both src =
-  let safe f = try ignore (f src); true with _ -> false in
+  let safe f =
+    try
+      ignore (f src);
+      true
+    with
+    | _ -> false
+  in
   safe (fun s -> Top_down.parse_expr s) && safe parse_expr_bottom_up
 ;;
 
@@ -89,7 +103,6 @@ let%test "integer literal" = check_expr_both "42" (econsti 42)
 let%test "zero literal" = check_expr_both "52" (econsti 52)
 let%test "single-digit literal" = check_expr_both "67" (econsti 67)
 let%test "multi-digit literal" = check_expr_both "123456789" (econsti 123456789)
-
 let%test "identifier" = check_expr_both "x" (Ident "x")
 let%test "single-letter identifier" = check_expr_both "y" (Ident "y")
 let%test "identifier with digits and a quote" = check_expr_both "x1'_2" (Ident "x1'_2")
@@ -104,7 +117,8 @@ let%test "application is left-associative" =
 ;;
 
 let%test "application of four atoms" =
-  check_expr_both "f x y z"
+  check_expr_both
+    "f x y z"
     (eapp (eapp (eapp (Ident "f") (Ident "x")) (Ident "y")) (Ident "z"))
 ;;
 
@@ -117,7 +131,8 @@ let%test "application with parens" =
 ;;
 
 let%test "nested parens on the right" =
-  check_expr_both "f (g (h x))"
+  check_expr_both
+    "f (g (h x))"
     (eapp (Ident "f") (eapp (Ident "g") (eapp (Ident "h") (Ident "x"))))
 ;;
 
@@ -130,7 +145,8 @@ let%test "application binds tighter than plus" =
 ;;
 
 let%test "applications on both sides of +" =
-  check_expr_both "f x + g y"
+  check_expr_both
+    "f x + g y"
     (eadd (eapp (Ident "f") (Ident "x")) (eapp (Ident "g") (Ident "y")))
 ;;
 
@@ -175,7 +191,8 @@ let%test "minus then plus" =
 ;;
 
 let%test "a longer mixed chain" =
-  check_expr_both "1 + 2 * 3 - 4 / 5"
+  check_expr_both
+    "1 + 2 * 3 - 4 / 5"
     (esub
        (eadd (econsti 1) (emul (econsti 2) (econsti 3)))
        (ediv (econsti 4) (econsti 5)))
@@ -190,7 +207,8 @@ let%test "comparison is below +" =
 ;;
 
 let%test "comparison between two sums" =
-  check_expr_both "a + b < c + d"
+  check_expr_both
+    "a + b < c + d"
     (elt (eadd (Ident "a") (Ident "b")) (eadd (Ident "c") (Ident "d")))
 ;;
 
@@ -200,7 +218,6 @@ let%test "comparisons are left-associative" =
 
 let%test "comparison <=" = check_expr_both "a <= b" (elte (Ident "a") (Ident "b"))
 let%test "comparison >=" = check_expr_both "a >= b" (egte (Ident "a") (Ident "b"))
-
 let%test "unary minus" = check_expr_both "- x" (euminus (Ident "x"))
 
 let%test "unary minus below application" =
@@ -225,9 +242,7 @@ let%test "unary minus on the right of plus" =
   check_expr_both "a + - b" (eadd (Ident "a") (euminus (Ident "b")))
 ;;
 
-let%test "double unary minus" =
-  check_expr_both "- - a" (euminus (euminus (Ident "a")))
-;;
+let%test "double unary minus" = check_expr_both "- - a" (euminus (euminus (Ident "a")))
 
 let%test "unary minus over a parenthesised sum" =
   check_expr_both "- (a + b)" (euminus (eadd (Ident "a") (Ident "b")))
@@ -269,12 +284,13 @@ let%test "else-if chain" =
 let%test "fun" = check_expr_both "fun x -> x" (elambda "x" (Ident "x"))
 
 let%test "fun with two parameters" =
-  check_expr_both "fun x y -> x + y" (elambda "x" (elambda "y" (eadd (Ident "x") (Ident "y"))))
+  check_expr_both
+    "fun x y -> x + y"
+    (elambda "x" (elambda "y" (eadd (Ident "x") (Ident "y"))))
 ;;
 
 let%test "fun with three parameters" =
-  check_expr_both "fun x y z -> x"
-    (elambda "x" (elambda "y" (elambda "z" (Ident "x"))))
+  check_expr_both "fun x y z -> x" (elambda "x" (elambda "y" (elambda "z" (Ident "x"))))
 ;;
 
 let%test "fun with an explicit fun" =
@@ -286,12 +302,14 @@ let%test "fun body extends to the right" =
 ;;
 
 let%test "fun returning an if" =
-  check_expr_both "fun x -> if x then 1 else 2"
+  check_expr_both
+    "fun x -> if x then 1 else 2"
     (elambda "x" (eif (Ident "x") (econsti 1) (econsti 2)))
 ;;
 
 let%test "if returning funs" =
-  check_expr_both "if x then fun y -> y else fun z -> z"
+  check_expr_both
+    "if x then fun y -> y else fun z -> z"
     (eif (Ident "x") (elambda "y" (Ident "y")) (elambda "z" (Ident "z")))
 ;;
 
@@ -318,7 +336,8 @@ let%test "let with parameter sugar" =
 let%test "let with two parameters" =
   check_expr_both
     "let f x y = x + y in f 1 2"
-    (elet "f"
+    (elet
+       "f"
        (elambda "x" (elambda "y" (eadd (Ident "x") (Ident "y"))))
        (eapp (eapp (Ident "f") (econsti 1)) (econsti 2)))
 ;;
@@ -344,10 +363,13 @@ let%test "nested let" =
 let%test "three nested lets" =
   check_expr_both
     "let x = 1 in let y = 2 in let z = 3 in x + y + z"
-    (elet "x" (econsti 1)
-       (elet "y" (econsti 2)
-          (elet "z" (econsti 3)
-             (eadd (eadd (Ident "x") (Ident "y")) (Ident "z")))))
+    (elet
+       "x"
+       (econsti 1)
+       (elet
+          "y"
+          (econsti 2)
+          (elet "z" (econsti 3) (eadd (eadd (Ident "x") (Ident "y")) (Ident "z")))))
 ;;
 
 let%test "shadowing let" =
@@ -385,7 +407,8 @@ let%test "fun passed as an argument" =
 let%test "apply function" =
   check_expr_both
     "let apply f x = f x in apply (fun y -> y + 1) 2"
-    (elet "apply"
+    (elet
+       "apply"
        (elambda "f" (elambda "x" (eapp (Ident "f") (Ident "x"))))
        (eapp
           (eapp (Ident "apply") (elambda "y" (eadd (Ident "y") (econsti 1))))
@@ -395,13 +418,13 @@ let%test "apply function" =
 let%test "compose function" =
   check_expr_both
     "let compose f g = fun x -> f (g x) in compose (fun x -> x + 1) (fun y -> y * 2)"
-    (elet "compose"
-       (elambda "f"
+    (elet
+       "compose"
+       (elambda
+          "f"
           (elambda "g" (elambda "x" (eapp (Ident "f") (eapp (Ident "g") (Ident "x"))))))
        (eapp
-          (eapp
-             (Ident "compose")
-             (elambda "x" (eadd (Ident "x") (econsti 1))))
+          (eapp (Ident "compose") (elambda "x" (eadd (Ident "x") (econsti 1))))
           (elambda "y" (emul (Ident "y") (econsti 2)))))
 ;;
 
@@ -423,9 +446,7 @@ let%test "extra spaces and parens" =
   check_expr_both "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
 ;;
 
-let%test "tabs as whitespace" =
-  check_expr_both "1\t+\t2" (eadd (econsti 1) (econsti 2))
-;;
+let%test "tabs as whitespace" = check_expr_both "1\t+\t2" (eadd (econsti 1) (econsti 2))
 
 (* --- Names and keywords: shared, since maximal munch is a lexer property --- *)
 
@@ -548,6 +569,5 @@ let%test "does not raise on a long application chain" =
 ;;
 
 let%test "does not raise on deeply parenthesised input" =
-  does_not_raise_both
-    (String.concat "" [ String.make 50 '('; "1"; String.make 50 ')' ])
+  does_not_raise_both (String.concat "" [ String.make 50 '('; "1"; String.make 50 ')' ])
 ;;
