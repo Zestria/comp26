@@ -1,3 +1,4 @@
 (library
  (name vibecaml)
- (modules ast config parser_intf pprint))
+ (modules ast config parser_intf pprint)
+ (modules_without_implementation parser_intf))
