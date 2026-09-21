@@ -1,0 +1,3 @@
+(library
+ (name vibecaml)
+ (modules ast config parser_intf pprint))
