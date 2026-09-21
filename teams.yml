@@ -12,5 +12,10 @@
   - Kakadu2
   - Kakadu3
 
+- vibecaml:
+  - lazarev26andrew
+  - lutik924
+  - alken1t
+
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
