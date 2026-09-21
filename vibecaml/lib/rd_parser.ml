@@ -5,7 +5,7 @@
 open Ast
 
 type token_kind =
-  | Int of int
+  | Int of string
   | Ident of string
   | Operator of string
   | Let
@@ -141,9 +141,7 @@ let lex source =
             index
         in
         let digits = String.sub source index (finish - index) in
-        (match int_of_string_opt digits with
-         | Some value -> add (Int value) finish
-         | None -> fail index "целое число вне диапазона")
+        add (Int digits) finish
       | character when is_letter character ->
         let finish = take_while is_identifier_char index in
         add (word_kind (String.sub source index (finish - index))) finish
@@ -170,6 +168,18 @@ let expect state kind =
 
 let binding pattern expression =
   { binding_pattern = pattern; binding_expression = expression }
+;;
+
+let int_constant offset digits =
+  match int_of_string_opt digits with
+  | Some value -> Const_int value
+  | None -> fail offset "целое число вне диапазона"
+;;
+
+let negative_int_constant offset digits =
+  match int_of_string_opt ("-" ^ digits) with
+  | Some value -> Const_int value
+  | None -> fail offset "целое число вне диапазона"
 ;;
 
 (* Приоритеты — данные, а не ветви грамматики. В #5 эту таблицу можно будет
@@ -203,7 +213,7 @@ let starts_atom = function
 
 let rec parse_pattern state =
   match take state with
-  | { kind = Int value; _ } -> Pat_constant (Const_int value)
+  | { kind = Int digits; offset } -> Pat_constant (int_constant offset digits)
   | { kind = True; _ } -> Pat_constant (Const_bool true)
   | { kind = False; _ } -> Pat_constant (Const_bool false)
   | { kind = Ident "_"; _ } -> Pat_wildcard
@@ -216,6 +226,21 @@ and parse_parenthesized_pattern state offset =
   | Rparen ->
     let _ = take state in
     Pat_constant Const_unit
+  | Equal ->
+    let _ = take state in
+    expect state Rparen;
+    Pat_var "="
+  | Operator "-" ->
+    let _ = take state in
+    (match (current state).kind with
+     | Int digits ->
+       let token = take state in
+       expect state Rparen;
+       Pat_constant (negative_int_constant token.offset digits)
+     | Rparen ->
+       let _ = take state in
+       Pat_var "-"
+     | _ -> fail (current state).offset "ожидалось число или закрывающая скобка")
   | Operator name ->
     let _ = take state in
     expect state Rparen;
@@ -348,13 +373,14 @@ and parse_application state =
 
 and parse_atom state =
   match take state with
-  | { kind = Int value; _ } -> Expr_constant (Const_int value)
+  | { kind = Int digits; offset } -> Expr_constant (int_constant offset digits)
   | { kind = True; _ } -> Expr_constant (Const_bool true)
   | { kind = False; _ } -> Expr_constant (Const_bool false)
   | { kind = Ident name; _ } -> Expr_ident name
   | { kind = Operator "-"; offset } ->
     (match take state with
-     | { kind = Int value; _ } -> Expr_constant (Const_int (-value))
+     | { kind = Int digits; offset } ->
+       Expr_constant (negative_int_constant offset digits)
      | token -> fail token.offset "после унарного - ожидалось целое число")
   | { kind = Lparen; offset } -> parse_parenthesized_expression state offset
   | token -> fail token.offset "ожидалось выражение"
@@ -368,6 +394,17 @@ and parse_parenthesized_expression state offset =
     let _ = take state in
     expect state Rparen;
     Expr_ident "="
+  | Operator "-" ->
+    let _ = take state in
+    (match (current state).kind with
+     | Int digits ->
+       let token = take state in
+       expect state Rparen;
+       Expr_constant (negative_int_constant token.offset digits)
+     | Rparen ->
+       let _ = take state in
+       Expr_ident "-"
+     | _ -> fail (current state).offset "ожидалось число или закрывающая скобка")
   | Operator name ->
     let _ = take state in
     expect state Rparen;

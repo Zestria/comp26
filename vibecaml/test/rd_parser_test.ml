@@ -40,7 +40,12 @@ let () =
   check_expression
     "let rec f x y = x + y and g = f 1 in g"
     "(let rec f = (fun x y -> ((( + ) x) y)) and g = (f 1) in g)";
-  check_expression "if x < 2 then f x else g x" "(if ((( < ) x) 2) then (f x) else (g x))"
+  check_expression "if x < 2 then f x else g x" "(if ((( < ) x) 2) then (f x) else (g x))";
+  check_expression "let (-1) = 0 in 0" "(let (-1) = 0 in 0)";
+  check_expression
+    "let ( = ) = fun x -> x in ( = ) 1"
+    "(let ( = ) = (fun x -> x) in (( = ) 1))";
+  check_expression "(-4611686018427387904)" "(-4611686018427387904)"
 ;;
 
 let () =
