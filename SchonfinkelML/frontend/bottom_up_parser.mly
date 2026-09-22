@@ -71,4 +71,5 @@ atom:
   | x = IDENT; { Ident x }
   | n = INT; { econsti n }
   | UNIT; { eunit }
+  | LPAREN; RPAREN; { eunit }
   | LPAREN; e = expr; RPAREN; { e }
