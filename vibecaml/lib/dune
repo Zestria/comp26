@@ -7,7 +7,8 @@
   pprint
   menhir_parser
   menhir_lexer
-  menhir_frontend)
+  menhir_frontend
+  rd_parser)
  (modules_without_implementation parser_intf)
  ; Лексер и парсер бросают исключения; наружу торчит только Menhir_frontend,
  ; который переводит их в result.
