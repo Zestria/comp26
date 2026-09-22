@@ -4,7 +4,6 @@ open Ast
 
 type associativity =
   | Left
-  | Right
   | Nonassociative
 
 let control_precedence = 1
@@ -16,7 +15,6 @@ let infix_operator = function
   | "||" -> Some (2, Left)
   | "&&" -> Some (3, Left)
   | "=" | "<>" | "<" | "<=" | ">" | ">=" -> Some (4, Nonassociative)
-  | "::" -> Some (5, Right)
   | "+" | "-" -> Some (6, Left)
   | "*" | "/" -> Some (7, Left)
   | _ -> None
@@ -70,40 +68,9 @@ let pp_identifier formatter name =
   else Format.pp_print_string formatter name
 ;;
 
-let rec pp_pattern_at precedence formatter pattern =
-  match pattern with
-  | PCons (head, tail) ->
-    parenthesize
-      (precedence > 1)
-      (fun formatter (head, tail) ->
-         Format.fprintf
-           formatter
-           "@[<hov 2>%a ::@ %a@]"
-           (pp_pattern_at 2)
-           head
-           (pp_pattern_at 1)
-           tail)
-      formatter
-      (head, tail)
+let pp_pattern_at _precedence formatter = function
   | PWildcard -> Format.pp_print_string formatter "_"
   | PVariable name -> pp_identifier formatter name
-  | PConstant constant -> pp_constant formatter constant
-  | PList patterns ->
-    Format.fprintf
-      formatter
-      "[@[<hov>%a@]]"
-      (Format.pp_print_list
-         ~pp_sep:(fun formatter () -> Format.fprintf formatter ";@ ")
-         (pp_pattern_at 0))
-      patterns
-  | PTuple (first, second, rest) ->
-    Format.fprintf
-      formatter
-      "(@[<hov>%a@])"
-      (Format.pp_print_list
-         ~pp_sep:(fun formatter () -> Format.fprintf formatter ",@ ")
-         (pp_pattern_at 0))
-      (first :: second :: rest)
 ;;
 
 let pp_pattern = pp_pattern_at 0
@@ -146,22 +113,6 @@ let rec pp_expr_at precedence formatter expression =
       value
   | Constant constant -> pp_constant formatter constant
   | Variable name -> pp_identifier formatter name
-  | Tuple (first, second, rest) ->
-    Format.fprintf
-      formatter
-      "(@[<hov>%a@])"
-      (Format.pp_print_list
-         ~pp_sep:(fun formatter () -> Format.fprintf formatter ",@ ")
-         (pp_expr_at 0))
-      (first :: second :: rest)
-  | List expressions ->
-    Format.fprintf
-      formatter
-      "[@[<hov>%a@]]"
-      (Format.pp_print_list
-         ~pp_sep:(fun formatter () -> Format.fprintf formatter ";@ ")
-         (pp_expr_at 0))
-      expressions
   | Lambda _ -> pp_lambda precedence formatter expression
   | Application _ -> pp_application precedence formatter expression
   | If_then_else (condition, if_true, if_false) ->
@@ -179,31 +130,17 @@ let rec pp_expr_at precedence formatter expression =
            if_false)
       formatter
       (condition, if_true, if_false)
-  | Let_in (recursive, first, rest, body) ->
-    parenthesize
-      (precedence > control_precedence)
-      (fun formatter () ->
-         let first_keyword = "let" ^ pp_rec_flag recursive in
-         Format.fprintf
-           formatter
-           "@[<v 0>%a"
-           (pp_binding_with_keyword first_keyword)
-           first;
-         List.iter (Format.fprintf formatter "@,%a" (pp_binding_with_keyword "and")) rest;
-         Format.fprintf formatter "@,in@;<1 2>%a@]" (pp_expr_at control_precedence) body)
-      formatter
-      ()
-  | Match (scrutinee, first, rest) ->
+  | Let_in (recursive, pattern, value, body) ->
     parenthesize
       (precedence > control_precedence)
       (fun formatter () ->
          Format.fprintf
            formatter
-           "@[<v 2>match %a with%a@]"
-           (pp_expr_at 0)
-           scrutinee
-           pp_cases
-           (first, rest))
+           "@[<v 0>%a@,in@;<1 2>%a@]"
+           (pp_binding ("let" ^ pp_rec_flag recursive))
+           (pattern, value)
+           (pp_expr_at control_precedence)
+           body)
       formatter
       ()
 
@@ -214,7 +151,6 @@ and pp_infix precedence formatter operator left right =
     let left_precedence, right_precedence =
       match associativity with
       | Left -> operator_precedence, operator_precedence + 1
-      | Right -> operator_precedence + 1, operator_precedence
       | Nonassociative -> operator_precedence + 1, operator_precedence + 1
     in
     parenthesize
@@ -257,8 +193,8 @@ and pp_lambda precedence formatter expression =
     formatter
     ()
 
-and pp_binding_with_keyword keyword formatter { pattern; expression } =
-  match pattern, flatten_lambdas [] expression with
+and pp_binding keyword formatter (pattern, value) =
+  match pattern, flatten_lambdas [] value with
   | PVariable name, ((_ :: _ as parameters), body) ->
     Format.fprintf formatter "@[<hov 2>%s %a" keyword pp_identifier name;
     List.iter (Format.fprintf formatter "@ %a" (pp_pattern_at 2)) parameters;
@@ -271,20 +207,7 @@ and pp_binding_with_keyword keyword formatter { pattern; expression } =
       pp_pattern
       pattern
       (pp_expr_at control_precedence)
-      expression
-
-and pp_case formatter { case_pattern; case_expression } =
-  Format.fprintf
-    formatter
-    "| @[<hov 2>%a ->@ %a@]"
-    pp_pattern
-    case_pattern
-    (pp_expr_at control_precedence)
-    case_expression
-
-and pp_cases formatter (first, rest) =
-  Format.fprintf formatter "@,%a" pp_case first;
-  List.iter (Format.fprintf formatter "@,%a" pp_case) rest
+      value
 
 and pp_rec_flag = function
   | Nonrecursive -> ""
@@ -293,18 +216,14 @@ and pp_rec_flag = function
 
 let pp_expr = pp_expr_at 0
 
-let pp_structure_item formatter = function
-  | Value (recursive, first, rest) ->
-    let first_keyword = "let" ^ pp_rec_flag recursive in
-    Format.fprintf formatter "@[<v 0>%a" (pp_binding_with_keyword first_keyword) first;
-    List.iter (Format.fprintf formatter "@,%a" (pp_binding_with_keyword "and")) rest;
-    Format.fprintf formatter "@]"
+let pp_definition formatter (Definition (recursive, pattern, value)) =
+  pp_binding ("let" ^ pp_rec_flag recursive) formatter (pattern, value)
 ;;
 
 let pp_program formatter =
   Format.pp_print_list
     ~pp_sep:(fun formatter () -> Format.fprintf formatter "@,@,")
-    pp_structure_item
+    pp_definition
     formatter
 ;;
 

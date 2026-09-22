@@ -30,18 +30,13 @@ let check_program name expected =
   check ~name ~show:show_program ~printer:Pretty_printer.pp_program expected
 ;;
 
-(** Checks constants, tuples, lists, and recursive list patterns. *)
-let test_constants_and_collections () =
-  check_expr "tuple" "(1, true, ())" (Tuple (int 1, bool true, [ Constant Unit ]));
-  check_expr "list" "[1; 2 + 3]" (List [ int 1; infix "+" (int 2) (int 3) ]);
-  check_pattern
-    "list pattern"
-    "[1; true; _]"
-    (PList [ PConstant (Integer 1); PConstant (Boolean true); PWildcard ]);
-  check_pattern
-    "right-associative cons pattern"
-    "x :: y :: []"
-    (PCons (pvar "x", PCons (pvar "y", PList [])))
+(** Checks constants and the two supported forms of patterns. *)
+let test_constants_and_patterns () =
+  check_expr "integer" "1" (int 1);
+  check_expr "boolean" "true" (bool true);
+  check_expr "unit" "()" (Constant Unit);
+  check_pattern "variable pattern" "x" (pvar "x");
+  check_pattern "wildcard pattern" "_" PWildcard
 ;;
 
 (** Checks that precedence and associativity introduce only required parentheses. *)
@@ -56,10 +51,6 @@ let test_operator_precedence () =
     (infix "*" (infix "+" a b) (infix "-" c d));
   check_expr "left associativity" "a - b - c" (infix "-" (infix "-" a b) c);
   check_expr "right operand grouping" "a - (b - c)" (infix "-" a (infix "-" b c));
-  check_expr
-    "right-associative cons"
-    "a :: b :: []"
-    (infix "::" a (infix "::" b (List [])));
   check_expr "prefix precedence" "not (a && b)" (prefix "not" (infix "&&" a b));
   check_expr "operator as a value" "(++) a b" (application (var "++") [ a; b ])
 ;;
@@ -75,21 +66,16 @@ let test_functions_and_applications () =
     "f (g x) (fun y -> y)"
     (application
        (var "f")
-       [ application (var "g") [ var "x" ]; function_ [ pvar "y" ] (var "y") ])
+       [ application (var "g") [ var "x" ]; function_ [ pvar "y" ] (var "y") ]);
+  check_expr "partial application" "(+) 1" (application (var "+") [ int 1 ])
 ;;
 
-(** Checks layout and pattern rendering in [match] cases. *)
-let test_match () =
-  let empty_case = { case_pattern = PList []; case_expression = int 0 } in
-  let cons_case =
-    { case_pattern = PCons (pvar "x", pvar "xs")
-    ; case_expression = infix "+" (var "x") (int 1)
-    }
-  in
+(** Checks that local bindings accept both variable and wildcard patterns. *)
+let test_local_bindings () =
   check_expr
-    "match"
-    "match xs with\n  | [] -> 0\n  | x :: xs -> x + 1"
-    (Match (var "xs", empty_case, [ cons_case ]))
+    "wildcard binding"
+    "let _ =\n  f 1\nin\n  2"
+    (Let_in (Nonrecursive, PWildcard, application (var "f") [ int 1 ], int 2))
 ;;
 
 (** Checks stable multiline rendering of a complete CPS-factorial program. *)
@@ -106,9 +92,6 @@ let test_program () =
               (application (var "k") [ infix "*" (var "a") (var "n") ])
           ] )
   in
-  let fac =
-    { pattern = pvar "fac"; expression = function_ [ pvar "n"; pvar "k" ] fac_body }
-  in
   check_program
     "CPS factorial"
     (String.concat
@@ -119,7 +102,7 @@ let test_program () =
        ; "  else"
        ; "    fac (n - 1) (fun a -> k (a * n))"
        ])
-    [ Value (Recursive, fac, []) ]
+    [ Definition (Recursive, pvar "fac", function_ [ pvar "n"; pvar "k" ] fac_body) ]
 ;;
 
 let run name test =
@@ -133,9 +116,9 @@ let run name test =
 ;;
 
 let () =
-  run "constants and collections" test_constants_and_collections;
+  run "constants and patterns" test_constants_and_patterns;
   run "operator precedence" test_operator_precedence;
   run "functions and applications" test_functions_and_applications;
-  run "match expressions" test_match;
+  run "local bindings" test_local_bindings;
   run "complete program" test_program
 ;;
