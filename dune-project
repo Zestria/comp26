@@ -26,10 +26,7 @@
    (= "0.16.0"))
   qcheck
   bisect_ppx_ng
-  (llvm
-   (= "18-shared"))
-  (ppx_deriving_qcheck
-   (= "0.9"))))
+  ppx_deriving_qcheck))
 
 (package
  (name shmel)
@@ -45,7 +42,7 @@
    (= "18-shared"))
   (ppx_deriving_qcheck
    (= "0.9"))
-  menhir 
+  menhir
   )
  )
 

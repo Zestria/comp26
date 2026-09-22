@@ -1,3 +1,5 @@
 (cram
  (deps 1.cpp)
- (applies_to *))
+ (applies_to 1))
+
+(cram (deps fac.cpp) (applies_to fac))
