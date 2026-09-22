@@ -11,18 +11,20 @@
     Операторы представляются применением идентификатора оператора, поэтому
     изменение синтаксиса операторов не меняет представление дерева. *)
 
-type identifier = string
+type identifier = string [@@deriving show { with_path = false }]
 
 (** Константы, допустимые в исходной программе. *)
 type constant =
   | Const_int of int (** [42], [-1] *)
   | Const_bool of bool (** [true], [false] *)
   | Const_unit (** [()] *)
+[@@deriving show { with_path = false }]
 
 (** [Recursive] соответствует [let rec], а [Non_recursive] --- обычному [let]. *)
 type rec_flag =
   | Non_recursive (** [let] *)
   | Recursive (** [let rec] *)
+[@@deriving show { with_path = false }]
 
 (** Паттерны, допустимые в связываниях и аргументах функций. *)
 type pattern =
@@ -30,6 +32,7 @@ type pattern =
   | Pat_var of identifier (** [x], [( + )] *)
   | Pat_constant of constant (** [1], [true], [()] *)
   | Pat_tuple of pattern * pattern * pattern list (** [(p1, p2, ...)] *)
+[@@deriving show { with_path = false }]
 
 (** Выражения языка.
 
@@ -52,11 +55,13 @@ and value_binding =
   { binding_pattern : pattern
   ; binding_expression : expression
   }
+[@@deriving show { with_path = false }]
 
 (** Объявление верхнего уровня. *)
 type structure_item =
   | Structure_value of rec_flag * value_binding * value_binding list
   (** [let [rec] b1 and ...], в том числе группа [let rec ... and ...] *)
+[@@deriving show { with_path = false }]
 
 (** Файл программы после разбора. *)
-type structure = structure_item list
+type structure = structure_item list [@@deriving show { with_path = false }]
