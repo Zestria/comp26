@@ -44,195 +44,96 @@ let check_structure expected structure =
 ;;
 
 let () =
-  check_expression "((( + ) 1) 2)" (binary "+" (int 1) (int 2));
-  check_expression "((( * ) m) n)" (binary "*" (var "m") (var "n"));
-  check_expression "((( - ) n) 1)" (binary "-" (var "n") (int 1));
-  check_expression "((( <= ) n) 1)" (binary "<=" (var "n") (int 1));
-  check_expression "((( mod ) a) b)" (binary "mod" (var "a") (var "b"));
-  check_expression "(f (-1))" (app (var "f") [ int (-1) ]);
+  check_expression "1 + 2" (binary "+" (int 1) (int 2));
+  check_expression "m * n" (binary "*" (var "m") (var "n"));
+  check_expression "n - 1" (binary "-" (var "n") (int 1));
+  check_expression "n <= 1" (binary "<=" (var "n") (int 1));
+  check_expression "a mod b" (binary "mod" (var "a") (var "b"));
+  check_expression "f (-1)" (app (var "f") [ int (-1) ]);
   check_expression
-    "(1, true, ())"
+    "1, true, ()"
     (Expr_tuple (int 1, Expr_constant (Const_bool true), [ Expr_constant Const_unit ]));
   check_expression
-    "(fun (-1) _ (a, b) -> a)"
+    "fun (-1) _ (a, b) -> a"
     (Expr_fun
        ( Pat_constant (Const_int (-1))
        , [ Pat_wildcard; Pat_tuple (Pat_var "a", Pat_var "b", []) ]
        , var "a" ));
   check_expression
-    "(let rec f = (fun x -> (g x)) and g = (fun y -> y) in (if true then (f 1) else 0))"
+    "let rec f x = g x and g y = y in if true then f 1 else 0"
     (Expr_let
        ( Recursive
        , binding "f" (Expr_fun (Pat_var "x", [], app (var "g") [ var "x" ]))
        , [ binding "g" (Expr_fun (Pat_var "y", [], var "y")) ]
        , Expr_if (Expr_constant (Const_bool true), app (var "f") [ int 1 ], int 0) ));
   check_expression
-    "((((true) 1) ((()) 2)) ((false) 3))"
+    "(true) 1 ((()) 2) ((false) 3)"
     (app
        (Expr_app (Expr_constant (Const_bool true), int 1))
        [ Expr_app (Expr_constant Const_unit, int 2)
        ; Expr_app (Expr_constant (Const_bool false), int 3)
        ]);
   check_expression
-    "(let ( + ) = ( - ) in ((( + ) 1) 2))"
-    (Expr_let (Non_recursive, binding "+" (var "-"), [], binary "+" (int 1) (int 2)))
+    "let ( + ) = ( - ) in 1 + 2"
+    (Expr_let (Non_recursive, binding "+" (var "-"), [], binary "+" (int 1) (int 2)));
+  (* Сахар [let f x = ...] --- только когда первый параметр переменная. *)
+  check_expression
+    "let f = fun _ x -> x in f"
+    (Expr_let
+       ( Non_recursive
+       , binding "f" (Expr_fun (Pat_wildcard, [ Pat_var "x" ], var "x"))
+       , []
+       , var "f" ));
+  (* Скобки --- только там, где без них дерево другое. *)
+  check_expression "(1 + 2) * 3" (binary "*" (binary "+" (int 1) (int 2)) (int 3));
+  check_expression "1 - (2 - 3)" (binary "-" (int 1) (binary "-" (int 2) (int 3)));
+  check_expression "(2 ** 3) ** 4" (binary "**" (binary "**" (int 2) (int 3)) (int 4));
+  check_expression "2 ** 3 ** 4" (binary "**" (int 2) (binary "**" (int 3) (int 4)));
+  check_expression "( @@ ) f x" (binary "@@" (var "f") (var "x"));
+  check_expression "-x ** 2" (binary "**" (app (var "~-") [ var "x" ]) (int 2));
+  check_expression "-(x ** 2)" (app (var "~-") [ binary "**" (var "x") (int 2) ]);
+  check_expression
+    "- -f x"
+    (app (var "~-") [ app (var "~-") [ app (var "f") [ var "x" ] ] ]);
+  check_expression "( ~- ) 1" (app (var "~-") [ int 1 ]);
+  check_expression "1 + -1" (binary "+" (int 1) (int (-1)));
+  check_expression
+    "(fun x -> x) (if a then b else c)"
+    (app (Expr_fun (Pat_var "x", [], var "x")) [ Expr_if (var "a", var "b", var "c") ]);
+  check_expression
+    "if a then (b, c) else d, e"
+    (Expr_if
+       (var "a", Expr_tuple (var "b", var "c", []), Expr_tuple (var "d", var "e", [])));
+  check_expression
+    "(let x = 1 in x), fun y -> y, y"
+    (Expr_tuple
+       ( Expr_let (Non_recursive, binding "x" (int 1), [], var "x")
+       , Expr_fun (Pat_var "y", [], Expr_tuple (var "y", var "y", []))
+       , [] ));
+  check_expression
+    "let (a, b), c = x in a"
+    (Expr_let
+       ( Non_recursive
+       , { binding_pattern =
+             Pat_tuple (Pat_tuple (Pat_var "a", Pat_var "b", []), Pat_var "c", [])
+         ; binding_expression = var "x"
+         }
+       , []
+       , var "a" ))
 ;;
 
 let () =
   check_structure
-    "let rec fack = (fun n k -> (if ((( <= ) n) 1) then (k 1) else ((fack ((( - ) n) 1)) \
-     (fun m -> (k ((( * ) m) n))))))\n\
-     let rec fibk = (fun n k -> (if ((( < ) n) 2) then (k n) else ((fibk ((( - ) n) 1)) \
-     (fun a -> ((fibk ((( - ) n) 2)) (fun b -> (k ((( + ) a) b))))))))\n\
-     let main = (((fack 5) (fun x -> x)), ((fibk 10) (fun x -> x)))"
+    "let rec fack n k = if n <= 1 then k 1 else fack (n - 1) (fun m -> k (m * n))\n\
+     let rec fibk n k = if n < 2 then k n else fibk (n - 1) (fun a -> fibk (n - 2) (fun \
+     b -> k (a + b)))\n\
+     let main = fack 5 (fun x -> x), fibk 10 (fun x -> x)"
     [ fack; fibk; main ]
 ;;
 
 (* Свойство: любое дерево печатается в текст, который OCaml разбирает обратно в
-   то же дерево. *)
-module Generate = struct
-  open QCheck.Gen
-
-  let identifier =
-    oneof_list
-      [ "x"
-      ; "y"
-      ; "f"
-      ; "k"
-      ; "fack"
-      ; "x'"
-      ; "_a"
-      ; "x1"
-      ; "+"
-      ; "-"
-      ; "*"
-      ; "<"
-      ; "<="
-      ; "="
-      ; "&&"
-      ; "||"
-      ; "**"
-      ; "*."
-      ; "~-"
-      ; "!"
-      ; "!="
-      ; ":="
-      ; "@@"
-      ; "##"
-      ; "mod"
-      ; "lsl"
-      ; "or"
-      ]
-  ;;
-
-  let constant =
-    oneof
-      [ map
-          (fun value -> Const_int value)
-          (oneof [ int_small; map ( ~- ) int_small; oneof_list [ min_int; max_int ] ])
-      ; map (fun value -> Const_bool value) bool
-      ; return Const_unit
-      ]
-  ;;
-
-  let short_list element = list_size (int_range 0 2) element
-
-  let pattern =
-    sized_size (int_bound 3)
-    @@ fix (fun self size ->
-      let leaf =
-        oneof
-          [ return Pat_wildcard
-          ; map (fun name -> Pat_var name) identifier
-          ; map (fun value -> Pat_constant value) constant
-          ]
-      in
-      if size = 0
-      then leaf
-      else (
-        let child = self (size / 2) in
-        oneof
-          [ leaf
-          ; map3 (fun a b rest -> Pat_tuple (a, b, rest)) child child (short_list child)
-          ]))
-  ;;
-
-  let rec_flag = oneof_list [ Recursive; Non_recursive ]
-
-  let binding expression =
-    map2
-      (fun binding_pattern binding_expression -> { binding_pattern; binding_expression })
-      pattern
-      expression
-  ;;
-
-  let expression =
-    sized_size (int_bound 20)
-    @@ fix (fun self size ->
-      let leaf =
-        oneof
-          [ map (fun value -> Expr_constant value) constant
-          ; map (fun name -> Expr_ident name) identifier
-          ]
-      in
-      if size = 0
-      then leaf
-      else (
-        let child = self (size / 2) in
-        oneof
-          [ leaf
-          ; map2 (fun f a -> Expr_app (f, a)) child child
-          ; map3 (fun c t e -> Expr_if (c, t, e)) child child child
-          ; map3 (fun a b rest -> Expr_tuple (a, b, rest)) child child (short_list child)
-          ; map3
-              (fun first rest body -> Expr_fun (first, rest, body))
-              pattern
-              (short_list pattern)
-              child
-          ; map2
-              (fun (flag, first) (rest, body) -> Expr_let (flag, first, rest, body))
-              (pair rec_flag (binding child))
-              (pair (short_list (binding child)) child)
-          ]))
-  ;;
-
-  let structure =
-    list_size
-      (int_range 1 3)
-      (map3
-         (fun flag first rest -> Structure_value (flag, first, rest))
-         rec_flag
-         (binding expression)
-         (short_list (binding expression)))
-  ;;
-end
-
-(* Контрпример сжимаем до поддерева: упавшее поддерево обычно падает и само. *)
-module Shrink = struct
-  let children = function
-    | Expr_constant _ | Expr_ident _ -> []
-    | Expr_let (_, first, rest, body) ->
-      body :: List.map (fun binding -> binding.binding_expression) (first :: rest)
-    | Expr_fun (_, _, body) -> [ body ]
-    | Expr_app (function_, argument) -> [ function_; argument ]
-    | Expr_if (condition, then_branch, else_branch) ->
-      [ condition; then_branch; else_branch ]
-    | Expr_tuple (first, second, rest) -> first :: second :: rest
-  ;;
-
-  let expression expression yield = List.iter yield (children expression)
-end
-
-(* Seed случайный, чтобы каждый прогон проверял новые деревья; при падении он
-   печатается, и прогон повторяется через QCHECK_SEED=<seed>. *)
+   то же дерево. Имена шире ядра: принтер обязан экранировать любые операторы. *)
 let () =
-  let seed =
-    match Sys.getenv_opt "QCHECK_SEED" with
-    | Some seed -> int_of_string seed
-    | None ->
-      Random.self_init ();
-      Random.bits ()
-  in
   let round_trip print reparse =
     fun tree ->
     let printed = print tree in
@@ -240,26 +141,22 @@ let () =
     | Ok reparsed -> reparsed = tree
     | Error message -> QCheck.Test.fail_reportf "%s\n%s" message printed
   in
-  let tests =
+  Generate.check
     [ QCheck.Test.make
         ~count:1000
         ~name:"выражение переразбирается в то же дерево"
         (QCheck.make
            ~print:Pprint.string_of_expression
-           ~shrink:Shrink.expression
-           Generate.expression)
+           ~shrink:Generate.shrink_expression
+           (Generate.expression Generate.wide_identifiers))
         (round_trip Pprint.string_of_expression Reparse.expression)
     ; QCheck.Test.make
         ~count:300
         ~name:"программа переразбирается в то же дерево"
-        (QCheck.make ~print:Pprint.string_of_structure Generate.structure)
+        (QCheck.make
+           ~print:Pprint.string_of_structure
+           ~shrink:Generate.shrink_structure
+           (Generate.structure Generate.wide_identifiers))
         (round_trip Pprint.string_of_structure Reparse.structure)
     ]
-  in
-  let rand = Random.State.make [| seed |] in
-  List.iter
-    (fun test ->
-       try QCheck.Test.check_exn ~rand test with
-       | error -> fail "QCHECK_SEED=%d\n%s" seed (Printexc.to_string error))
-    tests
 ;;

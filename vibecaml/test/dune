@@ -1,4 +1,12 @@
 (tests
- (names pprint_test config_test parsers_test rd_parser_test)
+ (names
+  pprint_test
+  config_test
+  parsers_test
+  parsers_qcheck_test
+  rd_parser_test)
  (package vibecaml)
+ ; Иначе прошедший тест берётся из кэша и новый QCHECK_SEED не применяется.
+ (deps
+  (env_var QCHECK_SEED))
  (libraries vibecaml compiler-libs.common qcheck-core))

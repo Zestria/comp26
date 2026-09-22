@@ -5,6 +5,8 @@
 [@@@ocaml.text "/*"]
 
 open Vibecaml
+open Ast
+open Samples
 
 let fail format =
   Printf.ksprintf
@@ -27,25 +29,49 @@ let parsed_structure source =
 ;;
 
 let check_expression source expected =
-  let actual = Pprint.string_of_expression (parsed_expression source) in
-  if not (String.equal actual expected)
-  then fail "для %S ожидалось %s, получено %s" source expected actual
+  let actual = parsed_expression source in
+  if actual <> expected
+  then
+    fail
+      "для %S ожидалось %s, получено %s"
+      source
+      (Pprint.string_of_expression expected)
+      (Pprint.string_of_expression actual)
 ;;
 
 let () =
-  check_expression "1 + 2 * 3" "((( + ) 1) ((( * ) 2) 3))";
-  check_expression "1 - 2 - 3" "((( - ) ((( - ) 1) 2)) 3)";
-  check_expression "2 ** 3 ** 4" "((( ** ) 2) ((( ** ) 3) 4))";
-  check_expression "f x y" "((f x) y)";
+  check_expression "1 + 2 * 3" (binary "+" (int 1) (binary "*" (int 2) (int 3)));
+  check_expression "1 - 2 - 3" (binary "-" (binary "-" (int 1) (int 2)) (int 3));
+  check_expression "2 ** 3 ** 4" (binary "**" (int 2) (binary "**" (int 3) (int 4)));
+  check_expression "f x y" (app (var "f") [ var "x"; var "y" ]);
   check_expression
     "let rec f x y = x + y and g = f 1 in g"
-    "(let rec f = (fun x y -> ((( + ) x) y)) and g = (f 1) in g)";
-  check_expression "if x < 2 then f x else g x" "(if ((( < ) x) 2) then (f x) else (g x))";
-  check_expression "let (-1) = 0 in 0" "(let (-1) = 0 in 0)";
+    (Expr_let
+       ( Recursive
+       , binding
+           "f"
+           (Expr_fun (Pat_var "x", [ Pat_var "y" ], binary "+" (var "x") (var "y")))
+       , [ binding "g" (app (var "f") [ int 1 ]) ]
+       , var "g" ));
+  check_expression
+    "if x < 2 then f x else g x"
+    (Expr_if
+       (binary "<" (var "x") (int 2), app (var "f") [ var "x" ], app (var "g") [ var "x" ]));
+  check_expression
+    "let (-1) = 0 in 0"
+    (Expr_let
+       ( Non_recursive
+       , { binding_pattern = Pat_constant (Const_int (-1)); binding_expression = int 0 }
+       , []
+       , int 0 ));
   check_expression
     "let ( = ) = fun x -> x in ( = ) 1"
-    "(let ( = ) = (fun x -> x) in (( = ) 1))";
-  check_expression "(-4611686018427387904)" "(-4611686018427387904)"
+    (Expr_let
+       ( Non_recursive
+       , binding "=" (Expr_fun (Pat_var "x", [], var "x"))
+       , []
+       , app (var "=") [ int 1 ] ));
+  check_expression "(-4611686018427387904)" (int min_int)
 ;;
 
 let () =

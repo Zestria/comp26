@@ -50,33 +50,21 @@ let reserved =
   ]
 ;;
 
-let operators =
-  [ "||"
-  ; "&&"
-  ; "="
-  ; "<>"
-  ; "<"
-  ; "<="
-  ; ">"
-  ; ">="
-  ; "+"
-  ; "-"
-  ; "+."
-  ; "-."
-  ; "*"
-  ; "/"
-  ; "*."
-  ; "/."
-  ; "mod"
-  ; "land"
-  ; "lor"
-  ; "lxor"
-  ; "**"
-  ; "lsl"
-  ; "lsr"
-  ; "asr"
+type associativity =
+  | Left
+  | Right
+
+let binary_operators =
+  [ [ "||" ], Right
+  ; [ "&&" ], Right
+  ; [ "="; "<>"; "<"; "<="; ">"; ">=" ], Left
+  ; [ "+"; "-"; "+."; "-." ], Left
+  ; [ "*"; "/"; "*."; "/."; "mod"; "land"; "lor"; "lxor" ], Left
+  ; [ "**"; "lsl"; "lsr"; "asr" ], Right
   ]
 ;;
+
+let operators = List.concat_map fst binary_operators
 
 let reserved_error word = Printf.sprintf "ключевое слово %s вне подмножества" word
 
