@@ -3,5 +3,6 @@
  (package vibecaml)
  (name compiler)
  (modules compiler)
+ (libraries vibecaml)
  (instrumentation
   (backend bisect_ppx_ng)))
