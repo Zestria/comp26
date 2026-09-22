@@ -45,19 +45,19 @@
  (name vibecaml)
  (synopsis "Компилятор подмножества OCaml")
  (description
-  "Учебный компилятор подмножества OCaml: два независимых синтаксических анализатора (нисходящий на комбинаторах и восходящий на menhir), вывод типов и кодогенерация под RISC-V.")
+  "Учебный компилятор подмножества OCaml: два независимых синтаксических анализатора (нисходящий рекурсивным спуском и восходящий на menhir), вывод типов и кодогенерация под RISC-V.")
  (depends
   (ocaml
    (>= 5.5))
   dune
-  (angstrom
-   (>= 0.16.0))
   (menhir
    (>= 20231231))
   (qcheck
-   (>= 0.21))
+   (and
+    (>= 0.21)
+    :with-test))
   (ppx_deriving
    (>= 5.2.1))
-  bisect_ppx_ng))
+  (bisect_ppx_ng :with-test)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
