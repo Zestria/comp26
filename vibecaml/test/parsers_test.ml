@@ -52,9 +52,20 @@ let () =
     then fail "%s: fack и fibk вместе разобраны не в то дерево" name)
 ;;
 
-(* Вывод принтера разбирается обратно в то же дерево. *)
+(* Вывод принтера разбирается обратно в то же дерево. Применение [true] и
+   [()] печатается со скобками: без них это вне ядра. *)
 let () =
-  let structure = [ Samples.fack; Samples.fibk; Samples.main ] in
+  let constructor_application =
+    Structure_value
+      ( Non_recursive
+      , Samples.binding
+          "x"
+          (Samples.app
+             (Expr_app (Expr_constant (Const_bool true), Samples.int 1))
+             [ Expr_app (Expr_constant Const_unit, Samples.int 2) ])
+      , [] )
+  in
+  let structure = [ Samples.fack; Samples.fibk; Samples.main; constructor_application ] in
   let printed = Pprint.string_of_structure structure in
   for_each_parser (fun name (module P) ->
     if parsed name P.parse_structure printed <> structure
@@ -218,11 +229,17 @@ let () =
     expr "1+-1" "1:2: оператор +- вне подмножества";
     expr "a | b" "1:3: оператор | вне подмножества";
     expr "99999999999999999999" "1:1: целое 99999999999999999999 не помещается в int";
+    expr "4611686018427387904" "1:1: целое 4611686018427387904 не помещается в int";
+    expr "-(4611686018427387904)" "1:3: целое 4611686018427387904 не помещается в int";
+    structure
+      "let (4611686018427387904) = 1"
+      "1:6: целое 4611686018427387904 не помещается в int";
     expr "x (* не закрыт\n(* *)" "1:3: незакрытый комментарий";
     expr "1 +" "1:4: неожиданный конец ввода";
     expr "let x = 1 in" "1:13: неожиданный конец ввода";
     expr "if a then b" "1:12: неожиданный конец ввода";
     expr "(1, 2" "1:6: неожиданный конец ввода";
+    expr "( mod" "1:6: неожиданный конец ввода";
     structure "let" "1:4: неожиданный конец ввода";
     structure "let x =\n" "2:1: неожиданный конец ввода")
 ;;
@@ -253,8 +270,6 @@ let () =
       ; "() x"
       ; "- false x"
       ; "-. x"
-      ; "-(4611686018427387904)"
-      ; "4611686018427387904"
       ; "fun -1 -> 0"
       ; "fun (-1, 2) -> 0"
       ; "fun x, y -> 0"

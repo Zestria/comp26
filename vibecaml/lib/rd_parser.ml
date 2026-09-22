@@ -35,8 +35,6 @@ type token =
   ; offset : int
   }
 
-(* Поле [index] — положение курсора: разбор последовательно потребляет
-   токены, поэтому изменяемое состояние здесь проще и не дублирует массив. *)
 type state =
   { tokens : token array
   ; mutable index : int
@@ -115,8 +113,8 @@ let operator_kind offset = function
   | name -> fail offset (Lexicon.operator_error name)
 ;;
 
-(* Лексер специально остаётся маленьким: он отделяет комментарии и пробелы от
-   грамматики, поэтому все сообщения синтаксического анализатора однородны. *)
+(* Лексер отдельным проходом выкидывает пробелы и комментарии, грамматика
+   видит только токены. *)
 let lex source =
   let length = String.length source in
   let pair_at index =
@@ -180,7 +178,7 @@ let lookahead state distance =
   state.tokens.(min (state.index + distance) (Array.length state.tokens - 1)).kind
 ;;
 
-let peek state = lookahead state 1
+let next_kind state = lookahead state 1
 
 (* Курсор не уходит за [Eof]: иначе чтение после конца ввода вышло бы за
    границу массива. *)
@@ -248,17 +246,23 @@ let starts_atom = function
   | _ -> false
 ;;
 
-(* Оператор в скобках, [( + )], --- это имя. Смотрим на токен вперёд: [(-1)]
-   начинается так же, как [( - )]. *)
+(* Оператор в скобках, [( + )], --- это имя. Только минус смотрит на токен
+   вперёд: [(-1)] начинается так же, как [( - )]. После остальных операторов
+   обязана идти скобка, как у menhir-парсера: ошибка --- там же, где у него. *)
 let parenthesized_operator state =
-  match (current state).kind, peek state with
-  | Operator name, Rparen ->
+  match (current state).kind, next_kind state with
+  | Operator "-", Rparen ->
     skip state;
     skip state;
+    Some "-"
+  | Operator "-", _ -> None
+  | Operator name, _ ->
+    skip state;
+    expect state Rparen;
     Some name
-  | Equal, Rparen ->
+  | Equal, _ ->
     skip state;
-    skip state;
+    expect state Rparen;
     Some "="
   | _ -> None
 ;;
@@ -279,7 +283,7 @@ and parse_parenthesized_pattern state =
   match parenthesized_operator state with
   | Some name -> Pat_var name
   | None ->
-    (match (current state).kind, peek state with
+    (match (current state).kind, next_kind state with
      | Rparen, _ ->
        skip state;
        Pat_constant Const_unit
@@ -326,7 +330,7 @@ let parse_value_name state =
   | Ident name ->
     skip state;
     Some name
-  | Lparen when is_operator_name (peek state) && lookahead state 2 = Rparen ->
+  | Lparen when is_operator_name (next_kind state) && lookahead state 2 = Rparen ->
     skip state;
     parenthesized_operator state
   | _ -> None
@@ -446,7 +450,7 @@ and parse_infix state minimum =
    --- это [~- (f x)]. Минус перед целой константой сворачивается в
    константу, как в OCaml; скобки прозрачны, [-(1)] тоже число. *)
 and parse_unary state =
-  match (current state).kind, peek state with
+  match (current state).kind, next_kind state with
   | Operator "-", Int digits when Option.is_none (int_of_string_opt digits) ->
     skip state;
     let token = take state in
@@ -463,7 +467,7 @@ and parse_unary state =
    функцией: [true x] вне ядра, [(true) x] --- можно. *)
 and parse_application state =
   let constructor =
-    match (current state).kind, peek state with
+    match (current state).kind, next_kind state with
     | (True | False), _ | Lparen, Rparen -> true
     | _ -> false
   in
