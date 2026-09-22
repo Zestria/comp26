@@ -82,6 +82,10 @@ let rec pp_expression ppf = function
       rest
       pp_expression
       body
+  (* [true], [false] и [()] для OCaml --- конструкторы: [true x] --- это не
+     применение. Функцией в применении они бывают только в скобках. *)
+  | Expr_app ((Expr_constant (Const_bool _ | Const_unit) as function_), argument) ->
+    Format.fprintf ppf "((%a) %a)" pp_expression function_ pp_expression argument
   | Expr_app (function_, argument) ->
     Format.fprintf ppf "(%a %a)" pp_expression function_ pp_expression argument
   | Expr_if (condition, then_branch, else_branch) ->

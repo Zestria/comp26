@@ -1,4 +1,4 @@
 (tests
- (names pprint_test config_test rd_parser_test)
+ (names pprint_test config_test parsers_test rd_parser_test)
  (package vibecaml)
  (libraries vibecaml compiler-libs.common qcheck-core))

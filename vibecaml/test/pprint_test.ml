@@ -8,6 +8,7 @@
 
 open Vibecaml
 open Ast
+open Samples
 
 (* Не [failwith]: необработанное исключение печатает кириллицу экранированной. *)
 let fail format =
@@ -21,19 +22,6 @@ let fail format =
 let assert_equal expected actual =
   if not (String.equal expected actual)
   then fail "ожидалось:\n%s\nполучено:\n%s" expected actual
-;;
-
-let int value = Expr_constant (Const_int value)
-let var name = Expr_ident name
-
-let app function_ arguments =
-  List.fold_left (fun f a -> Expr_app (f, a)) function_ arguments
-;;
-
-let binary operator left right = app (var operator) [ left; right ]
-
-let binding name expression =
-  { binding_pattern = Pat_var name; binding_expression = expression }
 ;;
 
 (* Вывод печатается точно так, и OCaml разбирает его обратно в то же дерево. *)
@@ -79,71 +67,15 @@ let () =
        , [ binding "g" (Expr_fun (Pat_var "y", [], var "y")) ]
        , Expr_if (Expr_constant (Const_bool true), app (var "f") [ int 1 ], int 0) ));
   check_expression
+    "((((true) 1) ((()) 2)) ((false) 3))"
+    (app
+       (Expr_app (Expr_constant (Const_bool true), int 1))
+       [ Expr_app (Expr_constant Const_unit, int 2)
+       ; Expr_app (Expr_constant (Const_bool false), int 3)
+       ]);
+  check_expression
     "(let ( + ) = ( - ) in ((( + ) 1) 2))"
     (Expr_let (Non_recursive, binding "+" (var "-"), [], binary "+" (int 1) (int 2)))
-;;
-
-(* Эталоны из ТЗ: факториал и Фибоначчи в CPS. *)
-let fack =
-  Structure_value
-    ( Recursive
-    , binding
-        "fack"
-        (Expr_fun
-           ( Pat_var "n"
-           , [ Pat_var "k" ]
-           , Expr_if
-               ( binary "<=" (var "n") (int 1)
-               , app (var "k") [ int 1 ]
-               , app
-                   (var "fack")
-                   [ binary "-" (var "n") (int 1)
-                   ; Expr_fun
-                       (Pat_var "m", [], app (var "k") [ binary "*" (var "m") (var "n") ])
-                   ] ) ))
-    , [] )
-;;
-
-let fibk =
-  Structure_value
-    ( Recursive
-    , binding
-        "fibk"
-        (Expr_fun
-           ( Pat_var "n"
-           , [ Pat_var "k" ]
-           , Expr_if
-               ( binary "<" (var "n") (int 2)
-               , app (var "k") [ var "n" ]
-               , app
-                   (var "fibk")
-                   [ binary "-" (var "n") (int 1)
-                   ; Expr_fun
-                       ( Pat_var "a"
-                       , []
-                       , app
-                           (var "fibk")
-                           [ binary "-" (var "n") (int 2)
-                           ; Expr_fun
-                               ( Pat_var "b"
-                               , []
-                               , app (var "k") [ binary "+" (var "a") (var "b") ] )
-                           ] )
-                   ] ) ))
-    , [] )
-;;
-
-let main =
-  let identity = Expr_fun (Pat_var "x", [], var "x") in
-  Structure_value
-    ( Non_recursive
-    , binding
-        "main"
-        (Expr_tuple
-           ( app (var "fack") [ int 5; identity ]
-           , app (var "fibk") [ int 10; identity ]
-           , [] ))
-    , [] )
 ;;
 
 let () =
