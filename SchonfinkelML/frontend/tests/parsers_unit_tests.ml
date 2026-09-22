@@ -109,6 +109,13 @@ let%test "identifier with digits and a quote" = check_expr_both "x1'_2" (Ident "
 let%test "identifier with underscore" = check_expr_both "foo_bar" (Ident "foo_bar")
 let%test "uppercase identifier" = check_expr_both "Foo" (Ident "Foo")
 let%test "mixed-case identifier" = check_expr_both "aBc" (Ident "aBc")
+let%test "unit literal ()" = check_expr_both "()" eunit
+let%test "unit literal ( )" = check_expr_both "( )" eunit
+let%test "unit as an argument" = check_expr_both "f ()" (eapp (Ident "f") eunit)
+
+let%test "unit in if branches" =
+  check_expr_both "if x then () else ()" (eif (Ident "x") eunit eunit)
+;;
 
 (* --- Application --- *)
 
@@ -279,6 +286,24 @@ let%test "else-if chain" =
   check_expr_both
     "if x then 1 else if y then 2 else 3"
     (eif (Ident "x") (econsti 1) (eif (Ident "y") (econsti 2) (econsti 3)))
+;;
+
+let%test "if without else" =
+  check_expr_both "if x then 1" (eif (Ident "x") (econsti 1) eunit)
+;;
+
+let%test "if without else with a complex then branch" =
+  check_expr_both "if x then 1 + 2" (eif (Ident "x") (eadd (econsti 1) (econsti 2)) eunit)
+;;
+
+let%test "if without else with a unit branch" =
+  check_expr_both "if x then ()" (eif (Ident "x") eunit eunit)
+;;
+
+(* Reading back what [Common.pp_expr] writes. *)
+let%test "the printed form parses back" =
+  let e = eif (Ident "x") (eif (Ident "y") (econsti 1) eunit) (econsti 2) in
+  Top_down.parse_expr (string_of_expr e) = Ok e
 ;;
 
 let%test "fun" = check_expr_both "fun x -> x" (elambda "x" (Ident "x"))
@@ -550,7 +575,6 @@ let%test "only a closing paren" = check_error_both ")"
 (* --- Constructs both parsers are expected to reject --- *)
 
 let%test "if with a condition but no branches" = check_error_both "if x then"
-let%test "empty parens ( )" = check_error_both "( )"
 
 (* --- Robustness: neither engine may raise or crash the process --- *)
 
