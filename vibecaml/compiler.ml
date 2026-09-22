@@ -20,22 +20,42 @@ let parse_structure config source =
   | Config.Menhir -> Menhir_frontend.parse_structure source
 ;;
 
+(* Расширения пока нигде не реализованы (#5). Флаг, который молча ничего не
+   включает, хуже явной ошибки, поэтому отказываем до чтения входа. *)
+let check_extensions config =
+  let { Config.glued_keywords; operator_declarations } = config.Config.extensions in
+  let enabled =
+    List.find_opt
+      snd
+      [ "--ext-glued-keywords", glued_keywords
+      ; "--ext-operator-declarations", operator_declarations
+      ]
+  in
+  match enabled, config.Config.parser with
+  | None, _ -> Ok ()
+  | Some (flag, _), Config.Recursive_descent ->
+    Error (Printf.sprintf "расширение %s пока не реализовано" flag)
+  | Some (flag, _), Config.Menhir ->
+    Error (Printf.sprintf "расширение %s не поддерживается в menhir-парсере" flag)
+;;
+
 let fail message =
   prerr_endline ("vibecaml: " ^ message);
   exit 1
 ;;
 
+let run config =
+  let ( let* ) = Result.bind in
+  let* () = check_extensions config in
+  let* source = read_source config.Config.input_file in
+  parse_structure config source
+;;
+
 let () =
-  match Config.parse_arguments Sys.argv with
+  match Result.bind (Config.parse_arguments Sys.argv) run with
   | Error message -> fail message
-  | Ok config ->
-    (match read_source config.input_file with
-     | Error message -> fail message
-     | Ok source ->
-       (match parse_structure config source with
-        | Error message -> fail message
-        | Ok structure ->
-          (* Пока AST печатается принтером в исходный синтаксис: вывод легко
-             читать и сравнивать между парсерами. *)
-          Format.printf "%a@." Pprint.pp_structure structure))
+  | Ok structure ->
+    (* Пока AST печатается принтером в исходный синтаксис: вывод легко
+       читать и сравнивать между парсерами. *)
+    Format.printf "%a@." Pprint.pp_structure structure
 ;;

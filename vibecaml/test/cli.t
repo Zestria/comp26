@@ -47,3 +47,29 @@
   $ vibecamlc missing.ml
   vibecaml: missing.ml: No such file or directory
   [1]
+
+Расширения ещё не реализованы: флаг даёт ошибку до чтения входа, поэтому
+несуществующий файл не мешает.
+
+  $ vibecamlc --ext-glued-keywords missing.ml
+  vibecaml: расширение --ext-glued-keywords пока не реализовано
+  [1]
+
+  $ vibecamlc --ext-operator-declarations missing.ml
+  vibecaml: расширение --ext-operator-declarations пока не реализовано
+  [1]
+
+  $ vibecamlc --parser menhir --ext-glued-keywords missing.ml
+  vibecaml: расширение --ext-glued-keywords не поддерживается в menhir-парсере
+  [1]
+
+  $ vibecamlc --parser menhir --ext-operator-declarations missing.ml
+  vibecaml: расширение --ext-operator-declarations не поддерживается в menhir-парсере
+  [1]
+
+С двумя флагами сообщение про первое расширение из Config, порядок в командной
+строке не важен.
+
+  $ vibecamlc --ext-operator-declarations --ext-glued-keywords missing.ml
+  vibecaml: расширение --ext-glued-keywords пока не реализовано
+  [1]
