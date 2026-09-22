@@ -5,7 +5,7 @@
 open Vibecaml
 
 (* Точка входа компилятора: читает программу из файла или stdin, разбирает
-   выбранным парсером и печатает её обратно принтером. *)
+   выбранным парсером и печатает дерево и/или программу принтером. *)
 
 let read_source = function
   | None | Some "-" -> Ok (In_channel.input_all In_channel.stdin)
@@ -44,18 +44,24 @@ let fail message =
   exit 1
 ;;
 
+(* Без флагов дампа печатаем программу принтером, как раньше. *)
+let print_structure config structure =
+  let { Config.dump_ast; dump_pretty_printed; _ } = config in
+  if dump_ast then Format.printf "%a@." Ast.pp_structure structure;
+  if dump_pretty_printed || not dump_ast
+  then Format.printf "%a@." Pprint.pp_structure structure
+;;
+
 let run config =
   let ( let* ) = Result.bind in
   let* () = check_extensions config in
   let* source = read_source config.Config.input_file in
-  parse_structure config source
+  let* structure = parse_structure config source in
+  Ok (print_structure config structure)
 ;;
 
 let () =
   match Result.bind (Config.parse_arguments Sys.argv) run with
   | Error message -> fail message
-  | Ok structure ->
-    (* Пока AST печатается принтером в исходный синтаксис: вывод легко
-       читать и сравнивать между парсерами. *)
-    Format.printf "%a@." Pprint.pp_structure structure
+  | Ok () -> ()
 ;;

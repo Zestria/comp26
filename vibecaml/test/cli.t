@@ -22,6 +22,31 @@
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
+`--dump-ast` печатает только дерево, `--dump-pp` --- только программу, оба
+флага --- сначала дерево, потом программу.
+
+  $ echo 'let x = f 1' > small.ml
+
+  $ vibecamlc --dump-ast small.ml
+  [(Structure_value (Non_recursive,
+      { binding_pattern = (Pat_var "x");
+        binding_expression =
+        (Expr_app ((Expr_ident "f"), (Expr_constant (Const_int 1)))) },
+      []))
+    ]
+
+  $ vibecamlc --dump-pp small.ml
+  let x = f 1
+
+  $ vibecamlc --dump-pp --dump-ast small.ml
+  [(Structure_value (Non_recursive,
+      { binding_pattern = (Pat_var "x");
+        binding_expression =
+        (Expr_app ((Expr_ident "f"), (Expr_constant (Const_int 1)))) },
+      []))
+    ]
+  let x = f 1
+
 Одиночный `-` тоже означает stdin.
 
   $ vibecamlc - < prog.ml
