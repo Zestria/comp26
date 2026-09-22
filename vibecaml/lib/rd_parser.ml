@@ -11,6 +11,7 @@ open Ast
 type token_kind =
   | Int of string
   | Ident of string
+  | Underscore
   | Operator of string
   | Let
   | Rec
@@ -45,19 +46,19 @@ type associativity =
   | Left
   | Right
 
-exception Parse_error of string
+(* Смещение в исходнике и описание. В строку «строка:колонка» смещение
+   переводит [run]: так формат ошибок совпадает с menhir-парсером. *)
+exception Parse_error of int * string
 
-let fail offset message =
-  raise (Parse_error (Printf.sprintf "позиция %d: %s" offset message))
-;;
+let fail offset message = raise (Parse_error (offset, message))
 
 let is_space = function
-  | ' ' | '\t' | '\n' | '\r' -> true
+  | ' ' | '\t' | '\n' | '\r' | '\012' -> true
   | _ -> false
 ;;
 
-let is_letter = function
-  | 'a' .. 'z' | 'A' .. 'Z' | '_' -> true
+let is_digit = function
+  | '0' .. '9' -> true
   | _ -> false
 ;;
 
@@ -88,7 +89,7 @@ let is_operator_char = function
   | _ -> false
 ;;
 
-let word_kind = function
+let word_kind offset = function
   | "let" -> Let
   | "rec" -> Rec
   | "and" -> And
@@ -99,8 +100,19 @@ let word_kind = function
   | "else" -> Else
   | "true" -> True
   | "false" -> False
-  | ("mod" | "land" | "lor" | "lxor" | "lsl" | "lsr" | "asr" | "or") as op -> Operator op
+  | word when List.mem word Lexicon.reserved -> fail offset (Lexicon.reserved_error word)
+  | "_" -> Underscore
+  | word when List.mem word Lexicon.operators -> Operator word
   | word -> Ident word
+;;
+
+(* Оператор читается целиком, как в OCaml: [+-] --- один неизвестный
+   оператор, а не [+] и [-]. *)
+let operator_kind offset = function
+  | "=" -> Equal
+  | "->" -> Arrow
+  | name when List.mem name Lexicon.operators -> Operator name
+  | name -> fail offset (Lexicon.operator_error name)
 ;;
 
 (* Лексер специально остаётся маленьким: он отделяет комментарии и пробелы от
@@ -112,7 +124,7 @@ let lex source =
   in
   let rec skip_comment start depth index =
     if index >= length
-    then fail start "незакрытый комментарий"
+    then fail start Lexicon.unclosed_comment_error
     else (
       match pair_at index with
       | Some ('(', '*') -> skip_comment start (depth + 1) (index + 2)
@@ -130,43 +142,57 @@ let lex source =
     then List.rev ({ kind = Eof; offset = length } :: tokens)
     else if is_space source.[index]
     then loop (index + 1) tokens
-    else if index + 1 < length && String.sub source index 2 = "(*"
+    else if pair_at index = Some ('(', '*')
     then loop (skip_comment index 1 (index + 2)) tokens
     else (
       let add kind finish = loop finish ({ kind; offset = index } :: tokens) in
+      let text finish = String.sub source index (finish - index) in
       match source.[index] with
       | '(' -> add Lparen (index + 1)
       | ')' -> add Rparen (index + 1)
       | ',' -> add Comma (index + 1)
-      | '=' -> add Equal (index + 1)
-      | '-' when index + 1 < length && source.[index + 1] = '>' -> add Arrow (index + 2)
       | '0' .. '9' ->
-        let finish =
-          take_while
-            (function
-              | '0' .. '9' -> true
-              | _ -> false)
-            index
-        in
-        let digits = String.sub source index (finish - index) in
-        add (Int digits) finish
-      | character when is_letter character ->
+        let finish = take_while is_digit index in
+        (* [1x], [1L], [0x1F], [1_000] и [1.5] для OCaml --- один литерал, а не
+           число и что-то следом. *)
+        let glued = take_while (fun c -> is_identifier_char c || c = '.') finish in
+        if glued > finish
+        then fail index (Lexicon.literal_error (text glued))
+        else add (Int (text finish)) finish
+      | 'a' .. 'z' | '_' ->
         let finish = take_while is_identifier_char index in
-        add (word_kind (String.sub source index (finish - index))) finish
+        add (word_kind index (text finish)) finish
+      | 'A' .. 'Z' ->
+        let finish = take_while is_identifier_char index in
+        fail index (Lexicon.constructor_error (text finish))
       | character when is_operator_char character ->
         let finish = take_while is_operator_char index in
-        add (Operator (String.sub source index (finish - index))) finish
-      | character -> fail index (Printf.sprintf "недопустимый символ %C" character))
+        add (operator_kind index (text finish)) finish
+      | character -> fail index (Lexicon.unexpected_char_error character))
   in
   loop 0 []
 ;;
 
 let current state = state.tokens.(state.index)
 
+(* Токен на [distance] впереди текущего. За [Eof] ничего нет, там снова [Eof]. *)
+let lookahead state distance =
+  state.tokens.(min (state.index + distance) (Array.length state.tokens - 1)).kind
+;;
+
+let peek state = lookahead state 1
+
+(* Курсор не уходит за [Eof]: иначе чтение после конца ввода вышло бы за
+   границу массива. *)
 let take state =
   let token = current state in
-  state.index <- state.index + 1;
+  if token.kind <> Eof then state.index <- state.index + 1;
   token
+;;
+
+let skip state =
+  let (_ : token) = take state in
+  ()
 ;;
 
 let expect state kind =
@@ -181,24 +207,27 @@ let binding pattern expression =
 let int_constant offset digits =
   match int_of_string_opt digits with
   | Some value -> Const_int value
-  | None -> fail offset "целое число вне диапазона"
+  | None -> fail offset (Lexicon.int_overflow_error digits)
 ;;
 
+(* Отрицательная константа из цифр целиком: так проходит [min_int], модуль
+   которого не помещается в [int]. *)
 let negative_int_constant offset digits =
   match int_of_string_opt ("-" ^ digits) with
   | Some value -> Const_int value
-  | None -> fail offset "целое число вне диапазона"
+  | None -> fail offset (Lexicon.int_overflow_error digits)
 ;;
 
 (* Приоритеты — данные, а не ветви грамматики. В #5 эту таблицу можно будет
-   заменить после чтения объявлений операторов. *)
+   заменить после чтения объявлений операторов. Уровни и ассоциативность ---
+   как в OCaml. *)
 let operator_table =
   [ [ "||" ], 10, Right
   ; [ "&&" ], 20, Right
   ; [ "="; "<>"; "<"; "<="; ">"; ">=" ], 30, Left
   ; [ "+"; "-"; "+."; "-." ], 40, Left
-  ; [ "*"; "/"; "*."; "/."; "mod"; "land"; "lor"; "lxor"; "lsl"; "lsr"; "asr" ], 50, Left
-  ; [ "**" ], 60, Right
+  ; [ "*"; "/"; "*."; "/."; "mod"; "land"; "lor"; "lxor" ], 50, Left
+  ; [ "**"; "lsl"; "lsr"; "asr" ], 60, Right
   ]
 ;;
 
@@ -210,7 +239,7 @@ let operator_info name =
 ;;
 
 let starts_pattern = function
-  | Int _ | Ident _ | True | False | Lparen -> true
+  | Int _ | Ident _ | Underscore | True | False | Lparen -> true
   | _ -> false
 ;;
 
@@ -219,103 +248,142 @@ let starts_atom = function
   | _ -> false
 ;;
 
+(* Оператор в скобках, [( + )], --- это имя. Смотрим на токен вперёд: [(-1)]
+   начинается так же, как [( - )]. *)
+let parenthesized_operator state =
+  match (current state).kind, peek state with
+  | Operator name, Rparen ->
+    skip state;
+    skip state;
+    Some name
+  | Equal, Rparen ->
+    skip state;
+    skip state;
+    Some "="
+  | _ -> None
+;;
+
+(* Простой паттерн: без кортежа на верхнем уровне. *)
 let rec parse_pattern state =
   match take state with
   | { kind = Int digits; offset } -> Pat_constant (int_constant offset digits)
   | { kind = True; _ } -> Pat_constant (Const_bool true)
   | { kind = False; _ } -> Pat_constant (Const_bool false)
-  | { kind = Ident "_"; _ } -> Pat_wildcard
+  | { kind = Underscore; _ } -> Pat_wildcard
   | { kind = Ident name; _ } -> Pat_var name
-  | { kind = Lparen; offset } -> parse_parenthesized_pattern state offset
+  | { kind = Lparen; _ } -> parse_parenthesized_pattern state
   | token -> fail token.offset "ожидался паттерн"
 
-and parse_parenthesized_pattern state offset =
-  match (current state).kind with
-  | Rparen ->
-    let _ = take state in
-    Pat_constant Const_unit
-  | Equal ->
-    let _ = take state in
-    expect state Rparen;
-    Pat_var "="
-  | Operator "-" ->
-    let _ = take state in
-    (match (current state).kind with
-     | Int digits ->
+(* Отрицательная константа в паттерне --- только в скобках: [(-1)]. *)
+and parse_parenthesized_pattern state =
+  match parenthesized_operator state with
+  | Some name -> Pat_var name
+  | None ->
+    (match (current state).kind, peek state with
+     | Rparen, _ ->
+       skip state;
+       Pat_constant Const_unit
+     | Operator "-", Int digits ->
+       skip state;
        let token = take state in
        expect state Rparen;
        Pat_constant (negative_int_constant token.offset digits)
-     | Rparen ->
-       let _ = take state in
-       Pat_var "-"
-     | _ -> fail (current state).offset "ожидалось число или закрывающая скобка")
-  | Operator name ->
-    let _ = take state in
-    expect state Rparen;
-    Pat_var name
-  | _ ->
-    let first = parse_pattern state in
-    (match (current state).kind with
-     | Rparen ->
-       let _ = take state in
-       first
-     | Comma ->
-       let _ = take state in
-       let second = parse_pattern state in
-       let rec rest values =
-         match (current state).kind with
-         | Comma ->
-           let _ = take state in
-           rest (parse_pattern state :: values)
-         | Rparen ->
-           let _ = take state in
-           List.rev values
-         | _ -> fail (current state).offset "ожидались запятая или закрывающая скобка"
-       in
-       Pat_tuple (first, second, rest [])
-     | _ -> fail offset "ожидались запятая или закрывающая скобка")
+     | _ ->
+       let pattern = parse_pattern_tuple state (parse_pattern state) in
+       expect state Rparen;
+       pattern)
+
+(* Кортеж без скобок из простых паттернов, если после [first] идёт запятая. *)
+and parse_pattern_tuple state first =
+  let rec rest values =
+    match (current state).kind with
+    | Comma ->
+      skip state;
+      rest (parse_pattern state :: values)
+    | _ -> List.rev values
+  in
+  match rest [] with
+  | [] -> first
+  | second :: rest -> Pat_tuple (first, second, rest)
 ;;
 
+let parse_rec_flag state =
+  match (current state).kind with
+  | Rec ->
+    skip state;
+    Recursive
+  | _ -> Non_recursive
+;;
+
+let is_operator_name = function
+  | Operator _ | Equal -> true
+  | _ -> false
+;;
+
+(* Имя слева от параметров: [f] или [( + )], как [val_ident] в OCaml. *)
+let parse_value_name state =
+  match (current state).kind with
+  | Ident name ->
+    skip state;
+    Some name
+  | Lparen when is_operator_name (peek state) && lookahead state 2 = Rparen ->
+    skip state;
+    parenthesized_operator state
+  | _ -> None
+;;
+
+(* Кортеж без скобок: [let], [fun] и [else] тянутся через запятую, поэтому
+   элементы разбираются без кортежа, а тело [let]/[fun]/[else] --- с ним. *)
 let rec parse_expression state =
+  let first = parse_expr_no_tuple state in
+  let rec rest values =
+    match (current state).kind with
+    | Comma ->
+      skip state;
+      rest (parse_expr_no_tuple state :: values)
+    | _ -> List.rev values
+  in
+  match rest [] with
+  | [] -> first
+  | second :: rest -> Expr_tuple (first, second, rest)
+
+(* [let], [fun] и [if] не бывают операндом оператора: [1 + if ...] вне ядра. *)
+and parse_expr_no_tuple state =
   match (current state).kind with
   | Let -> parse_let state
   | Fun -> parse_fun state
   | If -> parse_if state
   | _ -> parse_infix state 0
 
-and parse_let state =
-  let _ = take state in
-  let flag =
-    match (current state).kind with
-    | Rec ->
-      let _ = take state in
-      Recursive
-    | _ -> Non_recursive
-  in
+and parse_let_bindings state =
+  let flag = parse_rec_flag state in
   let first = parse_value_binding state in
-  let rec bindings values =
+  let rec rest values =
     match (current state).kind with
     | And ->
-      let _ = take state in
-      bindings (parse_value_binding state :: values)
-    | In ->
-      let _ = take state in
-      List.rev values
-    | _ -> fail (current state).offset "ожидались and или in"
+      skip state;
+      rest (parse_value_binding state :: values)
+    | _ -> List.rev values
   in
-  let rest = bindings [] in
+  flag, first, rest []
+
+and parse_let state =
+  skip state;
+  let flag, first, rest = parse_let_bindings state in
+  expect state In;
   let body = parse_expression state in
   Expr_let (flag, first, rest, body)
 
+(* [let f x y = e] --- сахар для [let f = fun x y -> e]. Параметры бывают
+   только после имени, иначе слева паттерн, возможно кортеж. *)
 and parse_value_binding state =
-  let first = parse_pattern state in
-  let rec parameters values =
-    match (current state).kind with
-    | Equal -> List.rev values
-    | kind when starts_pattern kind -> parameters (parse_pattern state :: values)
-    | _ -> fail (current state).offset "ожидались параметр или знак ="
+  let pattern, parameters =
+    match parse_value_name state with
+    | Some name when starts_pattern (current state).kind ->
+      Pat_var name, parse_parameters state Equal
+    | Some name -> parse_pattern_tuple state (Pat_var name), []
+    | None -> parse_pattern_tuple state (parse_pattern state), []
   in
-  let parameters = parameters [] in
   expect state Equal;
   let expression = parse_expression state in
   let expression =
@@ -323,23 +391,27 @@ and parse_value_binding state =
     | [] -> expression
     | first :: rest -> Expr_fun (first, rest, expression)
   in
-  binding first expression
+  binding pattern expression
 
-and parse_fun state =
-  let _ = take state in
-  let first = parse_pattern state in
+and parse_parameters state stop =
   let rec parameters values =
     match (current state).kind with
-    | Arrow -> List.rev values
+    | kind when kind = stop -> List.rev values
     | kind when starts_pattern kind -> parameters (parse_pattern state :: values)
-    | _ -> fail (current state).offset "ожидались параметр или ->"
+    | _ -> fail (current state).offset "ожидался параметр"
   in
-  let rest = parameters [] in
-  expect state Arrow;
-  Expr_fun (first, rest, parse_expression state)
+  parameters []
+
+and parse_fun state =
+  skip state;
+  match parse_parameters state Arrow with
+  | [] -> fail (current state).offset "ожидался параметр"
+  | first :: rest ->
+    expect state Arrow;
+    Expr_fun (first, rest, parse_expression state)
 
 and parse_if state =
-  let _ = take state in
+  skip state;
   let condition = parse_expression state in
   expect state Then;
   let then_branch = parse_expression state in
@@ -347,7 +419,7 @@ and parse_if state =
   Expr_if (condition, then_branch, parse_expression state)
 
 and parse_infix state minimum =
-  let left = parse_application state in
+  let left = parse_unary state in
   let rec continue left =
     let token = current state in
     let name =
@@ -358,7 +430,7 @@ and parse_infix state minimum =
     in
     match Option.bind name operator_info with
     | Some (precedence, association) when precedence >= minimum ->
-      let _ = take state in
+      skip state;
       let next =
         match association with
         | Left -> precedence + 1
@@ -370,8 +442,34 @@ and parse_infix state minimum =
   in
   continue left
 
+(* Унарный минус сильнее бинарных операторов, но слабее применения: [-f x]
+   --- это [~- (f x)]. Минус перед целой константой сворачивается в
+   константу, как в OCaml; скобки прозрачны, [-(1)] тоже число. *)
+and parse_unary state =
+  match (current state).kind, peek state with
+  | Operator "-", Int digits when Option.is_none (int_of_string_opt digits) ->
+    skip state;
+    let token = take state in
+    Expr_constant (negative_int_constant token.offset digits)
+  | Operator "-", _ ->
+    skip state;
+    (match parse_unary state with
+     | Expr_constant (Const_int value) -> Expr_constant (Const_int (-value))
+     | expression -> Expr_app (Expr_ident "~-", expression))
+  | _ -> parse_application state
+
+(* [true], [false] и [()] для OCaml --- конструкторы, их применение к
+   нескольким аргументам не разбирается. Поэтому без скобок они не бывают
+   функцией: [true x] вне ядра, [(true) x] --- можно. *)
 and parse_application state =
+  let constructor =
+    match (current state).kind, peek state with
+    | (True | False), _ | Lparen, Rparen -> true
+    | _ -> false
+  in
   let first = parse_atom state in
+  if constructor && starts_atom (current state).kind
+  then fail (current state).offset "конструктор нельзя применить";
   let rec arguments function_ =
     if starts_atom (current state).kind
     then arguments (Expr_app (function_, parse_atom state))
@@ -385,78 +483,54 @@ and parse_atom state =
   | { kind = True; _ } -> Expr_constant (Const_bool true)
   | { kind = False; _ } -> Expr_constant (Const_bool false)
   | { kind = Ident name; _ } -> Expr_ident name
-  | { kind = Operator "-"; offset } ->
-    (match take state with
-     | { kind = Int digits; offset } ->
-       Expr_constant (negative_int_constant offset digits)
-     | token -> fail token.offset "после унарного - ожидалось целое число")
-  | { kind = Lparen; offset } -> parse_parenthesized_expression state offset
+  | { kind = Lparen; _ } -> parse_parenthesized_expression state
   | token -> fail token.offset "ожидалось выражение"
 
-and parse_parenthesized_expression state offset =
-  match (current state).kind with
-  | Rparen ->
-    let _ = take state in
-    Expr_constant Const_unit
-  | Equal ->
-    let _ = take state in
-    expect state Rparen;
-    Expr_ident "="
-  | Operator "-" ->
-    let _ = take state in
+and parse_parenthesized_expression state =
+  match parenthesized_operator state with
+  | Some name -> Expr_ident name
+  | None ->
     (match (current state).kind with
-     | Int digits ->
-       let token = take state in
+     | Rparen ->
+       skip state;
+       Expr_constant Const_unit
+     | _ ->
+       let expression = parse_expression state in
        expect state Rparen;
-       Expr_constant (negative_int_constant token.offset digits)
-     | Rparen ->
-       let _ = take state in
-       Expr_ident "-"
-     | _ -> fail (current state).offset "ожидалось число или закрывающая скобка")
-  | Operator name ->
-    let _ = take state in
-    expect state Rparen;
-    Expr_ident name
-  | _ ->
-    let first = parse_expression state in
-    (match (current state).kind with
-     | Rparen ->
-       let _ = take state in
-       first
-     | Comma ->
-       let _ = take state in
-       let second = parse_expression state in
-       let rec rest values =
-         match (current state).kind with
-         | Comma ->
-           let _ = take state in
-           rest (parse_expression state :: values)
-         | Rparen ->
-           let _ = take state in
-           List.rev values
-         | _ -> fail (current state).offset "ожидались запятая или закрывающая скобка"
-       in
-       Expr_tuple (first, second, rest [])
-     | _ -> fail offset "ожидались запятая или закрывающая скобка")
+       expression)
 ;;
 
+(* Позиция как у menhir-парсера: строка и колонка с единицы. *)
+let location source offset =
+  let before = String.sub source 0 (min offset (String.length source)) in
+  let line = List.length (String.split_on_char '\n' before) in
+  let line_start =
+    match String.rindex_opt before '\n' with
+    | Some index -> index + 1
+    | None -> 0
+  in
+  Printf.sprintf "%d:%d" line (offset - line_start + 1)
+;;
+
+(* Упёрлись в конец ввода --- сообщение то же, что у menhir-парсера. *)
 let run parse source =
+  let error offset message =
+    let message =
+      if offset >= String.length source then Lexicon.end_of_input_error else message
+    in
+    Error (Printf.sprintf "%s: %s" (location source offset) message)
+  in
   match lex source with
   | tokens ->
     let state = { tokens = Array.of_list tokens; index = 0 } in
     (try
        let result = parse state in
-       match (current state).kind with
-       | Eof -> Ok result
-       | _ ->
-         Error
-           (Printf.sprintf
-              "позиция %d: лишний текст после программы"
-              (current state).offset)
+       match current state with
+       | { kind = Eof; _ } -> Ok result
+       | { offset; _ } -> error offset "лишний текст после программы"
      with
-     | Parse_error message -> Error message
-     | Failure message -> Error ("не разбирается: " ^ message))
-  | exception Parse_error message -> Error message
+     | Parse_error (offset, message) -> error offset message)
+  | exception Parse_error (offset, message) -> error offset message
 ;;
 
 let parse_expr source = run parse_expression source
@@ -468,23 +542,9 @@ let parse_structure source =
          match (current state).kind with
          | Eof -> List.rev values
          | Let ->
-           let _ = take state in
-           let flag =
-             match (current state).kind with
-             | Rec ->
-               let _ = take state in
-               Recursive
-             | _ -> Non_recursive
-           in
-           let first = parse_value_binding state in
-           let rec bindings rest =
-             match (current state).kind with
-             | And ->
-               let _ = take state in
-               bindings (parse_value_binding state :: rest)
-             | _ -> List.rev rest
-           in
-           items (Structure_value (flag, first, bindings []) :: values)
+           skip state;
+           let flag, first, rest = parse_let_bindings state in
+           items (Structure_value (flag, first, rest) :: values)
          | _ -> fail (current state).offset "в структуре ожидалось let"
        in
        items [])

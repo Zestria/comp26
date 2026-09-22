@@ -7,12 +7,13 @@
   pprint
   menhir_parser
   menhir_lexer
+  lexicon
   menhir_frontend
   rd_parser)
  (modules_without_implementation parser_intf)
  ; Лексер и парсер бросают исключения; наружу торчит только Menhir_frontend,
- ; который переводит их в result.
- (private_modules menhir_parser menhir_lexer))
+ ; который переводит их в result. Lexicon --- общая кухня двух парсеров.
+ (private_modules lexicon menhir_parser menhir_lexer))
 
 (ocamllex menhir_lexer)
 
