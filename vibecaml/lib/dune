@@ -13,7 +13,10 @@
  (modules_without_implementation parser_intf)
  ; Лексер и парсер бросают исключения; наружу торчит только Menhir_frontend,
  ; который переводит их в result. Lexicon --- общая кухня двух парсеров.
- (private_modules lexicon menhir_parser menhir_lexer))
+ (private_modules lexicon menhir_parser menhir_lexer)
+ ; show на типах Ast: печать дерева для --dump-ast и отладки.
+ (preprocess
+  (pps ppx_deriving.show)))
 
 (ocamllex menhir_lexer)
 

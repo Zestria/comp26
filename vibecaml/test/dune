@@ -10,3 +10,10 @@
  (deps
   (env_var QCHECK_SEED))
  (libraries vibecaml compiler-libs.common qcheck-core))
+
+; Драйвер проверяется снаружи: запускаем настоящий бинарь и смотрим только на
+; stdout, stderr и код возврата.
+
+(cram
+ (package vibecaml)
+ (deps %{bin:vibecamlc}))

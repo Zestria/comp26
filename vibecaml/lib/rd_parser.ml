@@ -40,10 +40,6 @@ type state =
   ; mutable index : int
   }
 
-type associativity =
-  | Left
-  | Right
-
 (* Смещение в исходнике и описание. В строку «строка:колонка» смещение
    переводит [run]: так формат ошибок совпадает с menhir-парсером. *)
 exception Parse_error of int * string
@@ -52,11 +48,6 @@ let fail offset message = raise (Parse_error (offset, message))
 
 let is_space = function
   | ' ' | '\t' | '\n' | '\r' | '\012' -> true
-  | _ -> false
-;;
-
-let is_digit = function
-  | '0' .. '9' -> true
   | _ -> false
 ;;
 
@@ -150,7 +141,7 @@ let lex source =
       | ')' -> add Rparen (index + 1)
       | ',' -> add Comma (index + 1)
       | '0' .. '9' ->
-        let finish = take_while is_digit index in
+        let finish = take_while Lexicon.is_digit index in
         (* [1x], [1L], [0x1F], [1_000] и [1.5] для OCaml --- один литерал, а не
            число и что-то следом. *)
         let glued = take_while (fun c -> is_identifier_char c || c = '.') finish in
@@ -219,7 +210,7 @@ let negative_int_constant offset digits =
 (* Приоритеты — данные, а не ветви грамматики. В #5 эту таблицу можно будет
    заменить после чтения объявлений операторов. Уровни и ассоциативность ---
    как в OCaml. *)
-let operator_table =
+let operator_table : (string list * int * Lexicon.associativity) list =
   [ [ "||" ], 10, Right
   ; [ "&&" ], 20, Right
   ; [ "="; "<>"; "<"; "<="; ">"; ">=" ], 30, Left

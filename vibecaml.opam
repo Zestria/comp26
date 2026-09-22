@@ -2,7 +2,7 @@
 opam-version: "2.0"
 synopsis: "Компилятор подмножества OCaml"
 description:
-  "Учебный компилятор подмножества OCaml: два независимых синтаксических анализатора (нисходящий на комбинаторах и восходящий на menhir), вывод типов и кодогенерация под RISC-V."
+  "Учебный компилятор подмножества OCaml: два независимых синтаксических анализатора (нисходящий рекурсивным спуском и восходящий на menhir), вывод типов и кодогенерация под RISC-V."
 maintainer: ["Maintainer Name <maintainer@example.com>"]
 authors: ["Author Name <author@example.com>"]
 license: "LICENSE"
@@ -12,11 +12,10 @@ bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "ocaml" {>= "5.5"}
   "dune" {>= "3.24"}
-  "angstrom" {>= "0.16.0"}
   "menhir" {>= "20231231"}
-  "qcheck" {>= "0.21"}
+  "qcheck" {>= "0.21" & with-test}
   "ppx_deriving" {>= "5.2.1"}
-  "bisect_ppx_ng"
+  "bisect_ppx_ng" {with-test}
   "odoc" {with-doc}
 ]
 build: [
