@@ -40,10 +40,6 @@ type state =
   ; mutable index : int
   }
 
-type associativity =
-  | Left
-  | Right
-
 (* Смещение в исходнике и описание. В строку «строка:колонка» смещение
    переводит [run]: так формат ошибок совпадает с menhir-парсером. *)
 exception Parse_error of int * string
@@ -219,7 +215,7 @@ let negative_int_constant offset digits =
 (* Приоритеты — данные, а не ветви грамматики. В #5 эту таблицу можно будет
    заменить после чтения объявлений операторов. Уровни и ассоциативность ---
    как в OCaml. *)
-let operator_table =
+let operator_table : (string list * int * Lexicon.associativity) list =
   [ [ "||" ], 10, Right
   ; [ "&&" ], 20, Right
   ; [ "="; "<>"; "<"; "<="; ">"; ">=" ], 30, Left
