@@ -51,11 +51,6 @@ let is_space = function
   | _ -> false
 ;;
 
-let is_digit = function
-  | '0' .. '9' -> true
-  | _ -> false
-;;
-
 let is_identifier_char = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '\'' -> true
   | _ -> false
@@ -146,7 +141,7 @@ let lex source =
       | ')' -> add Rparen (index + 1)
       | ',' -> add Comma (index + 1)
       | '0' .. '9' ->
-        let finish = take_while is_digit index in
+        let finish = take_while Lexicon.is_digit index in
         (* [1x], [1L], [0x1F], [1_000] и [1.5] для OCaml --- один литерал, а не
            число и что-то следом. *)
         let glued = take_while (fun c -> is_identifier_char c || c = '.') finish in

@@ -66,6 +66,11 @@ let binary_operators =
 
 let operators = List.concat_map fst binary_operators
 
+let is_digit = function
+  | '0' .. '9' -> true
+  | _ -> false
+;;
+
 let reserved_error word = Printf.sprintf "ключевое слово %s вне подмножества" word
 
 let constructor_error name =

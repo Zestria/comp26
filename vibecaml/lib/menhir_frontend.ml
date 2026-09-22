@@ -10,11 +10,6 @@ let location { Lexing.pos_lnum; pos_bol; pos_cnum; _ } =
   Printf.sprintf "%d:%d" pos_lnum (pos_cnum - pos_bol + 1)
 ;;
 
-let is_digit = function
-  | '0' .. '9' -> true
-  | _ -> false
-;;
-
 let run entry source =
   let lexbuf = Lexing.from_string source in
   match entry Menhir_lexer.token lexbuf with
@@ -28,7 +23,8 @@ let run entry source =
      (* Модуль [min_int] лексер отдаёт токеном: он допустим после минуса.
         Если парсер споткнулся о него, это переполнение, как у rd-парсера. *)
      | lexeme
-       when Option.is_none (int_of_string_opt lexeme) && String.for_all is_digit lexeme ->
+       when Option.is_none (int_of_string_opt lexeme)
+            && String.for_all Lexicon.is_digit lexeme ->
        Error (Printf.sprintf "%s: %s" position (Lexicon.int_overflow_error lexeme))
      | lexeme -> Error (Printf.sprintf "%s: синтаксическая ошибка у %S" position lexeme))
 ;;

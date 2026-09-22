@@ -26,6 +26,9 @@ val binary_operators : (string list * associativity) list
 (** Все бинарные операторы подмножества, в том числе словесные ([mod], [lsl], …). *)
 val operators : string list
 
+(** Десятичная цифра [0]–[9]: из них состоит целая константа подмножества. *)
+val is_digit : char -> bool
+
 (** Сообщения об ошибках, одинаковые в обоих парсерах. *)
 
 val reserved_error : string -> string
