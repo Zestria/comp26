@@ -46,7 +46,7 @@ let binary_operator name =
     Lexicon.binary_operators
 ;;
 
-let binary_operators = Lexicon.operators
+let binary_operators = List.map fst Lexicon.binary_operators
 
 type shape =
   | Binary of identifier * int * Lexicon.associativity * expression * expression
@@ -184,14 +184,13 @@ and pp_bare ~tail ppf expression =
       (first, rest)
       (pp_at ~level:tuple_level ~tail)
       body
-  (* Ветка [then] без кортежа: [if a then b, c else d] OCaml не разбирает. *)
   | Other, Expr_if (condition, then_branch, else_branch) ->
     Format.fprintf
       ppf
       "if %a then %a else %a"
       (pp_at ~level:tuple_level ~tail:true)
       condition
-      (pp_at ~level:open_level ~tail:true)
+      (pp_at ~level:tuple_level ~tail:true)
       then_branch
       (pp_at ~level:tuple_level ~tail)
       else_branch

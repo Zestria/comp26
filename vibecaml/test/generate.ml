@@ -9,7 +9,7 @@
 open Vibecaml.Ast
 
 let names = [ "x"; "y"; "f"; "k"; "fack"; "x'"; "_a"; "x1" ]
-let core_identifiers = names @ Vibecaml.Pprint.binary_operators
+let core_identifiers = names @ List.concat Vibecaml.Pprint.binary_operators
 let wide_identifiers = core_identifiers @ [ "~-"; "!"; "!="; ":="; "@@"; "##"; "or" ]
 
 open QCheck.Gen
@@ -65,8 +65,22 @@ let expression identifiers =
   let pattern = pattern identifiers in
   (* Отдельная ветка под оператор: из случайного [Expr_app] цепочки вроде
      [a ** b ** c] почти не складываются, и приоритеты остаются без проверки. *)
-  let operator =
-    oneof_list (List.filter (fun name -> not (List.mem name names)) identifiers)
+  (* Сначала уровень, потом оператор в нём: иначе одиночные [||] и [&&] из
+     двух десятков операторов почти не встречаются. Прочие операторы из
+     [identifiers] --- отдельной группой. *)
+  let operators = List.filter (fun name -> not (List.mem name names)) identifiers in
+  let levels = Vibecaml.Pprint.binary_operators in
+  let others =
+    List.filter (fun name -> not (List.exists (List.mem name) levels)) operators
+  in
+  let groups = List.filter (fun group -> group <> []) (others :: levels) in
+  let operator = oneof (List.map oneof_list groups) in
+  (* Два оператора одного уровня подряд: на них видна ассоциативность. *)
+  let same_level_pair =
+    oneof_list groups >>= fun group -> pair (oneof_list group) (oneof_list group)
+  in
+  let binary operator left right =
+    Expr_app (Expr_app (Expr_ident operator, left), right)
   in
   sized_size (int_bound 20)
   @@ fix (fun self size ->
@@ -83,12 +97,15 @@ let expression identifiers =
       oneof
         [ leaf
         ; map unary_minus child
+        ; map3 binary operator child child
         ; map3
-            (fun operator left right ->
-               Expr_app (Expr_app (Expr_ident operator, left), right))
-            operator
-            child
-            child
+            (fun (outer, inner) (a, b, c) nested_left ->
+               if nested_left
+               then binary outer (binary inner a b) c
+               else binary outer a (binary inner b c))
+            same_level_pair
+            (triple child child child)
+            bool
         ; map2 (fun f a -> Expr_app (f, a)) child child
         ; map3 (fun c t e -> Expr_if (c, t, e)) child child child
         ; map3 (fun a b rest -> Expr_tuple (a, b, rest)) child child (short_list child)

@@ -24,23 +24,45 @@ let assert_equal expected actual =
   then fail "ожидалось:\n%s\nполучено:\n%s" expected actual
 ;;
 
-(* Вывод печатается точно так, и OCaml разбирает его обратно в то же дерево. *)
-let check_expression expected expression =
-  let printed = Pprint.string_of_expression expression in
-  assert_equal expected printed;
-  match Reparse.expression printed with
-  | Ok reparsed when reparsed = expression -> ()
-  | Ok _ -> fail "переразбирается в другое дерево: %s" printed
-  | Error message -> fail "%s\n%s" message printed
+let reparses print parsers printed tree =
+  List.iter
+    (fun (name, parse) ->
+       match parse printed with
+       | Ok reparsed when reparsed = tree -> ()
+       | Ok reparsed -> fail "%s: %s\nразобрано как\n%s" name printed (print reparsed)
+       | Error message -> fail "%s: %s\n%s" name message printed)
+    parsers
 ;;
 
-let check_structure expected structure =
-  let printed = Pprint.string_of_structure structure in
+let check print parsers expected tree =
+  let printed = print tree in
   assert_equal expected printed;
-  match Reparse.structure printed with
-  | Ok reparsed when reparsed = structure -> ()
-  | Ok _ -> fail "переразбирается в другое дерево:\n%s" printed
-  | Error message -> fail "%s\n%s" message printed
+  reparses print parsers printed tree
+;;
+
+(* Дерево ядра печатается точно так, и OCaml и оба наших парсера разбирают вывод
+   обратно в то же дерево. *)
+let check_expression =
+  check
+    Pprint.string_of_expression
+    [ "ocaml", Reparse.expression
+    ; "menhir", Menhir_frontend.parse_expr
+    ; "rd", Rd_parser.parse_expr
+    ]
+;;
+
+(* Шире ядра: такие операторы принимает только OCaml. *)
+let check_wide_expression =
+  check Pprint.string_of_expression [ "ocaml", Reparse.expression ]
+;;
+
+let check_structure =
+  check
+    Pprint.string_of_structure
+    [ "ocaml", Reparse.structure
+    ; "menhir", Menhir_frontend.parse_structure
+    ; "rd", Rd_parser.parse_structure
+    ]
 ;;
 
 let () =
@@ -89,19 +111,19 @@ let () =
   check_expression "1 - (2 - 3)" (binary "-" (int 1) (binary "-" (int 2) (int 3)));
   check_expression "(2 ** 3) ** 4" (binary "**" (binary "**" (int 2) (int 3)) (int 4));
   check_expression "2 ** 3 ** 4" (binary "**" (int 2) (binary "**" (int 3) (int 4)));
-  check_expression "( @@ ) f x" (binary "@@" (var "f") (var "x"));
+  check_wide_expression "( @@ ) f x" (binary "@@" (var "f") (var "x"));
   check_expression "-x ** 2" (binary "**" (app (var "~-") [ var "x" ]) (int 2));
   check_expression "-(x ** 2)" (app (var "~-") [ binary "**" (var "x") (int 2) ]);
   check_expression
     "- -f x"
     (app (var "~-") [ app (var "~-") [ app (var "f") [ var "x" ] ] ]);
-  check_expression "( ~- ) 1" (app (var "~-") [ int 1 ]);
+  check_wide_expression "( ~- ) 1" (app (var "~-") [ int 1 ]);
   check_expression "1 + -1" (binary "+" (int 1) (int (-1)));
   check_expression
     "(fun x -> x) (if a then b else c)"
     (app (Expr_fun (Pat_var "x", [], var "x")) [ Expr_if (var "a", var "b", var "c") ]);
   check_expression
-    "if a then (b, c) else d, e"
+    "if a then b, c else d, e"
     (Expr_if
        (var "a", Expr_tuple (var "b", var "c", []), Expr_tuple (var "d", var "e", [])));
   check_expression
@@ -120,6 +142,80 @@ let () =
          }
        , []
        , var "a" ))
+;;
+
+(* Краевые случаи, которые свойство может не заметить: лексические склейки,
+   свёртка минуса перед константой, min_int рядом с известным отличием ADR. *)
+let () =
+  let x = var "x"
+  and y = var "y"
+  and f = var "f" in
+  let neg operand = app (var "~-") [ operand ] in
+  let if_ condition then_branch else_branch =
+    Expr_if (condition, then_branch, else_branch)
+  in
+  (* Минус перед применением константы --- не константа. *)
+  check_expression "-1 x" (neg (app (int 1) [ x ]));
+  check_expression "(-1) x" (app (int (-1)) [ x ]);
+  check_expression "-(-1) x" (neg (app (int (-1)) [ x ]));
+  check_expression "-(-4611686018427387904 ** x)" (neg (binary "**" (int min_int) x));
+  check_expression "-(-4611686018427387904) x" (neg (app (int min_int) [ x ]));
+  (* Пробелы: иначе [--], [<-] и [->-] --- другие токены. *)
+  check_expression "x - -1" (binary "-" x (int (-1)));
+  check_expression "x < -1" (binary "<" x (int (-1)));
+  check_expression "fun _ -> -1" (Expr_fun (Pat_wildcard, [], int (-1)));
+  (* [( *] открывает комментарий, [mod] без скобок --- ключевое слово. *)
+  check_expression "( * )" (var "*");
+  check_expression "( mod )" (var "mod");
+  check_expression
+    "if f then if x then y else x, y else f"
+    (if_ f (if_ x y (Expr_tuple (x, y, []))) f);
+  check_expression "if if x then y else f then x else y" (if_ (if_ x y f) x y);
+  check_expression
+    "let f x (-1) (x, y) _ () true 0 = x in f"
+    (Expr_let
+       ( Non_recursive
+       , binding
+           "f"
+           (Expr_fun
+              ( Pat_var "x"
+              , [ Pat_constant (Const_int (-1))
+                ; Pat_tuple (Pat_var "x", Pat_var "y", [])
+                ; Pat_wildcard
+                ; Pat_constant Const_unit
+                ; Pat_constant (Const_bool true)
+                ; Pat_constant (Const_int 0)
+                ]
+              , x ))
+       , []
+       , f ));
+  (* Хвост объявления не забирает следующий [let] или [and]. *)
+  let item first rest = Structure_value (Non_recursive, first, rest) in
+  check_structure
+    "let f = fun _ -> x\nlet y = 1"
+    [ item (binding "f" (Expr_fun (Pat_wildcard, [], x))) []
+    ; item (binding "y" (int 1)) []
+    ];
+  check_structure
+    "let y = let x = 1 in x\nlet f = y"
+    [ item (binding "y" (Expr_let (Non_recursive, binding "x" (int 1), [], x))) []
+    ; item (binding "f" y) []
+    ];
+  check_structure
+    "let y = f x\nlet x = 1"
+    [ item (binding "y" (app f [ x ])) []; item (binding "x" (int 1)) [] ];
+  check_structure
+    "let f = fun () -> let y = x in y and y = 1"
+    [ item
+        (binding
+           "f"
+           (Expr_fun
+              (Pat_constant Const_unit, [], Expr_let (Non_recursive, binding "y" x, [], y))))
+        [ binding "y" (int 1) ]
+    ];
+  check_structure
+    "let ( + ) x y = x - y"
+    [ item (binding "+" (Expr_fun (Pat_var "x", [ Pat_var "y" ], binary "-" x y))) [] ]
 ;;
 
 let () =
