@@ -39,20 +39,20 @@ let test_constants_and_patterns () =
   check_pattern "wildcard pattern" "_" PWildcard
 ;;
 
-(** Checks that precedence and associativity introduce only required parentheses. *)
-let test_operator_precedence () =
+(** Checks that nested binary operations are always rendered unambiguously. *)
+let test_binary_operations () =
   let a = var "a"
   and b = var "b"
   and c = var "c"
   and d = var "d" in
   check_expr
-    "mixed precedence"
+    "nested mixed operators"
     "(a + b) * (c - d)"
     (infix "*" (infix "+" a b) (infix "-" c d));
-  check_expr "left associativity" "a - b - c" (infix "-" (infix "-" a b) c);
+  check_expr "left nesting" "(a - b) - c" (infix "-" (infix "-" a b) c);
   check_expr "right operand grouping" "a - (b - c)" (infix "-" a (infix "-" b c));
-  check_expr "prefix precedence" "not (a && b)" (prefix "not" (infix "&&" a b));
-  check_expr "operator as a value" "(++) a b" (application (var "++") [ a; b ])
+  check_expr "nested binary argument" "not (a && b)" (prefix "not" (infix "&&" a b));
+  check_expr "custom binary operator" "a ++ b" (application (var "++") [ a; b ])
 ;;
 
 (** Checks compact rendering of curried functions and compound arguments. *)
@@ -117,7 +117,7 @@ let run name test =
 
 let () =
   run "constants and patterns" test_constants_and_patterns;
-  run "operator precedence" test_operator_precedence;
+  run "binary operations" test_binary_operations;
   run "functions and applications" test_functions_and_applications;
   run "local bindings" test_local_bindings;
   run "complete program" test_program
