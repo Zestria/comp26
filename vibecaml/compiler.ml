@@ -44,8 +44,9 @@ let fail message =
   exit 1
 ;;
 
-(* Без флагов дампа печатаем программу принтером, как раньше. *)
-let print_structure config structure =
+(* Без флагов дампа печатаем программу принтером: такой вывод легко читать и
+   сравнивать между парсерами. *)
+let print_outputs config structure =
   let { Config.dump_ast; dump_pretty_printed; _ } = config in
   if dump_ast then Format.printf "%a@." Ast.pp_structure structure;
   if dump_pretty_printed || not dump_ast
@@ -57,7 +58,7 @@ let run config =
   let* () = check_extensions config in
   let* source = read_source config.Config.input_file in
   let* structure = parse_structure config source in
-  Ok (print_structure config structure)
+  Ok (print_outputs config structure)
 ;;
 
 let () =

@@ -98,3 +98,7 @@
   $ vibecamlc --ext-operator-declarations --ext-glued-keywords missing.ml
   vibecaml: расширение --ext-glued-keywords пока не реализовано
   [1]
+
+  $ vibecamlc --parser menhir --ext-operator-declarations --ext-glued-keywords missing.ml
+  vibecaml: расширение --ext-glued-keywords не поддерживается в menhir-парсере
+  [1]
