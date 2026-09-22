@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Source positions use zero-based byte offsets and one-based lines and columns. *)
 
 type point =
@@ -5,14 +13,14 @@ type point =
   ; line : int (** One-based line number. *)
   ; column : int (** One-based byte column within [line]. *)
   }
-[@@deriving eq, show { with_path = false }]
+[@@deriving show { with_path = false }]
 
 (** A half-open source range: [start] is included and [finish] is excluded. *)
 type span =
   { start : point
   ; finish : point
   }
-[@@deriving eq, show { with_path = false }]
+[@@deriving show { with_path = false }]
 
 let of_lexing_position position =
   { offset = position.Lexing.pos_cnum

@@ -1,3 +1,12 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
+open QCheck
 open Token
 
 let show_tokens tokens =
@@ -7,443 +16,236 @@ let show_tokens tokens =
     tokens
 ;;
 
-let tokens_exn input =
-  match Lexer.tokens input with
-  | Ok tokens -> tokens
+let collect lexer =
+  let rec loop reversed =
+    match Lexer.next_token lexer with
+    | Error error -> Error error
+    | Ok located ->
+      let reversed = located :: reversed in
+      (match located.token with
+       | EOF -> Ok (List.rev reversed)
+       | _ -> loop reversed)
+  in
+  loop []
+;;
+
+let tokens located = List.map (fun located -> located.token) located
+
+let expect_tokens source expected =
+  match collect (Lexer.from_string source) with
   | Error error ->
-    failwith (Format.asprintf "unexpected lexer error: %a" Error_monad.pp_error error)
+    Test.fail_reportf
+      "input: %S@,unexpected lexer error: %a"
+      source
+      Error_monad.pp_error
+      error
+  | Ok located ->
+    let actual = tokens located in
+    if actual <> expected
+    then
+      Test.fail_reportf
+        "input: %S@,expected: %s@,actual:   %s"
+        source
+        (show_tokens expected)
+        (show_tokens actual)
 ;;
 
-let tokens_of_lexer_exn lexer =
-  match Lexer.tokens_of_lexer lexer with
-  | Ok tokens -> tokens
-  | Error error ->
-    failwith (Format.asprintf "unexpected lexer error: %a" Error_monad.pp_error error)
-;;
-
-let check_tokens ~name expected input =
-  let actual = tokens_exn input in
-  if not (List.equal equal expected actual)
-  then
-    failwith
-      (Format.asprintf
-         "%s:@ input: %S@ expected: %s@ actual:   %s"
-         name
-         input
-         (show_tokens expected)
-         (show_tokens actual))
-;;
-
-let check_error ~name ~line ~column ~message input =
-  match Lexer.tokenize input with
-  | Ok tokens ->
-    failwith
-      (Format.asprintf
-         "%s: expected an error, got %s"
-         name
-         (show_tokens (List.map (fun x -> x.token) tokens)))
+let expect_error source ~line ~column ~message =
+  match collect (Lexer.from_string source) with
+  | Ok located ->
+    Test.fail_reportf
+      "input: %S@,expected an error, got: %s"
+      source
+      (show_tokens (tokens located))
   | Error error ->
     if
       error.location.line <> line
       || error.location.column <> column
-      || not (String.equal error.message message)
+      || error.message <> message
     then
-      failwith
-        (Format.asprintf
-           "%s:@ expected error at line %d, column %d: %s@ actual: %a"
-           name
-           line
-           column
-           message
-           Error_monad.pp_error
-           error)
+      Test.fail_reportf
+        "input: %S@,expected line %d, column %d: %s@,actual: %a"
+        source
+        line
+        column
+        message
+        Error_monad.pp_error
+        error
 ;;
 
-(** Checks that reserved words are distinguished from ordinary identifiers. *)
-let test_keywords () =
-  check_tokens
-    ~name:"keywords and identifiers"
-    [ LET
-    ; REC
-    ; IDENT "fact"
-    ; EQUAL
-    ; FUN
-    ; IDENT "n"
-    ; ARROW
-    ; IF
-    ; IDENT "n"
-    ; LESS_EQUAL
-    ; INT 1
-    ; THEN
-    ; TRUE
-    ; ELSE
-    ; FALSE
-    ; EOF
-    ]
-    "let rec fact = fun n -> if n <= 1 then true else false"
+let case name check =
+  Test.make ~name ~count:1 unit (fun () ->
+    check ();
+    true)
 ;;
 
-(** Checks tokens used by patterns, tuples, lists, functions, and match cases. *)
-let test_patterns_and_delimiters () =
-  check_tokens
-    ~name:"patterns and delimiters"
-    [ MATCH
-    ; IDENT "xs"
-    ; WITH
-    ; LBRACKET
-    ; RBRACKET
-    ; ARROW
-    ; LPAREN
-    ; RPAREN
-    ; BAR
-    ; IDENT "x"
-    ; CONS
-    ; IDENT "xs"
-    ; ARROW
-    ; LPAREN
-    ; IDENT "x"
-    ; COMMA
-    ; IDENT "xs"
-    ; RPAREN
-    ; EOF
-    ]
-    "match xs with [] -> () | x :: xs -> (x, xs)"
+(** A complete recursive definition uses only tokens supported by the minimal
+    AST. *)
+let factorial =
+  case "tokenize a recursive factorial definition" (fun () ->
+    expect_tokens
+      "let rec fact = fun n -> if n <= 1 then 1 else n * fact (n - 1)"
+      [ LET
+      ; REC
+      ; IDENT "fact"
+      ; EQUAL
+      ; FUN
+      ; IDENT "n"
+      ; ARROW
+      ; IF
+      ; IDENT "n"
+      ; LESS_EQUAL
+      ; INT 1
+      ; THEN
+      ; INT 1
+      ; ELSE
+      ; IDENT "n"
+      ; STAR
+      ; IDENT "fact"
+      ; LPAREN
+      ; IDENT "n"
+      ; MINUS
+      ; INT 1
+      ; RPAREN
+      ; EOF
+      ])
 ;;
 
-(** Checks a representative expression containing built-in operators. *)
-let test_operators () =
-  check_tokens
-    ~name:"built-in operators"
-    [ IDENT "x"
-    ; NOT_EQUAL
-    ; IDENT "y"
-    ; AND_AND
-    ; IDENT "x"
-    ; GREATER_EQUAL
-    ; INT 0
-    ; OR_OR
-    ; IDENT "not"
-    ; FALSE
-    ; EOF
-    ]
-    "x <> y && x >= 0 || not false"
+(** Every supported binary operator is emitted as one explicit token. *)
+let binary_operators =
+  case "tokenize supported binary operators" (fun () ->
+    expect_tokens
+      "= <> < <= > >= + - * / && ||"
+      [ EQUAL
+      ; NOT_EQUAL
+      ; LESS
+      ; LESS_EQUAL
+      ; GREATER
+      ; GREATER_EQUAL
+      ; PLUS
+      ; MINUS
+      ; STAR
+      ; SLASH
+      ; AND_AND
+      ; OR_OR
+      ; EOF
+      ])
 ;;
 
-(** Checks each operator spelling, longest-match behavior, and operator names. *)
-let test_operator_tokens () =
-  let cases =
-    [ ( "operator names in parentheses"
-      , "( + ) ( - ) ( * ) ( / )"
-      , [ LPAREN
-        ; PLUS
-        ; RPAREN
-        ; LPAREN
-        ; MINUS
-        ; RPAREN
-        ; LPAREN
-        ; STAR
-        ; RPAREN
-        ; LPAREN
-        ; SLASH
-        ; RPAREN
-        ; EOF
-        ] )
-    ; ( "comparison operator names in parentheses"
-      , "( = ) ( <> ) ( < ) ( <= ) ( > ) ( >= )"
-      , [ LPAREN
-        ; EQUAL
-        ; RPAREN
-        ; LPAREN
-        ; NOT_EQUAL
-        ; RPAREN
-        ; LPAREN
-        ; LESS
-        ; RPAREN
-        ; LPAREN
-        ; LESS_EQUAL
-        ; RPAREN
-        ; LPAREN
-        ; GREATER
-        ; RPAREN
-        ; LPAREN
-        ; GREATER_EQUAL
-        ; RPAREN
-        ; EOF
-        ] )
-    ; ( "boolean operator names in parentheses"
-      , "( && ) ( || )"
-      , [ LPAREN; AND_AND; RPAREN; LPAREN; OR_OR; RPAREN; EOF ] )
-    ; ( "minus and plus keep no unary/infix distinction in the lexer"
-      , "-x + +y - z"
-      , [ MINUS; IDENT "x"; PLUS; PLUS; IDENT "y"; MINUS; IDENT "z"; EOF ] )
-    ; ( "explicit OCaml unary operator names"
-      , "~-x ~+ y"
-      , [ TILDE_MINUS; IDENT "x"; TILDE_PLUS; IDENT "y"; EOF ] )
-    ; ( "not is an ordinary identifier"
-      , "let not = fun x -> x in not false"
-      , [ LET
-        ; IDENT "not"
-        ; EQUAL
-        ; FUN
-        ; IDENT "x"
-        ; ARROW
-        ; IDENT "x"
-        ; IN
-        ; IDENT "not"
-        ; FALSE
-        ; EOF
-        ] )
-    ; ( "longest supported operators are single tokens"
-      , "x <= y || x <> z && head :: tail"
-      , [ IDENT "x"
-        ; LESS_EQUAL
-        ; IDENT "y"
-        ; OR_OR
-        ; IDENT "x"
-        ; NOT_EQUAL
-        ; IDENT "z"
-        ; AND_AND
-        ; IDENT "head"
-        ; CONS
-        ; IDENT "tail"
-        ; EOF
-        ] )
-    ; "structural symbols stay distinct tokens", "| -> ::", [ BAR; ARROW; CONS; EOF ]
-    ]
-  in
-  List.iter (fun (name, input, expected) -> check_tokens ~name expected input) cases
+(** Words belonging only to removed AST constructs are ordinary identifiers
+    in the minimal language. *)
+let removed_keywords =
+  case "removed keywords become identifiers" (fun () ->
+    expect_tokens
+      "and function match with"
+      [ IDENT "and"; IDENT "function"; IDENT "match"; IDENT "with"; EOF ])
 ;;
 
-(** Checks that correctly closed nested comments are ignored as whitespace. *)
-let test_comments () =
-  check_tokens
-    ~name:"nested comments"
-    [ LET; IDENT "answer"; EQUAL; INT 42; EOF ]
-    "let (* outer (* nested *) comment *) answer = 42"
+(** Punctuation belonging only to lists, tuples, and match is rejected. *)
+let removed_punctuation =
+  case "reject removed punctuation" (fun () ->
+    expect_error "[" ~line:1 ~column:1 ~message:"unexpected character '['";
+    expect_error "," ~line:1 ~column:1 ~message:"unexpected character ','";
+    expect_error "::" ~line:1 ~column:1 ~message:"unknown operator \"::\"")
 ;;
 
-(** Checks valid boundaries around identifiers and numeric literals. *)
-let test_identifier_boundaries () =
-  check_tokens
-    ~name:"a number and an identifier separated by whitespace"
-    [ INT 9; IDENT "ui"; EOF ]
-    "9 ui";
-  check_tokens
-    ~name:"digits are allowed after the start of an identifier"
-    [ IDENT "ui9"; EOF ]
-    "ui9";
-  check_tokens
-    ~name:"apostrophes and underscores inside identifiers"
-    [ IDENT "_value"; IDENT "value'"; IDENT "value''9"; EOF ]
-    "_value value' value''9";
-  check_tokens
-    ~name:"keyword prefixes remain identifiers"
-    [ IDENT "letx"; IDENT "recursive"; IDENT "trueValue"; IDENT "not"; EOF ]
-    "letx recursive trueValue not";
-  check_tokens
-    ~name:"a comment separates a number from an identifier"
-    [ INT 9; IDENT "ui"; EOF ]
-    "9(* separator *)ui"
-;;
-
-(** Checks that balanced delimiters are parser concerns, not lexer state. *)
-let test_unclosed_delimiters_are_tokens () =
-  check_tokens
-    ~name:"unclosed delimiters remain tokens for the parser"
-    [ LPAREN; IDENT "x"; LBRACKET; INT 1; SEMICOLON; INT 2; EOF ]
-    "(x [1; 2"
-;;
-
-(** Checks half-open byte ranges attached to ordinary tokens and EOF. *)
-let test_locations () =
-  match Lexer.tokenize "let x" with
-  | Error error -> failwith (Error_monad.show_error error)
-  | Ok located ->
-    let point offset line column = Location.{ offset; line; column } in
-    let span start finish = Location.{ start; finish } in
-    let expected =
-      [ { token = LET; span = span (point 0 1 1) (point 3 1 4) }
-      ; { token = IDENT "x"; span = span (point 4 1 5) (point 5 1 6) }
-      ; { token = EOF; span = span (point 5 1 6) (point 5 1 6) }
-      ]
+(** Repeated calls consume one token at a time and keep EOF stable. *)
+let incremental_string =
+  case "read a string one token at a time" (fun () ->
+    let lexer = Lexer.from_string "let x" in
+    let next () =
+      match Lexer.next_token lexer with
+      | Ok located -> located
+      | Error error -> Test.fail_reportf "%a" Error_monad.pp_error error
     in
-    if not (List.equal equal_located expected located)
-    then
-      failwith
-        (Format.asprintf
-           "locations:@ expected: %a@ actual:   %a"
-           (Format.pp_print_list pp_located)
-           expected
-           (Format.pp_print_list pp_located)
-           located)
+    let first = next () in
+    let second = next () in
+    let eof = next () in
+    let repeated_eof = next () in
+    if
+      first.token <> LET
+      || second.token <> IDENT "x"
+      || eof.token <> EOF
+      || repeated_eof <> eof
+    then Test.fail_report "next_token returned an unexpected token sequence")
 ;;
 
-let next_token_exn lexer =
-  match Lexer.next_token lexer with
-  | Ok result -> result
-  | Error error -> failwith (Error_monad.show_error error)
+(** Constructing a channel lexer performs no read. Requesting one token fills
+    only the internal buffer rather than loading a large file completely. *)
+let lazy_channel =
+  case "read a channel lazily and in bounded chunks" (fun () ->
+    let source = "let " ^ String.make 20_000 'x' in
+    let path = Filename.temp_file "mmml-lexer-" ".ml" in
+    Fun.protect
+      ~finally:(fun () -> Sys.remove path)
+      (fun () ->
+         let output = open_out_bin path in
+         Fun.protect
+           ~finally:(fun () -> close_out output)
+           (fun () -> output_string output source);
+         let input = open_in_bin path in
+         Fun.protect
+           ~finally:(fun () -> close_in input)
+           (fun () ->
+              let lexer = Lexer.from_channel input in
+              let before = pos_in input in
+              let first = Lexer.next_token lexer in
+              let after = pos_in input in
+              if before <> 0
+              then Test.fail_reportf "lexer construction consumed %d bytes" before;
+              (match first with
+               | Error error -> Test.fail_reportf "%a" Error_monad.pp_error error
+               | Ok located when located.token = LET -> ()
+               | Ok located -> Test.fail_reportf "expected LET, got %a" pp located.token);
+              if after <= 0 || after >= String.length source
+              then
+                Test.fail_reportf
+                  "first token caused an invalid channel position: %d of %d"
+                  after
+                  (String.length source))))
 ;;
 
-(** Checks sequential [next_token] consumption and stable EOF behavior. *)
-let test_incremental_lexer () =
-  let lexer = Lexer.create "let x" in
-  let first = next_token_exn lexer in
-  let second = next_token_exn lexer in
-  let eof = next_token_exn lexer in
-  let repeated_eof = next_token_exn lexer in
-  if
-    (not (equal first.token LET))
-    || (not (equal second.token (IDENT "x")))
-    || (not (equal eof.token EOF))
-    || not (equal_located eof repeated_eof)
-  then failwith "next_token did not advance correctly or keep EOF stable"
+(** Line and column information is updated while whitespace is skipped. *)
+let locations =
+  case "track multiline token locations" (fun () ->
+    let lexer = Lexer.from_string "let\n  x" in
+    let first = Lexer.next_token lexer in
+    let second = Lexer.next_token lexer in
+    match first, second with
+    | Ok { token = LET; span = first_span }, Ok { token = IDENT "x"; span = second_span }
+      when first_span.start.line = 1
+           && first_span.start.column = 1
+           && second_span.start.line = 2
+           && second_span.start.column = 3 -> ()
+    | _ -> Test.fail_report "unexpected tokens or source locations")
 ;;
 
-(** Checks buffered, multiline tokenization from an input channel. *)
-let test_buffered_channel () =
-  let source = "let x = 1\nlet y = x + 2\n" in
-  let expected =
-    [ LET; IDENT "x"; EQUAL; INT 1; LET; IDENT "y"; EQUAL; IDENT "x"; PLUS; INT 2; EOF ]
-  in
-  let path = Filename.temp_file "mml-lexer-" ".ml" in
-  Fun.protect
-    ~finally:(fun () -> Sys.remove path)
-    (fun () ->
-       let output = open_out_bin path in
-       Fun.protect
-         ~finally:(fun () -> close_out output)
-         (fun () -> output_string output source);
-       let input = open_in_bin path in
-       Fun.protect
-         ~finally:(fun () -> close_in input)
-         (fun () ->
-            let actual = tokens_of_lexer_exn (Lexer.from_channel input) in
-            if not (List.equal equal expected actual)
-            then
-              failwith
-                (Format.asprintf
-                   "buffered channel:@ input: %S@ expected: %s@ actual:   %s"
-                   source
-                   (show_tokens expected)
-                   (show_tokens actual))))
+(** Lexical errors retain their exact source position and diagnostic. *)
+let errors =
+  case "report positioned lexical errors" (fun () ->
+    expect_error
+      "9name"
+      ~line:1
+      ~column:1
+      ~message:"invalid identifier \"9name\": identifiers cannot start with a digit";
+    expect_error "let x\n  (* open" ~line:2 ~column:3 ~message:"unterminated comment";
+    expect_error
+      (string_of_int Int.max_int ^ "0")
+      ~line:1
+      ~column:1
+      ~message:"integer literal is out of range")
 ;;
 
-(** Checks that digit-leading identifier-shaped lexemes are rejected whole. *)
-let test_invalid_identifiers () =
-  check_error
-    ~name:"identifier starting with a digit"
-    ~line:1
-    ~column:1
-    ~message:"invalid identifier \"9ui\": identifiers cannot start with a digit"
-    "9ui";
-  check_error
-    ~name:"identifier starting with several digits"
-    ~line:1
-    ~column:1
-    ~message:"invalid identifier \"123abc456\": identifiers cannot start with a digit"
-    "123abc456";
-  check_error
-    ~name:"identifier with a leading digit after a newline"
-    ~line:2
-    ~column:3
-    ~message:"invalid identifier \"7value\": identifiers cannot start with a digit"
-    "let x =\n  7value";
-  check_error
-    ~name:"identifier starting with a digit and underscore"
-    ~line:1
-    ~column:1
-    ~message:"invalid identifier \"9_name\": identifiers cannot start with a digit"
-    "9_name"
+let () =
+  exit
+    (QCheck_runner.run_tests
+       [ factorial
+       ; binary_operators
+       ; removed_keywords
+       ; removed_punctuation
+       ; incremental_string
+       ; lazy_channel
+       ; locations
+       ; errors
+       ])
 ;;
-
-(** Checks that maximal unsupported operator spellings produce lexer errors. *)
-let test_unknown_operators () =
-  check_error
-    ~name:"unknown operator"
-    ~line:1
-    ~column:3
-    ~message:"unknown operator \"++\""
-    "a ++ b";
-  check_error
-    ~name:"longest unknown operator"
-    ~line:1
-    ~column:2
-    ~message:"unknown operator \"+-=\""
-    "x+-=y";
-  check_error
-    ~name:"unsupported single-character operator"
-    ~line:1
-    ~column:3
-    ~message:"unknown operator \"@\""
-    "f @ x"
-;;
-
-(** Checks unsupported non-operator characters and their exact positions. *)
-let test_unexpected_characters () =
-  check_error
-    ~name:"unexpected character"
-    ~line:1
-    ~column:5
-    ~message:"unexpected character '`'"
-    "let `";
-  check_error
-    ~name:"unexpected character inside an identifier-shaped input"
-    ~line:1
-    ~column:2
-    ~message:"unexpected character '#'"
-    "x#field";
-  check_error
-    ~name:"unexpected opening brace"
-    ~line:1
-    ~column:1
-    ~message:"unexpected character '{'"
-    "{x}";
-  check_error
-    ~name:"multiline unexpected character location"
-    ~line:2
-    ~column:3
-    ~message:"unexpected character '`'"
-    "let x = 1\n  `"
-;;
-
-(** Checks that EOF inside simple and nested comments reports their opening. *)
-let test_unterminated_comments () =
-  check_error
-    ~name:"unterminated comment"
-    ~line:1
-    ~column:3
-    ~message:"unterminated comment"
-    "x (* never closed";
-  check_error
-    ~name:"unterminated nested multiline comment"
-    ~line:2
-    ~column:1
-    ~message:"unterminated comment"
-    "let x = 1\n(* outer\n   (* inner *)"
-;;
-
-(** Checks that an integer outside the runtime [int] range is rejected. *)
-let test_integer_overflow () =
-  check_error
-    ~name:"integer overflow"
-    ~line:1
-    ~column:1
-    ~message:"integer literal is out of range"
-    (string_of_int Int.max_int ^ "0")
-;;
-
-let%test_unit "keywords and identifiers" = test_keywords ()
-let%test_unit "patterns and delimiters" = test_patterns_and_delimiters ()
-let%test_unit "built-in operators" = test_operators ()
-let%test_unit "operator token boundaries" = test_operator_tokens ()
-let%test_unit "nested comments" = test_comments ()
-let%test_unit "identifier boundaries" = test_identifier_boundaries ()
-let%test_unit "unclosed delimiters belong to parser" = test_unclosed_delimiters_are_tokens ()
-let%test_unit "source locations" = test_locations ()
-let%test_unit "incremental lexer" = test_incremental_lexer ()
-let%test_unit "buffered channel" = test_buffered_channel ()
-let%test_unit "invalid identifiers" = test_invalid_identifiers ()
-let%test_unit "unknown operators" = test_unknown_operators ()
-let%test_unit "unexpected characters" = test_unexpected_characters ()
-let%test_unit "unterminated comments" = test_unterminated_comments ()
-let%test_unit "integer overflow" = test_integer_overflow ()

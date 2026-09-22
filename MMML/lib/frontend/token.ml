@@ -1,34 +1,28 @@
-(** Tokens produced by the MiniML lexer. Each supported operator has an
-    explicit constructor, so extending the language requires an explicit
-    change to this type. *)
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
+(** Tokens of the minimal MiniML syntax. *)
 
 type t =
-  | INT of (int[@gen QCheck.Gen.nat_small])
-  | IDENT of
-      (string
-      [@gen
-        QCheck.Gen.map (fun value -> "value_" ^ string_of_int value) QCheck.Gen.nat_small])
+  | INT of int
+  | IDENT of string
   | LET
   | REC
-  | AND
   | IN
   | FUN
-  | FUNCTION
   | IF
   | THEN
   | ELSE
-  | MATCH
-  | WITH
   | TRUE
   | FALSE
   | UNDERSCORE
   | LPAREN
   | RPAREN
-  | LBRACKET
-  | RBRACKET
-  | COMMA
-  | SEMICOLON
-  | BAR
   | ARROW
   | EQUAL
   | NOT_EQUAL
@@ -38,45 +32,36 @@ type t =
   | GREATER_EQUAL
   | PLUS
   | MINUS
-  | TILDE_PLUS
-  | TILDE_MINUS
   | STAR
   | SLASH
   | AND_AND
   | OR_OR
-  | CONS
   | EOF
-[@@deriving eq, show { with_path = false }, qcheck]
+[@@deriving show { with_path = false }]
 
-(** A token paired with its range in the original input. *)
+(** A token paired with its half-open range in the source. *)
 type located =
-  { token : t (** The recognized token. *)
-  ; span : Location.span (** Its half-open source range. *)
+  { token : t
+  ; span : Location.span
   }
-[@@deriving eq, show { with_path = false }]
+[@@deriving show { with_path = false }]
 
-(** [keyword_or_identifier text] recognizes reserved words and otherwise
-    returns [IDENT text]. *)
+(** Recognize a supported keyword or produce an identifier. *)
 let keyword_or_identifier = function
   | "let" -> LET
   | "rec" -> REC
-  | "and" -> AND
   | "in" -> IN
   | "fun" -> FUN
-  | "function" -> FUNCTION
   | "if" -> IF
   | "then" -> THEN
   | "else" -> ELSE
-  | "match" -> MATCH
-  | "with" -> WITH
   | "true" -> TRUE
   | "false" -> FALSE
   | "_" -> UNDERSCORE
   | identifier -> IDENT identifier
 ;;
 
-(** [operator_of_lexeme text] returns the token of an explicitly supported
-    operator. An unknown spelling produces [None]. *)
+(** Recognize one of the supported binary operators. *)
 let operator_of_lexeme = function
   | "=" -> Some EQUAL
   | "<>" -> Some NOT_EQUAL
@@ -86,43 +71,29 @@ let operator_of_lexeme = function
   | ">=" -> Some GREATER_EQUAL
   | "+" -> Some PLUS
   | "-" -> Some MINUS
-  | "~+" -> Some TILDE_PLUS
-  | "~-" -> Some TILDE_MINUS
   | "*" -> Some STAR
   | "/" -> Some SLASH
   | "&&" -> Some AND_AND
   | "||" -> Some OR_OR
-  | "::" -> Some CONS
-  | "|" -> Some BAR
   | _ -> None
 ;;
 
-(** Return the canonical source spelling of a token. [EOF] has an empty
-    spelling. This function is also used by lexer property tests. *)
+(** Return the canonical source spelling of a token. *)
 let to_lexeme = function
   | INT value -> string_of_int value
   | IDENT identifier -> identifier
   | LET -> "let"
   | REC -> "rec"
-  | AND -> "and"
   | IN -> "in"
   | FUN -> "fun"
-  | FUNCTION -> "function"
   | IF -> "if"
   | THEN -> "then"
   | ELSE -> "else"
-  | MATCH -> "match"
-  | WITH -> "with"
   | TRUE -> "true"
   | FALSE -> "false"
   | UNDERSCORE -> "_"
   | LPAREN -> "("
   | RPAREN -> ")"
-  | LBRACKET -> "["
-  | RBRACKET -> "]"
-  | COMMA -> ","
-  | SEMICOLON -> ";"
-  | BAR -> "|"
   | ARROW -> "->"
   | EQUAL -> "="
   | NOT_EQUAL -> "<>"
@@ -132,12 +103,9 @@ let to_lexeme = function
   | GREATER_EQUAL -> ">="
   | PLUS -> "+"
   | MINUS -> "-"
-  | TILDE_PLUS -> "~+"
-  | TILDE_MINUS -> "~-"
   | STAR -> "*"
   | SLASH -> "/"
   | AND_AND -> "&&"
   | OR_OR -> "||"
-  | CONS -> "::"
   | EOF -> ""
 ;;

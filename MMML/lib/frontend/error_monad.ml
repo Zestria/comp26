@@ -1,10 +1,17 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Result computations carrying a positioned frontend diagnostic. *)
 
 type error =
   { location : Location.point (** Where the error was detected. *)
   ; message : string (** Human-readable explanation without the location. *)
   }
-[@@deriving eq]
 
 (** The result type shared by frontend phases. *)
 type 'a t = ('a, error) result
@@ -17,7 +24,7 @@ let return value = Ok value
 let error location message = Error { location; message }
 
 (** Sequence a computation and a dependent continuation. *)
-let bind computation continuation = Result.bind computation continuation
+let bind = Result.bind
 
 (** Transform the successful result of [computation]. *)
 let map computation transform = Result.map transform computation
