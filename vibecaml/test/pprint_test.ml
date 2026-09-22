@@ -67,6 +67,13 @@ let () =
        , [ binding "g" (Expr_fun (Pat_var "y", [], var "y")) ]
        , Expr_if (Expr_constant (Const_bool true), app (var "f") [ int 1 ], int 0) ));
   check_expression
+    "((((true) 1) ((()) 2)) ((false) 3))"
+    (app
+       (Expr_app (Expr_constant (Const_bool true), int 1))
+       [ Expr_app (Expr_constant Const_unit, int 2)
+       ; Expr_app (Expr_constant (Const_bool false), int 3)
+       ]);
+  check_expression
     "(let ( + ) = ( - ) in ((( + ) 1) 2))"
     (Expr_let (Non_recursive, binding "+" (var "-"), [], binary "+" (int 1) (int 2)))
 ;;
