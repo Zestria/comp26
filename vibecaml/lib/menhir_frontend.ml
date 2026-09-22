@@ -19,7 +19,7 @@ let run entry source =
   | exception Menhir_parser.Error ->
     let position = location (Lexing.lexeme_start_p lexbuf) in
     (match Lexing.lexeme lexbuf with
-     | "" -> Error (position ^ ": неожиданный конец ввода")
+     | "" -> Error (Printf.sprintf "%s: %s" position Lexicon.end_of_input_error)
      | lexeme -> Error (Printf.sprintf "%s: синтаксическая ошибка у %S" position lexeme))
 ;;
 
