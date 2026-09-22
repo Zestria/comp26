@@ -22,6 +22,16 @@
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
+Одиночный `-` тоже означает stdin.
+
+  $ vibecamlc - < prog.ml
+  let x = 1 + 2 * 3
+  let rec f a b = if a then b else f a (b, b)
+
+  $ vibecamlc --parser menhir - < prog.ml
+  let x = 1 + 2 * 3
+  let rec f a b = if a then b else f a (b, b)
+
 Ошибка разбора.
 
   $ echo 'let = 1' | vibecamlc

@@ -8,7 +8,7 @@ open Vibecaml
    выбранным парсером и печатает её обратно принтером. *)
 
 let read_source = function
-  | None -> Ok (In_channel.input_all In_channel.stdin)
+  | None | Some "-" -> Ok (In_channel.input_all In_channel.stdin)
   | Some file ->
     (try Ok (In_channel.with_open_bin file In_channel.input_all) with
      | Sys_error message -> Error message)
