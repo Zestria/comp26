@@ -1,9 +1,10 @@
 
 on:
-  push:
-    - workflows: [ compile-and-review ]
-      filter:
-        branches: [ dev-khmelev ]
+  # push:
+  #   - workflows: [ sample-workflow ]
+  #     filter:
+  #       branches: [ master ]
+  #       paths: [ "!.sourcecraft/**" ]
   pull_request:
     - workflows: [ compile-and-review ]
       # filter:
@@ -54,7 +55,6 @@ workflows:
               OPAMROOT: /home/opam/.opam
               OPAMCONFIRMLEVEL: unsafe-yes
               TIMEFMT: '%U'
-              COMPILER: shmel
             script:
               #- sudo su -
               - echo "whoami = $(whoami)"
@@ -65,14 +65,14 @@ workflows:
               #- opam repo set-url default https://se.math.spbu.ru/opam
               - /usr/bin/time -f "%U" opam update
               - echo "There are $(opam list --available --short | wc -l) packages available"
-              #- sh -exc .sourcecraft/get_author.sh
-              #- jq -r .author prinfo.json
-              #- export COMITTER=$(jq -r .author.slug prinfo.json)
-              #- echo "comitter = $COMITTER"
-              #- rm -fr prinfo.json
+              - sh -exc .sourcecraft/get_author.sh
+              - jq -r .author prinfo.json
+              - export COMITTER=$(jq -r .author.slug prinfo.json)
+              - echo "comitter = $COMITTER"
+              - rm -fr prinfo.json
               #- cd $SOURCECRAFT_WORKSPACE
               - git config --global --add safe.directory .
-              - echo "Compiler calculation, COMPILER=$COMPILER"
+              - echo "Compiler calculation, comitter=$COMITTER"
               #- cat teams.yml
               - echo "Pinning..."
               - .sourcecraft/dune.sh pin
