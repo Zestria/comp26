@@ -18,27 +18,40 @@ let string_of_parser_kind = function
 type config =
   { mutable output : string
   ; mutable parser : parser_kind
+  ; mutable parser_settings : string option
   }
 
-let default_config () = { output = "a.out"; parser = Top_down }
-let usage_msg = "usage: myprog [OPTIONS] <input-file>"
+let default_config () = { output = "a.out"; parser = Top_down; parser_settings = None }
+
+let usage_msg =
+  {|
+SchonfinkelML: miniML compiler.
+usage: schonml [OPTIONS] <input-file>"
+
+FORMAT:
+For --parser-settings you can pass the following format of argument string:
+  "Entry1; Entry2; ...; EntryN"
+
+Each entry has the following form:
+  (left|right|nonassoc|prefix) <number> <operations>,
+where
+  <number> is a number which is precedence,
+  <operations> is operation which property you want to overwrite
+
+|}
+;;
 
 let flag_specs cfg =
   [ ( "-o"
     , Arg.String (fun f -> cfg.output <- f)
-    , "<file>  write output to <file> (default: stdout)" )
-  ; ( "--parser"
-    , Arg.String
-        (function
-          | "top-down" -> cfg.parser <- Top_down
-          | "bottom-up" -> cfg.parser <- Bottom_up
-          | s ->
-            raise
-              (Arg.Bad
-                 (Printf.sprintf
-                    "invalid value for --parser: %S (expected 'top-down' or 'bottom-up')"
-                    s)))
-    , "KIND   parser to use: 'top-down' (default) or 'bottom-up'" )
+    , " <file>  write output to <file> (default: stdout)" )
+  ; "--bottom-up", Arg.Unit (fun () -> cfg.parser <- Bottom_up), "Use LR(1) parser"
+  ; ( "--top-down"
+    , Arg.Unit (fun () -> cfg.parser <- Top_down)
+    , "Use recursive-descent parser, can accept parser settings" )
+  ; ( "--parser-settings"
+    , Arg.Unit (fun () -> cfg.parser <- Top_down)
+    , " <settings>  Pass settings to top down parser, see FORMAT for more info" )
   ]
 ;;
 
