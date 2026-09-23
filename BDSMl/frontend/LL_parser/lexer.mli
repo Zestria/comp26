@@ -10,5 +10,5 @@ open Tokens
 
 type error = [ `lexer_error of string ]
 
-val tokenize_lazy : string -> (token Seq.t, [> error ]) result
+val tokenize_lazy : string -> (token, [> error ]) result Seq.t
 val tokenize : string -> (token list, [> error ]) result
