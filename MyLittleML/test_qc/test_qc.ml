@@ -140,8 +140,8 @@ let roundtrip kind prog =
 
 let kind_name = function Parse.Topdown -> "topdown" | Parse.Bottomup -> "bottomup"
 
-let expect_parses name kind source expected =
-  let opts = { Parse.sticky = false } in
+let expect_parses ~sticky name kind source expected =
+  let opts = { Parse.sticky } in
   match Parse.parse kind opts source with
   | Ok prog when prog = expected -> ()
   | Ok prog ->
@@ -154,10 +154,23 @@ let expect_parses name kind source expected =
          (kind_name kind) name msg)
 ;;
 
-let expect_error name kind source =
-  let opts = { Parse.sticky = false } in
+let expect_error ~sticky name kind source =
+  let opts = { Parse.sticky } in
   match Parse.parse kind opts source with
   | Error _ -> ()
+  | Ok _ ->
+    failwith
+      (Format.sprintf "[%s] %s: expected a parse error" (kind_name kind) name)
+;;
+
+let expect_specific_error ~sticky name kind source expected_msg =
+  let opts = { Parse.sticky } in
+  match Parse.parse kind opts source with
+  | Error msg when msg = expected_msg -> ()
+  | Error msg ->
+    failwith
+      (Format.sprintf "[%s] %s: unexpected error message: got %S, expected %S"
+         (kind_name kind) name msg expected_msg)
   | Ok _ ->
     failwith
       (Format.sprintf "[%s] %s: expected a parse error" (kind_name kind) name)
@@ -242,25 +255,54 @@ let error_sources =
   ]
 ;;
 
+(* Sticky mode demos ----------------------------------------------------- *)
+
+let sticky_tests =
+  [ assert_test "sticky letx = 1 (topdown)" (fun () ->
+        expect_parses ~sticky:true "sticky letx = 1" Parse.Topdown "letx = 1"
+          [ Ast.Let ({ Ast.rec_ = false; name = "x"; params = []; body = Ast.Int 1 }, None) ])
+  ; assert_test "sticky letrec (topdown)" (fun () ->
+        expect_parses ~sticky:true "sticky letrec" Parse.Topdown "letrec f n = n + 1"
+          [ Ast.Let
+              ({ Ast.rec_ = true; name = "f"; params = [ "n" ]
+               ; body = Ast.Binop (Ast.Add, Ast.Var "n", Ast.Int 1) }
+              , None) ])
+  ; assert_test "sticky funx->x+1 (topdown)" (fun () ->
+        expect_parses ~sticky:true "sticky funx" Parse.Topdown "funx->x+1"
+          [ Ast.Fun (["x"], Ast.Binop (Ast.Add, Ast.Var "x", Ast.Int 1)) ])
+  ; assert_test "sticky letter = 1 (topdown, documented limitation)" (fun () ->
+        expect_parses ~sticky:true "sticky letter = 1" Parse.Topdown "letter = 1"
+          [ Ast.Let ({ Ast.rec_ = false; name = "ter"; params = []; body = Ast.Int 1 }, None) ])
+  ; assert_test "non-sticky letx stays an identifier (topdown)" (fun () ->
+        expect_parses ~sticky:false "non-sticky letx" Parse.Topdown "letx = 1"
+          [ Ast.Binop (Ast.Eq, Ast.Var "letx", Ast.Int 1) ])
+  ; assert_test "bottomup rejects --sticky" (fun () ->
+        expect_specific_error ~sticky:true "bottomup sticky" Parse.Bottomup "letx = 1"
+          "sticky mode is not supported by the bottom-up parser")
+  ]
+;;
+
 (* Test suite ------------------------------------------------------------ *)
 
 let cps_tests =
   [ assert_test "cps factorial (topdown)" (fun () ->
-        expect_parses "cps factorial" Parse.Topdown fact_src fact_ast)
+        expect_parses ~sticky:false "cps factorial" Parse.Topdown fact_src fact_ast)
   ; assert_test "cps factorial (bottomup)" (fun () ->
-        expect_parses "cps factorial" Parse.Bottomup fact_src fact_ast)
+        expect_parses ~sticky:false "cps factorial" Parse.Bottomup fact_src fact_ast)
   ; assert_test "cps fibonacci (topdown)" (fun () ->
-        expect_parses "cps fibonacci" Parse.Topdown fib_src fib_ast)
+        expect_parses ~sticky:false "cps fibonacci" Parse.Topdown fib_src fib_ast)
   ; assert_test "cps fibonacci (bottomup)" (fun () ->
-        expect_parses "cps fibonacci" Parse.Bottomup fib_src fib_ast)
+        expect_parses ~sticky:false "cps fibonacci" Parse.Bottomup fib_src fib_ast)
   ]
 ;;
 
 let precedence_tests =
   List.concat_map
     (fun (name, src, ast) ->
-       [ assert_test (name ^ " (topdown)") (fun () -> expect_parses name Parse.Topdown src ast)
-       ; assert_test (name ^ " (bottomup)") (fun () -> expect_parses name Parse.Bottomup src ast)
+       [ assert_test (name ^ " (topdown)") (fun () ->
+             expect_parses ~sticky:false name Parse.Topdown src ast)
+       ; assert_test (name ^ " (bottomup)") (fun () ->
+             expect_parses ~sticky:false name Parse.Bottomup src ast)
        ])
     precedence_cases
 ;;
@@ -268,8 +310,10 @@ let precedence_tests =
 let error_tests =
   List.concat_map
     (fun (name, src) ->
-       [ assert_test (name ^ " (topdown)") (fun () -> expect_error name Parse.Topdown src)
-       ; assert_test (name ^ " (bottomup)") (fun () -> expect_error name Parse.Bottomup src)
+       [ assert_test (name ^ " (topdown)") (fun () ->
+             expect_error ~sticky:false name Parse.Topdown src)
+       ; assert_test (name ^ " (bottomup)") (fun () ->
+             expect_error ~sticky:false name Parse.Bottomup src)
        ])
     error_sources
 ;;
@@ -285,5 +329,6 @@ let () =
         ]
         @ cps_tests
         @ precedence_tests
-        @ error_tests))
+        @ error_tests
+        @ sticky_tests))
 ;;

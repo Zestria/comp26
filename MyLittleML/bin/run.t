@@ -103,3 +103,31 @@ $ ../compiler.exe --help
   $ printf 'let x = 1' | ../compiler.exe --parser bottomup --sticky
   compiler: sticky mode is not supported by the bottom-up parser
   [1]
+
+  $ printf 'letx = 1' | ../compiler.exe --parser topdown --sticky
+  [(Ast.Let ({ Ast.rec_ = false; name = "x"; params = []; body = (Ast.Int 1) },
+      None))
+    ]
+
+  $ printf 'letrec f n = n + 1' | ../compiler.exe --parser topdown --sticky
+  [(Ast.Let (
+      { Ast.rec_ = true; name = "f"; params = ["n"];
+        body = (Ast.Binop (Ast.Add, (Ast.Var "n"), (Ast.Int 1))) },
+      None))
+    ]
+
+  $ printf 'funx->x+1' | ../compiler.exe --parser topdown --sticky
+  [(Ast.Fun (["x"], (Ast.Binop (Ast.Add, (Ast.Var "x"), (Ast.Int 1)))))]
+
+  $ printf 'letter = 1' | ../compiler.exe --parser topdown --sticky
+  [(Ast.Let (
+      { Ast.rec_ = false; name = "ter"; params = []; body = (Ast.Int 1) }, None
+      ))
+    ]
+
+  $ printf 'letx = 1' | ../compiler.exe --parser topdown
+  [(Ast.Binop (Ast.Eq, (Ast.Var "letx"), (Ast.Int 1)))]
+
+  $ printf 'letx = 1' | ../compiler.exe --parser bottomup --sticky
+  compiler: sticky mode is not supported by the bottom-up parser
+  [1]
