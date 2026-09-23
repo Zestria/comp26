@@ -8,9 +8,9 @@
 # Если планируете ничего не делать -- лучше не записывайтесь
 
 - demo:
-    - kosarev-d-s
-    - Kakadu2
-    - Kakadu
+  - kosarev-d-s
+  - Kakadu2
+  - Kakadu
 
 - shmel:
   - kormyltsyn-roman-gmail-com
@@ -34,5 +34,8 @@
     - bogbanrvd-gmail-com
     - shamashaehmitov
     - garry2311
+
+- MMML:
+  - mikhailsviriukov
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
