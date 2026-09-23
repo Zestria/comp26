@@ -1,10 +1,9 @@
 
 on:
-  # push:
-  #   - workflows: [ sample-workflow ]
-  #     filter:
-  #       branches: [ master ]
-  #       paths: [ "!.sourcecraft/**" ]
+  push:
+    - workflows: [ compile-and-review ]
+      filter:
+        branches: [ dev-khmelev ]
   pull_request:
     - workflows: [ compile-and-review ]
       # filter:
