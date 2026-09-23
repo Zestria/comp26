@@ -7,7 +7,7 @@ type dataset =
   }
 
 let parse_ll source =
-  match Parser_LL.parse_string_LL source with
+  match LL_parser.Parser.parse_string_LL source with
   | Ok ast -> ignore (Sys.opaque_identity ast)
   | Error _ -> failwith "the recursive-descent parser rejected a benchmark input"
 ;;
@@ -19,7 +19,7 @@ let parse_lr source =
 ;;
 
 let check_dataset dataset =
-  match Parser_LL.parse_string_LL dataset.source, Parse.parse dataset.source with
+  match LL_parser.Parser.parse_string_LL dataset.source, Parse.parse dataset.source with
   | Ok ll_ast, Ok lr_ast when ll_ast = lr_ast -> ()
   | Ok _, Ok _ ->
     failwith
@@ -66,40 +66,37 @@ let write_samples output dataset =
   in
   List.iter
     (fun (parser, measurements) ->
-      List.iteri
-        (fun repetition sample ->
-          let iterations = Int64.to_float sample.Benchmark.iters in
-          let wall_seconds_per_parse = sample.wall /. iterations in
-          Printf.fprintf
-            output
-            "%s,%d,%d,%s,%d,%Ld,%.12g,%.12g\n"
-            dataset.name
-            dataset.size
-            (String.length dataset.source)
-            parser
-            repetition
-            sample.iters
-            sample.wall
-            wall_seconds_per_parse)
-        measurements)
+       List.iteri
+         (fun repetition sample ->
+            let iterations = Int64.to_float sample.Benchmark.iters in
+            let wall_seconds_per_parse = sample.wall /. iterations in
+            Printf.fprintf
+              output
+              "%s,%d,%d,%s,%d,%Ld,%.12g,%.12g\n"
+              dataset.name
+              dataset.size
+              (String.length dataset.source)
+              parser
+              repetition
+              sample.iters
+              sample.wall
+              wall_seconds_per_parse)
+         measurements)
     samples;
   flush output
 ;;
 
 let () =
   let output_path =
-    if Array.length Sys.argv > 1
-    then Sys.argv.(1)
-    else "benchmark/benchmark_results.csv"
+    if Array.length Sys.argv > 1 then Sys.argv.(1) else "benchmark/benchmark_results.csv"
   in
   let output = open_out output_path in
   Fun.protect
     ~finally:(fun () -> close_out_noerr output)
     (fun () ->
-      output_string
-        output
-        "dataset,size,source_bytes,parser,repetition,iterations,total_wall_seconds,\
-         wall_seconds_per_parse\n";
-      List.iter (write_samples output) datasets);
+       output_string
+         output
+         "dataset,size,source_bytes,parser,repetition,iterations,total_wall_seconds,wall_seconds_per_parse\n";
+       List.iter (write_samples output) datasets);
   Printf.printf "Benchmark results written to %s\n%!" output_path
 ;;

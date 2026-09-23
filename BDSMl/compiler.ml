@@ -82,8 +82,8 @@ let binop_of_name = function
 ;;
 
 let associativity_of_name = function
-  | "left" -> Parser_LL.Left
-  | "right" -> Parser_LL.Right
+  | "left" -> LL_parser.Parser.Left
+  | "right" -> LL_parser.Parser.Right
   | name -> raise (Arg.Bad ("unknown associativity: " ^ name))
 ;;
 
@@ -92,9 +92,7 @@ let parse_associativity_override value =
   | [ operator; associativity ] ->
     binop_of_name operator, associativity_of_name associativity
   | _ ->
-    raise
-      (Arg.Bad
-         "expected OPERATOR:left or OPERATOR:right (for example minus:right)")
+    raise (Arg.Bad "expected OPERATOR:left or OPERATOR:right (for example minus:right)")
 ;;
 
 let print_ll_error = function
@@ -112,11 +110,11 @@ let run_frontend parser overrides source =
       let config =
         List.fold_left
           (fun config (operator, associativity) ->
-            Parser_LL.with_associativity config operator associativity)
-          Parser_LL.default_config
+             LL_parser.Parser.with_associativity config operator associativity)
+          LL_parser.Parser.default_config
           (List.rev overrides)
       in
-      (match Parser_LL.parse_string_LL ~config source with
+      (match LL_parser.Parser.parse_string_LL ~config source with
        | Ok program -> Ok program
        | Error error -> Error (print_ll_error error))
   in
@@ -134,10 +132,11 @@ let () =
   let options =
     [ ( "--parser"
       , Arg.Symbol
-          ([ "ll"; "lr" ], function
+          ( [ "ll"; "lr" ]
+          , function
             | "ll" -> parser := LL
             | "lr" -> parser := LR
-            | _ -> assert false)
+            | _ -> assert false )
       , " Select the parser (default: ll)" )
     ; ( "--operator-assoc"
       , Arg.String
