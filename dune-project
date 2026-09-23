@@ -25,6 +25,21 @@
   bisect_ppx_ng
   (llvm
    (= "18-shared"))
+  ppx_deriving_qcheck))
+
+(package
+ (name MMML)
+ (synopsis "A short LLVM project")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  ppx_deriving
+  (llvm
+   (= "18-shared"))
   (ppx_deriving_qcheck
    (= "0.6"))))
 

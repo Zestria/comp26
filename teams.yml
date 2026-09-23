@@ -8,9 +8,9 @@
 # Если планируете ничего не делать -- лучше не записывайтесь
 
 - demo:
-  - Kakadu
+  - kosarev-d-s
   - Kakadu2
-  - Kakadu3
+  - Kakadu
 
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
