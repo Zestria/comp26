@@ -1,7 +1,7 @@
 (executable
  (name test_qc)
  (modules test_qc)
- (libraries qcheck angstrom)
+ (libraries qcheck parsing)
  (preprocess
   (pps ppx_deriving_qcheck ppx_deriving.show)))
 

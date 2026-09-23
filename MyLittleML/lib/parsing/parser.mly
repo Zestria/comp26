@@ -14,7 +14,7 @@
    `[in expr]` continuation is a single production, so a top-level
    declaration is just an expression without the `in` part.
 
-   Menhir reports 14 shift/reduce conflicts (in 10 states); every one of
+   Menhir reports 23 shift/reduce conflicts (in 11 states); every one of
    them is resolved in the direction that matches OCaml semantics (default:
    prefer shift).  Full derivations can be inspected by regenerating
    `parser.conflicts` with `menhir --explain`:
@@ -30,7 +30,15 @@
       opens the let-in continuation of the INNERMOST let, i.e.
       `let x = let y = z in e2` is `let x = (let y = z in e2)`.  Verified
       by the test `let x = 5 in x = 5`, which must parse as a let-in whose
-      body is a comparison. *)
+      body is a comparison.
+
+   4. Phrase continuation (state 73): after a top-level [item], an
+      atom/keyword token may either start another item in the same phrase
+      (shift, like the old whitespace-separator behaviour) or finish the
+      phrase (reduce, used when `;;` follows).  A `;;` terminator always
+      separates phrases; without it, atom-starting items glue into
+      applications (application is tighter) and keyword-starting items
+      become sibling items of the same phrase, which is equivalent. *)
 %{
 open Ast
 %}
@@ -40,13 +48,20 @@ open Ast
 %token <string> ID
 %token LET REC IN FUN IF THEN ELSE MOD
 %token PLUS MINUS STAR SLASH LT LE GT GE EQ NEQ
-%token LPAREN RPAREN ARROW EOF
+%token LPAREN RPAREN ARROW SEMI EOF
 
 %start <Ast.prog> prog
 %%
 
 prog:
-  | l = list(item) EOF { l }
+  | l = list(phrase) EOF { List.concat l }
+
+(* A phrase is a non-empty sequence of top-level items, optionally
+   terminated by `;;` (the separator is optional after the LAST phrase too,
+   so `let x = 1;;` and `let x = 1` are both accepted). *)
+phrase:
+  | l = nonempty_list(item) SEMI { l }
+  | l = nonempty_list(item) { l }
 
 item:
   | e = expr { e }

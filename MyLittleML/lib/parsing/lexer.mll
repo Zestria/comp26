@@ -19,7 +19,7 @@ rule read = parse
   | white        { read lexbuf }
   | newline      { Lexing.new_line lexbuf; read lexbuf }
   | comment      { read lexbuf }
-  | ";;"         { read lexbuf }   (* optional top-level separator, skipped *)
+  | ";;"         { SEMI }          (* top-level phrase separator *)
   | int          { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | "true"       { TRUE }
   | "false"      { FALSE }

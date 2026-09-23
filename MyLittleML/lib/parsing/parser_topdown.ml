@@ -115,6 +115,13 @@ let comment =
            | Some _ -> tracked (advance 1) *> loop))
 ;;
 
+(** Optional top-level separator [";;"] (phrase terminator, matching the
+    [SEMI] token of the bottom-up grammar).  It is consumed between
+    declarations (and after the last one) by {!program}, but NOT inside
+    expressions: an application never glues across a [";;"], so separate
+    declarations stay separate. *)
+let semi = tracked (string ";;")
+
 let skip_ws =
   fix (fun skip_ws ->
       tracked
@@ -260,7 +267,8 @@ let program =
               >>= fun thn ->
               keyword "else" *> expr >>| fun els -> Ast.If (cond, thn, els)
             in
-            choice [ let_parser; fun_parser; if_parser; binop ]))
+            let item = choice [ let_parser; fun_parser; if_parser; binop ] in
+            item <* (semi *> return () <|> return ())))
   <* skip_ws
 ;;
 
