@@ -73,10 +73,28 @@ let rec skip src len st =
       then skip src len { pos = st.pos + 2; line = st.line + 1; col = 1 }
       else skip src len { pos = st.pos + 1; line = st.line + 1; col = 1 }
     | ' ' -> skip src len { st with pos = st.pos + 1; col = st.col + 1 }
-    | '\t' ->
-      let next_col = ((st.col - 1 + 4) / 4 * 4) + 1 in
-      skip src len { st with pos = st.pos + 1; col = next_col }
+    | '\t' -> skip src len { st with pos = st.pos + 1; col = st.col + 1 }
+    | '\012' -> skip src len { st with pos = st.pos + 1; col = st.col + 1 }
+    | '(' when st.pos + 1 < len && src.[st.pos + 1] = '*' ->
+      skip_comment src len st { st with pos = st.pos + 2; col = st.col + 2 } 1
     | _ -> st)
+
+and skip_comment src len start st depth =
+  if st.pos >= len
+  then error_at start "unterminated comment"
+  else if st.pos + 1 < len && src.[st.pos] = '(' && src.[st.pos + 1] = '*'
+  then skip_comment src len start { st with pos = st.pos + 2; col = st.col + 2 } (depth + 1)
+  else if st.pos + 1 < len && src.[st.pos] = '*' && src.[st.pos + 1] = ')'
+  then (
+    let st = { st with pos = st.pos + 2; col = st.col + 2 } in
+    if depth = 1 then skip src len st else skip_comment src len start st (depth - 1))
+  else (
+    match src.[st.pos] with
+    | '\r' when st.pos + 1 < len && src.[st.pos + 1] = '\n' ->
+      skip_comment src len start { pos = st.pos + 2; line = st.line + 1; col = 1 } depth
+    | '\r' | '\n' ->
+      skip_comment src len start { pos = st.pos + 1; line = st.line + 1; col = 1 } depth
+    | _ -> skip_comment src len start { st with pos = st.pos + 1; col = st.col + 1 } depth)
 ;;
 
 let advance st n = { st with pos = st.pos + n; col = st.col + n }

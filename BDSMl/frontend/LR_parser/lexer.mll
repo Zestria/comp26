@@ -79,13 +79,25 @@ and comment start depth = parse
   | _ { comment start depth lexbuf }
 
 {
-let tokenize source =
-  let lexbuf = Lexing.from_string source in
-  let rec collect acc =
+let tokenize_lazy_from_lexbuf lexbuf : (Tokens.token, [> error ]) result Seq.t =
+  let rec tokens () =
     match token lexbuf with
-    | TEOF -> Ok (List.rev (TEOF :: acc))
-    | next -> collect (next :: acc)
+    | TEOF -> Seq.Cons (Ok TEOF, fun () -> Seq.Nil)
+    | next -> Seq.Cons (Ok next, tokens)
+    | exception Error message ->
+      Seq.Cons (Result.Error (`lexer_error message), fun () -> Seq.Nil)
   in
-  try collect [] with
-  | Error message -> Result.Error (`lexer_error message)
+  tokens
+
+let tokenize_lazy source =
+  Seq.memoize (tokenize_lazy_from_lexbuf (Lexing.from_string source))
+
+let tokenize source =
+  let rec collect acc seq =
+    match seq () with
+    | Seq.Nil -> Ok (List.rev acc)
+    | Seq.Cons (Result.Error error, _) -> Result.Error error
+    | Seq.Cons (Ok next, rest) -> collect (next :: acc) rest
+  in
+  collect [] (tokenize_lazy source)
 }

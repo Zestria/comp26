@@ -31,6 +31,11 @@ let regression_tests () =
   List.iter
     (fun (source, expected) -> expect_program source [ StrEval expected ])
     [ "()", Unit
+    ; "( )", Unit
+    ; "( \t\n )", Unit
+    ; "f ( )", App (Var "f", Unit)
+    ; "fun ( ) -> ( )", Abs (PUnit, Unit)
+    ; "fun ( \t ) x -> x", Abs (PUnit, Abs (PVar "x", Var "x"))
     ; "fun () _ x -> x", Abs (PUnit, Abs (PUnderscore, Abs (PVar "x", Var "x")))
     ; "f x y", App (App (Var "f", Var "x"), Var "y")
     ; "-f x * 2", BinOp (Mult, UnOp (Neg, App (Var "f", Var "x")), Int 2)
@@ -54,6 +59,8 @@ let regression_tests () =
     ; StrEval Unit
     ];
   expect_program "let () = ();;" [ StrLet (NonRec, PUnit, Unit) ];
+  expect_program "let ( ) = ( )" [ StrLet (NonRec, PUnit, Unit) ];
+  expect_program "let f ( ) = ( )" [ StrLet (NonRec, PVar "f", Abs (PUnit, Unit)) ];
   let right_minus = with_associativity default_config Minus Right in
   (match parse_string_LL ~config:right_minus "8 - 3 - 1" with
    | Ok [ StrEval (BinOp (Minus, Int 8, BinOp (Minus, Int 3, Int 1))) ] -> ()
@@ -101,7 +108,7 @@ let regression_tests () =
     ];
   List.iter
     (fun source ->
-       if LL_parser.Lexer.tokenize source <> Lexer_LR.tokenize source
+       if LL_parser.Lexer.tokenize source <> LR_parser.Lexer.tokenize source
        then failwith (Printf.sprintf "Lexers disagree on %S" source))
     [ "Foo _foo x1 123abc iffy inlet lettuce trueish funny recover thenable nothing"
     ; "() ( ) -> - <> <= < >= > && || ;;"
@@ -125,12 +132,21 @@ let regression_tests () =
   (match Parse.parse "let x =\r\n)" with
    | Error "Line 2, column 1: Syntax error" -> ()
    | _ -> failwith "Incorrect syntax error location");
+  (match parse_string_LL "1) @" with
+   | Error (`parse_error _) -> ()
+   | _ -> failwith "LL parser read past a syntax error");
+  (match Parse.parse "1) @" with
+   | Error "Line 1, column 2: Syntax error" -> ()
+   | _ -> failwith "LR parser read past a syntax error");
+  (match parse_string_LL "1 @" with
+   | Error (`lexer_error "1:3: unexpected character '@'") -> ()
+   | _ -> failwith "LL parser did not report a consumed lexer error");
   (match Parse.parse "fun _ -> ()" with
    | Ok [ StrEval (Abs (PUnderscore, Unit)) ] -> ()
    | _ -> failwith "Parse.parse compatibility entry point failed");
-  match Parser.expression Lexer_LR.token (Lexing.from_string "1 + 2") with
+  match LR_parser.Parser.expression LR_parser.Lexer.token (Lexing.from_string "1 + 2") with
   | BinOp (Plus, Int 1, Int 2) -> ()
-  | _ -> failwith "Parser.expression entry point failed"
+  | _ -> failwith "LR_parser.Parser.expression entry point failed"
 ;;
 
 (* Fully parenthesize generated expressions so the expected AST is unambiguous. *)
@@ -297,6 +313,6 @@ let () =
         let source = source_of_program expected in
         parse_string_LL source = Ok expected && Parse.parse source = Ok expected)
     ; QCheck.Test.make ~name:"LL/LR token agreement" ~count:2000 tokens (fun source ->
-        LL_parser.Lexer.tokenize source = Lexer_LR.tokenize source)
+        LL_parser.Lexer.tokenize source = LR_parser.Lexer.tokenize source)
     ]
 ;;

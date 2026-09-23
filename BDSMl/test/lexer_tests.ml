@@ -46,7 +46,7 @@ let show_token = function
 
 let render src =
   let tokens = tokenize src in
-  if Lexer_LR.tokenize src <> tokens
+  if LR_parser.Lexer.tokenize src <> tokens
   then failwith (Printf.sprintf "Lexers disagree on %S" src);
   match tokens with
   | Ok toks ->
@@ -151,6 +151,39 @@ let error_position_tests =
   ]
 ;;
 
+let comment_tests =
+  [ case ~name:"empty comment" "(* *)" "Ok [TEOF]"
+  ; case ~name:"between tokens" "a(* ignored *)b" "Ok [TIdent(\"a\"); TIdent(\"b\"); TEOF]"
+  ; case ~name:"nested comment" "(* outer (* inner *) rest *)42" "Ok [TInt(42); TEOF]"
+  ; case ~name:"comment with line breaks" "(*\r\ninside\r*)\n@" "Error: 4:1: unexpected character '@'"
+  ; case ~name:"unterminated comment" "  (* outer (* inner *)" "Error: 1:3: unterminated comment"
+  ; case ~name:"unterminated after newline" "x\n(* never closed" "Error: 2:1: unterminated comment"
+  ]
+;;
+
+let lazy_lr_tests =
+  [ Alcotest.test_case "error follows the first token" `Quick (fun () ->
+      let tokens = LR_parser.Lexer.tokenize_lazy "1 @" in
+      match tokens () with
+      | Seq.Cons (Ok (TInt 1), rest) ->
+        (match rest () with
+         | Seq.Cons (Error (`lexer_error message), after_error) ->
+           Alcotest.(check string) "error position" "1:3: unexpected character '@'" message;
+           (match after_error () with
+            | Seq.Nil -> ()
+            | _ -> failwith "lazy lexer continued after an error")
+         | _ -> failwith "expected a deferred lexer error")
+      | _ -> failwith "expected the first token")
+  ; Alcotest.test_case "comments and EOF in lazy sequence" `Quick (fun () ->
+      let source = "a(* outer (* inner *) *)b" in
+      let ll = List.of_seq (tokenize_lazy source) in
+      let lr = List.of_seq (LR_parser.Lexer.tokenize_lazy source) in
+      if ll <> lr then failwith "lazy lexers disagree";
+      if lr <> [ Ok (TIdent "a"); Ok (TIdent "b"); Ok TEOF ]
+      then failwith "lazy LR lexer returned unexpected tokens")
+  ]
+;;
+
 let () =
   Alcotest.run
     "lexer"
@@ -162,6 +195,8 @@ let () =
     ; "parens and unit", parens_and_unit_tests
     ; "operators", operator_tests
     ; "expressions", expression_tests
+    ; "comments", comment_tests
+    ; "lazy LR lexer", lazy_lr_tests
     ; "lexer errors", lexer_error_tests
     ; "error positions", error_position_tests
     ]
