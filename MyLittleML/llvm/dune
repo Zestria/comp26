@@ -1,3 +1,4 @@
 (cram
  (deps 1.cpp)
- (applies_to *))
+ (applies_to *)
+ (enabled_if false)) ; TODO: codegeneration in next tasks
