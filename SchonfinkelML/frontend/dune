@@ -1,6 +1,6 @@
 (library
  (name frontend)
- (modules common lexer bottom_up_parser)
+ (modules common lexer bottom_up_parser config)
  (libraries)
  (package SchonfinkelML))
 

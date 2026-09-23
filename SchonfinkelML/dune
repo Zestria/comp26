@@ -7,6 +7,6 @@
  (package SchonfinkelML)
  (name compiler)
  (modules compiler)
- (libraries LL)
+ (libraries LL frontend)
  (instrumentation
   (backend bisect_ppx_ng)))
