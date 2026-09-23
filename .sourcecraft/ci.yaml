@@ -54,6 +54,7 @@ workflows:
               OPAMROOT: /home/opam/.opam
               OPAMCONFIRMLEVEL: unsafe-yes
               TIMEFMT: '%U'
+              COMPILER: shmel
             script:
               #- sudo su -
               - echo "whoami = $(whoami)"
@@ -64,14 +65,14 @@ workflows:
               #- opam repo set-url default https://se.math.spbu.ru/opam
               - /usr/bin/time -f "%U" opam update
               - echo "There are $(opam list --available --short | wc -l) packages available"
-              - sh -exc .sourcecraft/get_author.sh
-              - jq -r .author prinfo.json
-              - export COMITTER=$(jq -r .author.slug prinfo.json)
-              - echo "comitter = $COMITTER"
-              - rm -fr prinfo.json
+              #- sh -exc .sourcecraft/get_author.sh
+              #- jq -r .author prinfo.json
+              #- export COMITTER=$(jq -r .author.slug prinfo.json)
+              #- echo "comitter = $COMITTER"
+              #- rm -fr prinfo.json
               #- cd $SOURCECRAFT_WORKSPACE
               - git config --global --add safe.directory .
-              - echo "Compiler calculation, comitter=$COMITTER"
+              - echo "Compiler calculation, COMPILER=$COMPILER"
               #- cat teams.yml
               - echo "Pinning..."
               - .sourcecraft/dune.sh pin
