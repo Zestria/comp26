@@ -126,5 +126,4 @@
  (documentation
   "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend"))
 
-
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
