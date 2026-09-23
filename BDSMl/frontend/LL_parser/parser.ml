@@ -76,55 +76,72 @@ let ( let* ) m f =
   | Error e -> Error e
 ;;
 
-(* Чуть поразмыслить *)
+type 'e token_stream = (token, 'e) result Seq.t
+
+type 'e stream_head =
+  | Nil
+  | Cons of token * 'e token_stream
+  | LexError of 'e
+
+let step (s : 'e token_stream) : 'e stream_head =
+  match s () with
+  | Seq.Nil -> Nil
+  | Seq.Cons (Ok t, rest) -> Cons (t, rest)
+  | Seq.Cons (Error e, _) -> LexError e
+;;
+
 let expect expected tokens =
-  match tokens with
-  | t :: ts when t = expected -> Ok ((), ts)
-  | t :: _ ->
+  match step tokens with
+  | Cons (t, ts) when t = expected -> Ok ((), ts)
+  | Cons (t, _) ->
     Error
       (`parse_error
           (Printf.sprintf
              "expected '%s', got '%s'"
              (token_to_string expected)
              (token_to_string t)))
-  | [] -> Error (`parse_error "unexpected end of input")
+  | Nil -> Error (`parse_error "unexpected end of input")
+  | LexError e -> Error (e :> [> error ])
 ;;
 
-let parse_pattern = function
-  | TIdent s :: ts -> Ok (PVar s, ts)
-  | TUnit :: ts -> Ok (PUnit, ts)
-  | TUnderscore :: ts -> Ok (PUnderscore, ts)
-  | t :: _ -> Error (`parse_error ("Expected pattern, got '" ^ token_to_string t ^ "'"))
-  | [] -> Error (`parse_error "Unexpected end of input")
+let parse_pattern tokens =
+  match step tokens with
+  | Cons (TIdent s, ts) -> Ok (PVar s, ts)
+  | Cons (TUnit, ts) -> Ok (PUnit, ts)
+  | Cons (TUnderscore, ts) -> Ok (PUnderscore, ts)
+  | Cons (t, _) ->
+    Error (`parse_error ("Expected pattern, got '" ^ token_to_string t ^ "'"))
+  | Nil -> Error (`parse_error "Unexpected end of input")
+  | LexError e -> Error (e :> [> error ])
 ;;
 
 let rec parse_pattern_list tokens =
-  match tokens with
-  | (TIdent _ | TUnderscore | TUnit) :: _ ->
+  match step tokens with
+  | Cons ((TIdent _ | TUnderscore | TUnit), _) ->
     let* p, ts = parse_pattern tokens in
     let* ps, ts = parse_pattern_list ts in
     Ok (p :: ps, ts)
-  | ts -> Ok ([], ts)
+  | Cons _ | Nil -> Ok ([], tokens)
+  | LexError e -> Error (e :> [> error ])
 ;;
 
 let wrap_abs param body = List.fold_right (fun p acc -> Abs (p, acc)) param body
 
-(* wtf *)
 let rec parse_expr config tokens =
-  match tokens with
-  | TLet :: _ ->
+  match step tokens with
+  | Cons (TLet, _) ->
     let* (rec_flag, pat, value), ts = parse_let_header config tokens in
     let* (), ts = expect TIn ts in
     let* body, ts = parse_expr config ts in
     Ok (Let (rec_flag, pat, value, body), ts)
-  | TIF :: ts ->
+  | Cons (TIF, ts) ->
     let* cond, ts = parse_expr config ts in
     let* (), ts = expect TThen ts in
     let* e_then, ts = parse_expr config ts in
     let* (), ts = expect TElse ts in
     let* e_else, ts = parse_expr config ts in
     Ok (If (cond, e_then, e_else), ts)
-  | TFun :: ts ->
+  | Cons (TFun, ts) ->
     let* params, ts = parse_pattern_list ts in
     if params = []
     then Error (`parse_error "'fun' expects at least one parameter")
@@ -132,15 +149,15 @@ let rec parse_expr config tokens =
       let* (), ts = expect TArrow ts in
       let* body, ts = parse_expr config ts in
       Ok (wrap_abs params body, ts)
-  | ts -> parse_binary config 0 ts
+  | Cons _ | Nil -> parse_binary config 0 tokens
+  | LexError e -> Error (e :> [> error ])
 
-(* wtf *)
 and parse_let_header config tokens =
-  match tokens with
-  | TLet :: ts ->
+  match step tokens with
+  | Cons (TLet, ts) ->
     let rec_flag, ts =
-      match ts with
-      | TRec :: rest -> Rec, rest
+      match step ts with
+      | Cons (TRec, rest) -> Rec, rest
       | _ -> NonRec, ts
     in
     let* pat, ts = parse_pattern ts in
@@ -148,8 +165,10 @@ and parse_let_header config tokens =
     let* (), ts = expect TEqual ts in
     let* value, ts = parse_expr config ts in
     Ok ((rec_flag, pat, wrap_abs params value), ts)
-  | t :: _ -> Error (`parse_error ("expected 'let', got '" ^ token_to_string t ^ "'"))
-  | [] -> Error (`parse_error "unexpected end of input")
+  | Cons (t, _) ->
+    Error (`parse_error ("expected 'let', got '" ^ token_to_string t ^ "'"))
+  | Nil -> Error (`parse_error "unexpected end of input")
+  | LexError e -> Error (e :> [> error ])
 
 and op_of_token = function
   | TPlus -> Some Plus
@@ -176,8 +195,8 @@ and precedence = function
 and parse_binary config min_precedence tokens =
   let* left, tokens = parse_unary config tokens in
   let rec loop left tokens =
-    match tokens with
-    | token :: rest ->
+    match step tokens with
+    | Cons (token, rest) ->
       (match op_of_token token with
        | Some operator when precedence operator >= min_precedence ->
          let operator_precedence = precedence operator in
@@ -189,18 +208,20 @@ and parse_binary config min_precedence tokens =
          let* right, rest = parse_binary config next_precedence rest in
          loop (BinOp (operator, left, right)) rest
        | _ -> Ok (left, tokens))
-    | [] -> Ok (left, [])
+    | Nil -> Ok (left, tokens)
+    | LexError e -> Error (e :> [> error ])
   in
   loop left tokens
 
-and parse_unary config = function
-  | TMinus :: ts ->
+and parse_unary config tokens =
+  match step tokens with
+  | Cons (TMinus, ts) ->
     let* e, ts = parse_unary config ts in
     Ok (UnOp (Neg, e), ts)
-  | TNot :: ts ->
+  | Cons (TNot, ts) ->
     let* e, ts = parse_unary config ts in
     Ok (UnOp (Not, e), ts)
-  | ts -> parse_app config ts
+  | Cons _ | Nil | LexError _ -> parse_app config tokens
 
 and is_atom_start = function
   | TInt _ | TIdent _ | TTrue | TFalse | TUnit | TLParen -> true
@@ -209,37 +230,41 @@ and is_atom_start = function
 and parse_app config tokens =
   let* f, ts = parse_atom config tokens in
   let rec loop acc ts =
-    match ts with
-    | t :: _ when is_atom_start t ->
+    match step ts with
+    | Cons (t, _) when is_atom_start t ->
       let* arg, ts' = parse_atom config ts in
       loop (App (acc, arg)) ts'
-    | _ -> Ok (acc, ts)
+    | Cons _ | Nil -> Ok (acc, ts)
+    | LexError e -> Error (e :> [> error ])
   in
   loop f ts
 
-and parse_atom config = function
-  | TInt n :: ts -> Ok (Int n, ts)
-  | TTrue :: ts -> Ok (Bool true, ts)
-  | TFalse :: ts -> Ok (Bool false, ts)
-  | TUnit :: ts -> Ok (Unit, ts)
-  | TIdent s :: ts -> Ok (Var s, ts)
-  | TLParen :: ts ->
+and parse_atom config tokens =
+  match step tokens with
+  | Cons (TInt n, ts) -> Ok (Int n, ts)
+  | Cons (TTrue, ts) -> Ok (Bool true, ts)
+  | Cons (TFalse, ts) -> Ok (Bool false, ts)
+  | Cons (TUnit, ts) -> Ok (Unit, ts)
+  | Cons (TIdent s, ts) -> Ok (Var s, ts)
+  | Cons (TLParen, ts) ->
     let* e, ts = parse_expr config ts in
     let* (), ts = expect TRParen ts in
     Ok (e, ts)
-  | t :: _ -> Error (`parse_error ("unexpected token '" ^ token_to_string t ^ "'"))
-  | [] -> Error (`parse_error "unexpected end of input")
+  | Cons (t, _) -> Error (`parse_error ("unexpected token '" ^ token_to_string t ^ "'"))
+  | Nil -> Error (`parse_error "unexpected end of input")
+  | LexError e -> Error (e :> [> error ])
 ;;
 
 let parse_structure_item config tokens =
-  match tokens with
-  | TLet :: _ ->
+  match step tokens with
+  | Cons (TLet, _) ->
     let* (rec_flag, pat, value), ts = parse_let_header config tokens in
-    (match ts with
-     | TIn :: ts ->
-       let* body, ts = parse_expr config ts in
-       Ok (StrEval (Let (rec_flag, pat, value, body)), ts)
-     | _ -> Ok (StrLet (rec_flag, pat, value), ts))
+    (match step ts with
+     | Cons (TIn, ts') ->
+       let* body, ts'' = parse_expr config ts' in
+       Ok (StrEval (Let (rec_flag, pat, value, body)), ts'')
+     | Cons _ | Nil -> Ok (StrLet (rec_flag, pat, value), ts)
+     | LexError e -> Error (e :> [> error ]))
   | _ ->
     let* e, ts = parse_expr config tokens in
     Ok (StrEval e, ts)
@@ -247,29 +272,29 @@ let parse_structure_item config tokens =
 
 let rec parse_items config tokens =
   let* item, ts = parse_structure_item config tokens in
-  match ts with
-  | TEOF :: _ -> Ok [ item ]
-  | TSemisemi :: rest ->
-    (match rest with
-     | TEOF :: _ -> Ok [ item ]
-     | _ ->
+  match step ts with
+  | Cons (TEOF, _) -> Ok [ item ]
+  | Cons (TSemisemi, rest) ->
+    (match step rest with
+     | Cons (TEOF, _) -> Ok [ item ]
+     | Cons _ ->
        let* items = parse_items config rest in
-       Ok (item :: items))
-  | t :: _ ->
+       Ok (item :: items)
+     | Nil -> Error (`parse_error "unexpected end of input")
+     | LexError e -> Error (e :> [> error ]))
+  | Cons (t, _) ->
     Error
       (`parse_error
           (Printf.sprintf "expected ';;' before next item, got '%s'" (token_to_string t)))
-  | [] -> Error (`parse_error "unexpected end of input")
+  | Nil -> Error (`parse_error "unexpected end of input")
+  | LexError e -> Error (e :> [> error ])
 ;;
 
-let parse ?(config = default_config) (tokens : token list) : (program, [> error ]) result =
+let parse ?(config = default_config) (tokens : 'e token_stream) =
   parse_items config tokens
 ;;
 
-let parse_string_LL ?(config = default_config) (src : string)
-  : (program, [> error | Lexer.error ]) result
-  =
-  match Lexer.tokenize src with
-  | Error e -> Error e
-  | Ok tokens -> (parse ~config tokens :> (program, [> error | Lexer.error ]) result)
+let parse_string_LL ?(config = default_config) (src : string) =
+  let tokens = Lexer.tokenize_lazy src |> Seq.memoize in
+  parse ~config tokens
 ;;
