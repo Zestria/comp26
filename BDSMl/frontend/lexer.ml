@@ -6,38 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-type token =
-  | TUnit
-  | TInt of int
-  | TIdent of string
-  | TTrue
-  | TFalse
-  | TPlus
-  | TMinus
-  | TStar
-  | TSlash
-  | TEqual
-  | TNotEqual
-  | TMore
-  | TLess
-  | TEMore
-  | TELess
-  | TAnd
-  | TOr
-  | TNot
-  | TLParen
-  | TRParen
-  | TUnderscore
-  | TSemisemi (* ;; *)
-  | TEOF
-  | TIF
-  | TThen
-  | TElse
-  | TLet
-  | TRec
-  | TIn
-  | TFun
-  | TArrow (* -> *)
+open Tokens
 
 type error = [ `lexer_error of string ]
 
@@ -77,87 +46,122 @@ let take_while src len pred i =
   String.sub src i (!j - i), !j
 ;;
 
+type lex_state =
+  { pos : int
+  ; line : int
+  ; col : int
+  }
+
+let init_state = { pos = 0; line = 1; col = 1 }
+
+exception Lexer_error of string
+
+let error_at st fmt =
+  Printf.ksprintf
+    (fun msg -> raise (Lexer_error (Printf.sprintf "%d:%d: %s" st.line st.col msg)))
+    fmt
+;;
+
+let rec skip src len st =
+  if st.pos >= len
+  then st
+  else (
+    match src.[st.pos] with
+    | '\n' -> skip src len { pos = st.pos + 1; line = st.line + 1; col = 1 }
+    | '\r' ->
+      if st.pos + 1 < len && src.[st.pos + 1] = '\n'
+      then skip src len { pos = st.pos + 2; line = st.line + 1; col = 1 }
+      else skip src len { pos = st.pos + 1; line = st.line + 1; col = 1 }
+    | ' ' -> skip src len { st with pos = st.pos + 1; col = st.col + 1 }
+    | '\t' ->
+      let next_col = ((st.col - 1 + 4) / 4 * 4) + 1 in
+      skip src len { st with pos = st.pos + 1; col = next_col }
+    | _ -> st)
+;;
+
+let advance st n = { st with pos = st.pos + n; col = st.col + n }
+
+let next_token src len st : (token * lex_state) option =
+  let st = skip src len st in
+  let i = st.pos in
+  if i >= len
+  then None
+  else (
+    let c = src.[i] in
+    if is_digit c
+    then (
+      let s, j = take_while src len is_digit i in
+      let consumed = j - i in
+      match int_of_string_opt s with
+      | Some n -> Some (TInt n, advance st consumed)
+      | None -> error_at st "integer literal '%s' out of range" s)
+    else if is_ident_start c
+    then (
+      let s, j = take_while src len is_ident_char i in
+      let consumed = j - i in
+      let tok =
+        match keyword_of_string s with
+        | Some t -> t
+        | None -> TIdent s
+      in
+      Some (tok, advance st consumed))
+    else (
+      match c with
+      | '(' ->
+        if i + 1 < len && src.[i + 1] = ')'
+        then Some (TUnit, advance st 2)
+        else Some (TLParen, advance st 1)
+      | ')' -> Some (TRParen, advance st 1)
+      | '+' -> Some (TPlus, advance st 1)
+      | '*' -> Some (TStar, advance st 1)
+      | '/' -> Some (TSlash, advance st 1)
+      | '-' ->
+        if i + 1 < len && src.[i + 1] = '>'
+        then Some (TArrow, advance st 2)
+        else Some (TMinus, advance st 1)
+      | '=' -> Some (TEqual, advance st 1)
+      | '<' ->
+        if i + 1 < len && src.[i + 1] = '>'
+        then Some (TNotEqual, advance st 2)
+        else if i + 1 < len && src.[i + 1] = '='
+        then Some (TELess, advance st 2)
+        else Some (TLess, advance st 1)
+      | '>' ->
+        if i + 1 < len && src.[i + 1] = '='
+        then Some (TEMore, advance st 2)
+        else Some (TMore, advance st 1)
+      | '&' ->
+        if i + 1 < len && src.[i + 1] = '&'
+        then Some (TAnd, advance st 2)
+        else error_at st "unexpected '&' (expected '&&')"
+      | '|' ->
+        if i + 1 < len && src.[i + 1] = '|'
+        then Some (TOr, advance st 2)
+        else error_at st "unexpected '|' (expected '||')"
+      | ';' ->
+        if i + 1 < len && src.[i + 1] = ';'
+        then Some (TSemisemi, advance st 2)
+        else error_at st "unexpected character ';'"
+      | ch -> error_at st "unexpected character '%c'" ch))
+;;
+
+let rec tokens_seq src len st () =
+  match next_token src len st with
+  | exception Lexer_error msg -> Seq.Cons (Error (`lexer_error msg), fun () -> Seq.Nil)
+  | None -> Seq.Cons (Ok TEOF, fun () -> Seq.Nil)
+  | Some (tok, st') -> Seq.Cons (Ok tok, tokens_seq src len st')
+;;
+
+let tokenize_lazy src : (token, [> error ]) result Seq.t =
+  tokens_seq src (String.length src) init_state
+;;
+
 let tokenize src : (token list, [> error ]) result =
-  let len = String.length src in
-  let rec skip i line col =
-    if i >= len
-    then i, line, col
-    else (
-      match src.[i] with
-      | '\n' -> skip (i + 1) (line + 1) 1
-      | '\r' ->
-        if i + 1 < len && src.[i + 1] = '\n'
-        then skip (i + 2) (line + 1) 1
-        else skip (i + 1) (line + 1) 1
-      | ' ' | '\t' -> skip (i + 1) line (col + 1)
-      | _ -> i, line, col)
+  let rec collect seq acc =
+    match seq () with
+    | Seq.Nil -> Ok (List.rev acc)
+    | Seq.Cons (Error e, _) -> Error e
+    | Seq.Cons (Ok tok, rest) -> collect rest (tok :: acc)
   in
-  let error line col fmt =
-    Printf.ksprintf
-      (fun msg -> Error (`lexer_error (Printf.sprintf "%d:%d: %s" line col msg)))
-      fmt
-  in
-  let rec go i line col acc =
-    let i, line, col = skip i line col in
-    if i >= len
-    then Ok (List.rev (TEOF :: acc))
-    else (
-      let c = src.[i] in
-      if is_digit c
-      then (
-        let s, j = take_while src len is_digit i in
-        let consumed = j - i in
-        match int_of_string_opt s with
-        | Some n -> go j line (col + consumed) (TInt n :: acc)
-        | None -> error line col "integer literal '%s' out of range" s)
-      else if is_ident_start c
-      then (
-        let s, j = take_while src len is_ident_char i in
-        let consumed = j - i in
-        let tok =
-          match keyword_of_string s with
-          | Some t -> t
-          | None -> TIdent s
-        in
-        go j line (col + consumed) (tok :: acc))
-      else (
-        match c with
-        | '(' ->
-          if i + 1 < len && src.[i + 1] = ')'
-          then go (i + 2) line (col + 2) (TUnit :: acc)
-          else go (i + 1) line (col + 1) (TLParen :: acc)
-        | ')' -> go (i + 1) line (col + 1) (TRParen :: acc)
-        | '+' -> go (i + 1) line (col + 1) (TPlus :: acc)
-        | '*' -> go (i + 1) line (col + 1) (TStar :: acc)
-        | '/' -> go (i + 1) line (col + 1) (TSlash :: acc)
-        | '-' ->
-          if i + 1 < len && src.[i + 1] = '>'
-          then go (i + 2) line (col + 2) (TArrow :: acc)
-          else go (i + 1) line (col + 1) (TMinus :: acc)
-        | '=' -> go (i + 1) line (col + 1) (TEqual :: acc)
-        | '<' ->
-          if i + 1 < len && src.[i + 1] = '>'
-          then go (i + 2) line (col + 2) (TNotEqual :: acc)
-          else if i + 1 < len && src.[i + 1] = '='
-          then go (i + 2) line (col + 2) (TELess :: acc)
-          else go (i + 1) line (col + 1) (TLess :: acc)
-        | '>' ->
-          if i + 1 < len && src.[i + 1] = '='
-          then go (i + 2) line (col + 2) (TEMore :: acc)
-          else go (i + 1) line (col + 1) (TMore :: acc)
-        | '&' ->
-          if i + 1 < len && src.[i + 1] = '&'
-          then go (i + 2) line (col + 2) (TAnd :: acc)
-          else error line col "unexpected '&' (expected '&&')"
-        | '|' ->
-          if i + 1 < len && src.[i + 1] = '|'
-          then go (i + 2) line (col + 2) (TOr :: acc)
-          else error line col "unexpected '|' (expected '||')"
-        | ';' ->
-          if i + 1 < len && src.[i + 1] = ';'
-          then go (i + 2) line (col + 2) (TSemisemi :: acc)
-          else error line col "unexpected character ';'"
-        | ch -> error line col "unexpected character '%c'" ch))
-  in
-  go 0 1 1 []
+  collect (tokens_seq src (String.length src) init_state) []
 ;;
