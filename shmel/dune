@@ -7,6 +7,6 @@
  (package shmel)
  (name compiler)
  (modules compiler)
- (libraries kormilcyn_khmelev_yakovlev_lib KormilcynKhmelevYakovlev)
+ (libraries shmel_lib Shmel)
  (instrumentation
   (backend bisect_ppx_ng)))

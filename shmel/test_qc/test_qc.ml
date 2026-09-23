@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Kormilcyn_khmelev_yakovlev_lib
+open Shmel_lib
 
 module Parse = struct
   type result = (Ast.expr, string) Stdlib.result

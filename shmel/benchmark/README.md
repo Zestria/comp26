@@ -24,7 +24,7 @@
 Запуск из корня репозитория:
 
 ```sh
-dune exec kormilcyn-khmelev-yakovlev/benchmark/benchmark.exe
+dune exec shmel/benchmark/benchmark.exe
 ```
 
 Также доступно публичное имя executable:
