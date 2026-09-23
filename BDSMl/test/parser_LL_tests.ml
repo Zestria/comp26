@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open Frontend
-open Parser_LL
+open LL_parser.Parser
 open Printer
 
 let render src =

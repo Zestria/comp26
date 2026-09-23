@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open Frontend
-open Lexer
+open LL_parser.Lexer
 open Tokens
 
 let show_token = function

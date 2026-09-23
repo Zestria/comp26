@@ -2,9 +2,10 @@
 
 open Frontend
 open Ast
+open LL_parser.Parser
 
 let parse_LL source =
-  match Parser_LL.parse_string_LL source with
+  match parse_string_LL source with
   | Ok program -> Ok program
   | Error (`lexer_error message | `parse_error message) -> Error message
 ;;
@@ -53,19 +54,17 @@ let regression_tests () =
     ; StrEval Unit
     ];
   expect_program "let () = ();;" [ StrLet (NonRec, PUnit, Unit) ];
-  let right_minus =
-    Parser_LL.with_associativity Parser_LL.default_config Minus Parser_LL.Right
-  in
-  (match Parser_LL.parse_string_LL ~config:right_minus "8 - 3 - 1" with
+  let right_minus = with_associativity default_config Minus Right in
+  (match parse_string_LL ~config:right_minus "8 - 3 - 1" with
    | Ok [ StrEval (BinOp (Minus, Int 8, BinOp (Minus, Int 3, Int 1))) ] -> ()
    | _ -> failwith "LL associativity override for minus was ignored");
-  let left_or = Parser_LL.with_associativity Parser_LL.default_config Or Parser_LL.Left in
-  (match Parser_LL.parse_string_LL ~config:left_or "true || false || true" with
+  let left_or = with_associativity default_config Or Left in
+  (match parse_string_LL ~config:left_or "true || false || true" with
    | Ok [ StrEval (BinOp (Or, BinOp (Or, Bool true, Bool false), Bool true)) ] -> ()
    | _ -> failwith "LL associativity override for or was ignored");
   List.iter
     (fun source ->
-       match Parser_LL.parse_string_LL source, Parse.parse source with
+       match parse_string_LL source, Parse.parse source with
        | Error _, Error _ -> ()
        | _ -> failwith (Printf.sprintf "Expected a syntax error on %S" source))
     [ "fun -> 1"
@@ -102,7 +101,7 @@ let regression_tests () =
     ];
   List.iter
     (fun source ->
-       if Lexer.tokenize source <> Lexer_LR.tokenize source
+       if LL_parser.Lexer.tokenize source <> Lexer_LR.tokenize source
        then failwith (Printf.sprintf "Lexers disagree on %S" source))
     [ "Foo _foo x1 123abc iffy inlet lettuce trueish funny recover thenable nothing"
     ; "() ( ) -> - <> <= < >= > && || ;;"
@@ -296,8 +295,8 @@ let () =
   QCheck_runner.run_tests_main
     [ QCheck.Test.make ~name:"LL/LR AST round trip" ~count:2000 programs (fun expected ->
         let source = source_of_program expected in
-        Parser_LL.parse_string_LL source = Ok expected && Parse.parse source = Ok expected)
+        parse_string_LL source = Ok expected && Parse.parse source = Ok expected)
     ; QCheck.Test.make ~name:"LL/LR token agreement" ~count:2000 tokens (fun source ->
-        Lexer.tokenize source = Lexer_LR.tokenize source)
+        LL_parser.Lexer.tokenize source = Lexer_LR.tokenize source)
     ]
 ;;

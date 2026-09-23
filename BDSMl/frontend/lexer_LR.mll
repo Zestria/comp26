@@ -1,7 +1,7 @@
 {
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-open Lexer
+open LL_parser.Lexer
 open Tokens
 
 type error = [ `lexer_error of string ]
