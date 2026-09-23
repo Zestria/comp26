@@ -34,7 +34,7 @@ let parse_bottomup source =
 
 let parse kind opts source =
   match kind with
-  | Topdown -> Parser_topdown.parse_prog source
+  | Topdown -> Parser_topdown.parse_prog ~sticky:opts.sticky source
   | Bottomup ->
     if opts.sticky
     then Error "sticky mode is not supported by the bottom-up parser"

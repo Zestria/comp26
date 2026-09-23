@@ -13,6 +13,13 @@
     ([letx] is an identifier, not [let] followed by [x]) while still
     falling back to the identifier rule.
 
+    Sticky mode ([\~sticky:true], enabled by the CLI flag [--sticky])
+    makes keywords win at the character level: the word-boundary check in
+    {!kw} is dropped, so [letx = 1] parses as [let x = 1], [letrec f n = e]
+    as [let rec f n = e] and [funx->x+1] as [fun x -> x + 1].  Known,
+    documented limitation: a bare identifier that happens to start with a
+    keyword is misread, e.g. [letter = 1] becomes [let ter = 1].
+
     Precedence (low -> high): comparisons -> [+ -] -> [* / mod] ->
     unary minus -> application.
 
@@ -130,17 +137,26 @@ let skip_ws =
 
 (* Tokens -------------------------------------------------------------- *)
 
-(** Keyword that must not be a prefix of a longer identifier. *)
-let kw s =
+(** Keyword match.
+
+    - Non-sticky (default): the keyword must not be a prefix of a longer
+      identifier ([letx] is a variable, not [let] followed by [x]).
+    - Sticky: the keyword wins at the character level; the word-boundary
+      check is dropped, so [letx] splits into [let] + [x]. *)
+let kw ~sticky s =
   tracked (string s)
-  *> peek_char
-  >>= (function
-    | Some c when is_id_char c ->
-      fail_at (s ^ " is a keyword and cannot start an identifier")
-    | _ -> return ())
+  >>= fun _ ->
+  if sticky
+  then return ()
+  else
+    peek_char
+    >>= (function
+      | Some c when is_id_char c ->
+        fail_at (s ^ " is a keyword and cannot start an identifier")
+      | _ -> return ())
 ;;
 
-let keyword s = skip_ws *> kw s
+let keyword ~sticky s = skip_ws *> kw ~sticky s
 
 let sym s = skip_ws *> tracked (string s)
 
@@ -148,7 +164,13 @@ let keywords =
   [ "let"; "rec"; "in"; "fun"; "if"; "then"; "else"; "mod"; "true"; "false" ]
 ;;
 
-let ident =
+(** Identifier.  The bare keywords are rejected in both modes.  In sticky
+    mode the flag only controls *where* identifiers may be reached: a
+    keyword match wins first in expression position, while a keyword-prefixed
+    name like [letx] is still a valid identifier wherever {!ident} is used
+    directly (binding names, parameters). *)
+let ident ~sticky =
+  ignore sticky;
   tracked (take_while1 is_id_char)
   >>= fun s ->
   if List.mem s keywords
@@ -168,7 +190,7 @@ let plus_op = sym "+"
 let minus_op = sym "-"
 let star_op = sym "*"
 let slash_op = sym "/"
-let mod_op = keyword "mod" *> return "mod"
+let mod_op ~sticky = keyword ~sticky "mod" *> return "mod"
 let eq_op = sym "="
 let neq_op = sym "<>"
 let lt_op = sym "<"
@@ -200,7 +222,7 @@ let prio base table =
 
 (* Program ------------------------------------------------------------- *)
 
-let program =
+let program ~sticky =
   skip_ws
   *> many
        (fix (fun expr ->
@@ -209,9 +231,9 @@ let program =
               skip_ws
               *> choice
                    [ (int_lit >>| fun n -> Ast.Int n)
-                   ; (keyword "true" *> return (Ast.Bool true))
-                   ; (keyword "false" *> return (Ast.Bool false))
-                   ; (ident >>| fun x -> Ast.Var x)
+                   ; (keyword ~sticky "true" *> return (Ast.Bool true))
+                   ; (keyword ~sticky "false" *> return (Ast.Bool false))
+                   ; (ident ~sticky >>| fun x -> Ast.Var x)
                    ; parens ]
             in
             let app =
@@ -238,44 +260,44 @@ let program =
                    ; (minus_op, fun l r -> Ast.Binop (Ast.Sub, l, r)) ]
                  ; [ (star_op, fun l r -> Ast.Binop (Ast.Mul, l, r))
                    ; (slash_op, fun l r -> Ast.Binop (Ast.Div, l, r))
-                   ; (mod_op, fun l r -> Ast.Binop (Ast.Mod, l, r)) ] |]
+                   ; (mod_op ~sticky, fun l r -> Ast.Binop (Ast.Mod, l, r)) ] |]
             in
             let let_parser =
-              keyword "let"
-              *> option false (keyword "rec" *> return true)
+              keyword ~sticky "let"
+              *> option false (keyword ~sticky "rec" *> return true)
               >>= fun rec_ ->
-              skip_ws *> ident
+              skip_ws *> ident ~sticky
               >>= fun name ->
-              many (skip_ws *> ident)
+              many (skip_ws *> ident ~sticky)
               >>= fun params ->
               sym "=" *> expr
               >>= fun body ->
-              option None (keyword "in" *> expr >>| fun e -> Some e)
+              option None (keyword ~sticky "in" *> expr >>| fun e -> Some e)
               >>= fun cont ->
               return (Ast.Let ({ Ast.rec_; name; params; body }, cont))
             in
             let fun_parser =
-              keyword "fun"
-              *> many1 (skip_ws *> ident)
+              keyword ~sticky "fun"
+              *> many1 (skip_ws *> ident ~sticky)
               >>= fun params ->
               sym "->" *> expr >>| fun body -> Ast.Fun (params, body)
             in
             let if_parser =
-              keyword "if" *> expr
+              keyword ~sticky "if" *> expr
               >>= fun cond ->
-              keyword "then" *> expr
+              keyword ~sticky "then" *> expr
               >>= fun thn ->
-              keyword "else" *> expr >>| fun els -> Ast.If (cond, thn, els)
+              keyword ~sticky "else" *> expr >>| fun els -> Ast.If (cond, thn, els)
             in
             let item = choice [ let_parser; fun_parser; if_parser; binop ] in
             item <* (semi *> return () <|> return ())))
   <* skip_ws
 ;;
 
-let parse_prog source =
+let parse_prog ~sticky source =
   max_pos := 0;
   best_fail := None;
-  match parse_string ~consume:Consume.All program source with
+  match parse_string ~consume:Consume.All (program ~sticky) source with
   | Ok prog -> Ok prog
   | Error _ ->
     let off, msg =
