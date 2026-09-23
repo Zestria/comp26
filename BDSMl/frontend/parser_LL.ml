@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open Ast
-open Lexer
+open Tokens
 
 type error =
   [ `lexer_error of string
@@ -266,9 +266,7 @@ let parse ?(config = default_config) (tokens : token list) : (program, [> error 
   parse_items config tokens
 ;;
 
-let parse_string_LL
-      ?(config = default_config)
-      (src : string)
+let parse_string_LL ?(config = default_config) (src : string)
   : (program, [> error | Lexer.error ]) result
   =
   match Lexer.tokenize src with

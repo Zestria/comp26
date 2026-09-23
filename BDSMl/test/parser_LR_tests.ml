@@ -12,17 +12,17 @@ let parse_LL source =
 let expect_program source expected =
   List.iter
     (fun (name, parse) ->
-      match parse source with
-      | Ok actual when actual = expected -> ()
-      | Ok actual ->
-        failwith
-          (Printf.sprintf
-             "%s: %S: expected %s, got %s"
-             name
-             source
-             (Printer.print_ast expected)
-             (Printer.print_ast actual))
-      | Error message -> failwith (Printf.sprintf "%s: %S: %s" name source message))
+       match parse source with
+       | Ok actual when actual = expected -> ()
+       | Ok actual ->
+         failwith
+           (Printf.sprintf
+              "%s: %S: expected %s, got %s"
+              name
+              source
+              (Printer.print_ast expected)
+              (Printer.print_ast actual))
+       | Error message -> failwith (Printf.sprintf "%s: %S: %s" name source message))
     [ "LL", parse_LL; "LR", Parse.parse ]
 ;;
 
@@ -39,10 +39,8 @@ let regression_tests () =
     ; "8 / 2 / 2", BinOp (Div, BinOp (Div, Int 8, Int 2), Int 2)
     ; "1 < 2 = true", BinOp (Equal, BinOp (Less, Int 1, Int 2), Bool true)
     ; "true || false && true", BinOp (Or, Bool true, BinOp (And, Bool false, Bool true))
-    ; ( "true || false || true"
-      , BinOp (Or, Bool true, BinOp (Or, Bool false, Bool true)) )
-    ; ( "true && false && true"
-      , BinOp (And, Bool true, BinOp (And, Bool false, Bool true)) )
+    ; "true || false || true", BinOp (Or, Bool true, BinOp (Or, Bool false, Bool true))
+    ; "true && false && true", BinOp (And, Bool true, BinOp (And, Bool false, Bool true))
     ; ( "let x = let y = 1 in y in x"
       , Let (NonRec, PVar "x", Let (NonRec, PVar "y", Int 1, Var "y"), Var "x") )
     ; ( "if true then if false then 1 else 2 else 3"
@@ -61,17 +59,15 @@ let regression_tests () =
   (match Parser_LL.parse_string_LL ~config:right_minus "8 - 3 - 1" with
    | Ok [ StrEval (BinOp (Minus, Int 8, BinOp (Minus, Int 3, Int 1))) ] -> ()
    | _ -> failwith "LL associativity override for minus was ignored");
-  let left_or =
-    Parser_LL.with_associativity Parser_LL.default_config Or Parser_LL.Left
-  in
+  let left_or = Parser_LL.with_associativity Parser_LL.default_config Or Parser_LL.Left in
   (match Parser_LL.parse_string_LL ~config:left_or "true || false || true" with
    | Ok [ StrEval (BinOp (Or, BinOp (Or, Bool true, Bool false), Bool true)) ] -> ()
    | _ -> failwith "LL associativity override for or was ignored");
   List.iter
     (fun source ->
-      match Parser_LL.parse_string_LL source, Parse.parse source with
-      | Error _, Error _ -> ()
-      | _ -> failwith (Printf.sprintf "Expected a syntax error on %S" source))
+       match Parser_LL.parse_string_LL source, Parse.parse source with
+       | Error _, Error _ -> ()
+       | _ -> failwith (Printf.sprintf "Expected a syntax error on %S" source))
     [ "fun -> 1"
     ; "fun x x"
     ; "let = 1"
@@ -87,8 +83,8 @@ let regression_tests () =
   (* Preserve the original Menhir grammar beyond the shared LL subset. *)
   List.iter
     (fun (source, expected) ->
-      if Parse.parse source <> Ok expected
-      then failwith (Printf.sprintf "Original LR syntax changed on %S" source))
+       if Parse.parse source <> Ok expected
+       then failwith (Printf.sprintf "Original LR syntax changed on %S" source))
     [ "", []
     ; " \t\n", []
     ; ";;", []
@@ -106,8 +102,8 @@ let regression_tests () =
     ];
   List.iter
     (fun source ->
-      if Lexer.tokenize source <> Lexer_LR.tokenize source
-      then failwith (Printf.sprintf "Lexers disagree on %S" source))
+       if Lexer.tokenize source <> Lexer_LR.tokenize source
+       then failwith (Printf.sprintf "Lexers disagree on %S" source))
     [ "Foo _foo x1 123abc iffy inlet lettuce trueish funny recover thenable nothing"
     ; "() ( ) -> - <> <= < >= > && || ;;"
     ; "\r\n\r\n@"
@@ -120,9 +116,9 @@ let regression_tests () =
    | _ -> failwith "Nested comments were not preserved");
   List.iter
     (fun (source, expected) ->
-      match Parse.parse source with
-      | Error message when message = expected -> ()
-      | _ -> failwith (Printf.sprintf "Incorrect lexer error on %S" source))
+       match Parse.parse source with
+       | Error message when message = expected -> ()
+       | _ -> failwith (Printf.sprintf "Incorrect lexer error on %S" source))
     [ "\r\n@", "2:1: unexpected character '@'"
     ; "(*\r\n*)\r@", "3:1: unexpected character '@'"
     ; "  (* unterminated", "1:3: unterminated comment"
@@ -205,11 +201,12 @@ let source_of_program program =
 
 let gen_program =
   let open QCheck.Gen in
-  let ident = oneofl [ "x"; "y"; "k"; "_foo"; "fooBar"; "iffy" ] in
+  let ident = oneof_list [ "x"; "y"; "k"; "_foo"; "fooBar"; "iffy" ] in
   let pattern = oneof [ map (fun x -> PVar x) ident; return PUnit; return PUnderscore ] in
-  let flag = oneofl [ NonRec; Rec ] in
+  let flag = oneof_list [ NonRec; Rec ] in
   let op =
-    oneofl [ Plus; Minus; Mult; Div; Equal; NotEqual; More; Less; EMore; ELess; And; Or ]
+    oneof_list
+      [ Plus; Minus; Mult; Div; Equal; NotEqual; More; Less; EMore; ELess; And; Or ]
   in
   let atom =
     oneof
@@ -224,10 +221,10 @@ let gen_program =
     then atom
     else (
       let sub = expr (depth - 1) in
-      frequency
+      oneof_weighted
         [ 3, atom
         ; 2, map3 (fun op left right -> BinOp (op, left, right)) op sub sub
-        ; 1, map2 (fun op body -> UnOp (op, body)) (oneofl [ Neg; Not ]) sub
+        ; 1, map2 (fun op body -> UnOp (op, body)) (oneof_list [ Neg; Not ]) sub
         ; 1, map3 (fun cond yes no -> If (cond, yes, no)) sub sub sub
         ; ( 1
           , map3
@@ -259,7 +256,7 @@ let () =
           (String.concat " ")
           (list_size
              (int_bound 40)
-             (oneofl
+             (oneof_list
                 [ "let"
                 ; "rec"
                 ; "in"

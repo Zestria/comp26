@@ -1,5 +1,6 @@
 %{
 open Ast
+open Tokens
 
 let abstract parameters body =
   List.fold_right (fun parameter body -> Abs (parameter, body)) parameters body

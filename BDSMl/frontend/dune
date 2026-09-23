@@ -2,10 +2,10 @@
  (name frontend)
  (public_name BDSMl.frontend)
  (libraries base)
- (modules_without_implementation Ast))
+ (modules_without_implementation Ast Tokens))
 
 (menhir
  (modules parser)
- (flags --strict --external-tokens Lexer))
+ (flags --strict --external-tokens Tokens))
 
 (ocamllex lexer_LR)

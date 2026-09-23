@@ -5,7 +5,7 @@ type error = [ `lexer_error of string ]
 exception Error of string
 
 (** Read one token using ocamllex. Raises [Error] on invalid input. *)
-val token : Lexing.lexbuf -> Lexer.token
+val token : Lexing.lexbuf -> Tokens.token
 
 (** Use the same token type and error variant as [Lexer.tokenize]. *)
-val tokenize : string -> (Lexer.token list, [> error ]) result
+val tokenize : string -> (Tokens.token list, [> error ]) result

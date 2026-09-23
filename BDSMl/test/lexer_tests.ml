@@ -8,6 +8,7 @@
 
 open Frontend
 open Lexer
+open Tokens
 
 let show_token = function
   | TEOF -> "TEOF"
