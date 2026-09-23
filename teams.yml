@@ -12,5 +12,10 @@
   - Kakadu2
   - Kakadu
 
+- shmel:
+  - kormyltsyn-roman-gmail-com
+  - khmelevvova06
+  - yacknickovlev
+
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
