@@ -44,7 +44,7 @@ case "$CMD" in
         opam install "$COMPILER_NAME" --deps-only --with-test --with-doc --yes
         ;;
     build)
-        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @check @runtest @install
+        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @check "@$COMPILER_NAME/runtest" @install
         ;;
     *)
         usage
