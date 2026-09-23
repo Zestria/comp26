@@ -1,6 +1,0 @@
-(library
- (name frontend)
- (public_name MMML.frontend)
- (wrapped false)
- (preprocess
-  (pps ppx_deriving.eq ppx_deriving.show)))
