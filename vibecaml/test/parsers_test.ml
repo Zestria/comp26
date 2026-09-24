@@ -27,6 +27,8 @@ let parsers =
   ]
 ;;
 
+let extensions = Config.default_extensions
+
 let for_each_parser check =
   List.iter
     (fun (name, (module P : Parser_intf.S)) -> check name (module P : Parser_intf.S))
@@ -42,7 +44,7 @@ let parsed name parse source =
 (* Эталонные программы из ТЗ разбираются в ожидаемое дерево. *)
 let () =
   for_each_parser (fun name (module P) ->
-    let structure = parsed name P.parse_structure in
+    let structure = parsed name (P.parse_structure extensions) in
     if structure Samples.fack_source <> [ Samples.fack ]
     then fail "%s: fack разобран не в то дерево" name;
     if structure Samples.fibk_source <> [ Samples.fibk ]
@@ -68,7 +70,7 @@ let () =
   let structure = [ Samples.fack; Samples.fibk; Samples.main; constructor_application ] in
   let printed = Pprint.string_of_structure structure in
   for_each_parser (fun name (module P) ->
-    if parsed name P.parse_structure printed <> structure
+    if parsed name (P.parse_structure extensions) printed <> structure
     then fail "%s: вывод принтера разобран не в то дерево:\n%s" name printed)
 ;;
 
@@ -177,8 +179,12 @@ let structures =
 
 let () =
   for_each_parser (fun name (module P) ->
-    List.iter (same_as_ocaml name P.parse_expr Reparse.expression) expressions;
-    List.iter (same_as_ocaml name P.parse_structure Reparse.structure) structures)
+    List.iter
+      (same_as_ocaml name (P.parse_expr extensions) Reparse.expression)
+      expressions;
+    List.iter
+      (same_as_ocaml name (P.parse_structure extensions) Reparse.structure)
+      structures)
 ;;
 
 (* Известное отличие от OCaml: он отвергает [-(-4611686018427387904)], а у нас
@@ -186,7 +192,7 @@ let () =
 let () =
   let source = "- (-4611686018427387904)" in
   for_each_parser (fun name (module P) ->
-    if parsed name P.parse_expr source <> Expr_constant (Const_int min_int)
+    if parsed name (P.parse_expr extensions) source <> Expr_constant (Const_int min_int)
     then fail "%s: не то дерево: %s" name source)
 ;;
 
@@ -203,8 +209,8 @@ let expect_error name parse source expected =
 
 let () =
   for_each_parser (fun name (module P) ->
-    let expr = expect_error name P.parse_expr in
-    let structure = expect_error name P.parse_structure in
+    let expr = expect_error name (P.parse_expr extensions) in
+    let structure = expect_error name (P.parse_structure extensions) in
     expr "match x with _ -> 1" "1:1: ключевое слово match вне подмножества";
     expr "let match = 1 in match" "1:5: ключевое слово match вне подмножества";
     expr "begin 1 end" "1:1: ключевое слово begin вне подмножества";
@@ -259,7 +265,7 @@ let expect_some_error name parse source =
 let () =
   for_each_parser (fun name (module P) ->
     List.iter
-      (expect_some_error name P.parse_expr)
+      (expect_some_error name (P.parse_expr extensions))
       [ "1 + if a then b else c"
       ; "1 + let x = 1 in x"
       ; "1 + fun x -> x"
@@ -285,7 +291,7 @@ let () =
       ; "x -> y"
       ];
     List.iter
-      (expect_some_error name P.parse_structure)
+      (expect_some_error name (P.parse_structure extensions))
       [ "let x = 1;; let y = 2"
       ; ";;"
       ; "let -1 = -1"

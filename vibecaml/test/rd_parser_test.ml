@@ -16,14 +16,16 @@ let fail format =
     format
 ;;
 
+let config = Config.default_extensions
+
 let parsed_expression source =
-  match Rd_parser.parse_expr source with
+  match Rd_parser.parse_expr config source with
   | Ok expression -> expression
   | Error message -> fail "не удалось разобрать %S: %s" source message
 ;;
 
 let parsed_structure source =
-  match Rd_parser.parse_structure source with
+  match Rd_parser.parse_structure config source with
   | Ok structure -> structure
   | Error message -> fail "не удалось разобрать программу: %s" message
 ;;
@@ -86,7 +88,7 @@ let () =
 ;;
 
 let () =
-  match Rd_parser.parse_expr "let x =" with
+  match Rd_parser.parse_expr Config.default_extensions "let x =" with
   | Error message when String.length message > 0 -> ()
   | Error _ -> fail "пустое сообщение об ошибке"
   | Ok _ -> fail "некорректный ввод не должен разбираться"
