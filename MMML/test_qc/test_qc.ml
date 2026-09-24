@@ -6,93 +6,41 @@
 
 [@@@ocaml.text "/*"]
 
-(* run this test via `dune test  --force` *)
+open QCheck
 
-module AST = struct
-  type t =
-    | Const of (int[@gen QCheck.Gen.return 1])
-    | Add of t * t
-  [@@deriving qcheck, show { with_path = false }]
-end
+let print_expr = Ast.show_expr
+let print_program = Ast.show_program
 
-module PP = struct
-  let rec pp ppf = function
-    | AST.Const n -> Format.fprintf ppf "%d" n
-    (* | Add (l, r) -> Format.fprintf ppf "%a+%a" pp l pp r *)
-    | Add (l, r) -> Format.fprintf ppf "(%a+%a)" pp l pp r
-  ;;
-end
+let expr_gen = QCheck.Gen.sized_size (QCheck.Gen.int_bound 30) Ast.gen_expr_sized
 
-module Parser = struct
-  open Angstrom
-
-  let prio expr table =
-    let len = Array.length table in
-    let rec helper level =
-      if level >= len
-      then expr
-      else (
-        let xs = table.(level) in
-        return (List.fold_left (fun acc (op, r) -> op acc r))
-        <*> helper (level + 1)
-        <*> many
-              (choice
-                 (List.map
-                    (fun (op, f) -> op *> helper (level + 1) >>= fun r -> return (f, r))
-                    xs)))
-    in
-    helper 0
-  ;;
-
-  let expr_small =
-    let code0 = Char.code '0' in
-    Angstrom.satisfy (function
-      | '0' .. '9' -> true
-      | _ -> false)
-    >>| fun c -> AST.Const (Char.code c - code0)
-  ;;
-
-  let expr =
-    fix (fun self ->
-      let add a b = AST.Add (a, b) in
-      prio (expr_small <|> (char '(' *> self <* char ')')) [| [ char '+', add ] |])
-  ;;
-end
-
-let rec shrink_expr =
-  let open QCheck.Iter in
-  (* fun _ -> empty *)
-  function
-  | AST.Const _ -> empty
-  | Add (l, r) ->
-    of_list [ l; r ]
-    <+> (shrink_expr l >>= fun l -> return (AST.Add (l, r)))
-    <+> (shrink_expr r >>= fun r -> return (AST.Add (l, r)))
+let definition_gen =
+  QCheck.Gen.map
+    (fun (flag, pattern, expression) -> Ast.Definition (flag, pattern, expression))
+    (QCheck.Gen.triple Ast.gen_rec_flag Ast.gen_pattern expr_gen)
 ;;
 
-let arbitrary_expr =
-  (* let open QCheck.Iter in *)
-  QCheck.make AST.gen ~print:(Format.asprintf "%a" PP.pp) ~shrink:shrink_expr
+let program_gen = QCheck.Gen.list_size (QCheck.Gen.int_bound 5) definition_gen
+
+let expr_round_trip =
+  Test.make
+    ~name:"pretty-print then parse expression"
+    ~count:1_000
+    (QCheck.make expr_gen ~print:print_expr)
+    (fun expression ->
+       match Topdown_parser.parse_expression (Pretty_printer.expr_to_string expression) with
+       | Ok parsed -> parsed = expression
+       | Error _ -> false)
 ;;
 
-let _ =
-  QCheck_runner.run_tests
-    [ QCheck.(
-        Test.make arbitrary_expr (fun l ->
-          match
-            Angstrom.parse_string
-              ~consume:Angstrom.Consume.All
-              Parser.expr
-              (Format.asprintf "%a" PP.pp l)
-          with
-          | Result.Ok after when after = l -> true
-          | Result.Ok after ->
-            Format.printf "before : %a\n%!" AST.pp l;
-            (* Format.printf "       : `%a`\n%!" PP.pp l; *)
-            Format.printf "`%a`\n%!" AST.pp after;
-            false
-          | Result.Error _ ->
-            (* Format.printf "failed on : %a\n%!" Lam.pp l; *)
-            false))
-    ]
+let program_round_trip =
+  Test.make
+    ~name:"pretty-print then parse program"
+    ~count:1_000
+    (QCheck.make program_gen ~print:print_program)
+    (fun program ->
+       match Topdown_parser.parse_program (Pretty_printer.program_to_string program) with
+       | Ok parsed -> parsed = program
+       | Error _ -> false)
 ;;
+
+let () = exit (QCheck_runner.run_tests [ expr_round_trip; program_round_trip ])
