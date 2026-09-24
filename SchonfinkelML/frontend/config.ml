@@ -50,7 +50,10 @@ let flag_specs cfg =
     , Arg.Unit (fun () -> cfg.parser <- Top_down)
     , "Use recursive-descent parser, can accept parser settings" )
   ; ( "--parser-settings"
-    , Arg.Unit (fun () -> cfg.parser <- Top_down)
+    , Arg.String
+        (fun settings ->
+          cfg.parser_settings <- Some settings;
+          cfg.parser <- Top_down)
     , " <settings>  Pass settings to top down parser, see FORMAT for more info" )
   ]
 ;;
