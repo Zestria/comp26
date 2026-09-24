@@ -29,5 +29,31 @@ let run entry source =
      | lexeme -> Error (Printf.sprintf "%s: синтаксическая ошибка у %S" position lexeme))
 ;;
 
-let parse_structure source = run Menhir_parser.structure_eof source
-let parse_expr source = run Menhir_parser.expression_eof source
+(* Menhir не поддерживает любые расширения, поэтому при любом из флагов возвращаем ошибку. *)
+let check_extensions extensions =
+  let enabled =
+    List.find_opt
+      snd
+      [ "--ext-glued-keywords", extensions.Parser_intf.glued_keywords
+      ; "--ext-operator-declarations", extensions.Parser_intf.operator_declarations
+      ]
+  in
+  match enabled with
+  | None -> Ok ()
+  | Some (flag, _) ->
+    Error (Printf.sprintf "расширение %s не поддерживается в menhir-парсере" flag)
+;;
+
+let with_extensions extensions entry source =
+  match check_extensions extensions with
+  | Error _ as error -> error
+  | Ok () -> run entry source
+;;
+
+let parse_structure extensions source =
+  with_extensions extensions Menhir_parser.structure_eof source
+;;
+
+let parse_expr extensions source =
+  with_extensions extensions Menhir_parser.expression_eof source
+;;
