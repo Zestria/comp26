@@ -10,7 +10,6 @@ open QCheck
 
 let print_expr = Ast.show_expr
 let print_program = Ast.show_program
-
 let expr_gen = QCheck.Gen.sized_size (QCheck.Gen.int_bound 30) Ast.gen_expr_sized
 
 let definition_gen =
@@ -27,7 +26,9 @@ let expr_round_trip =
     ~count:1_000
     (QCheck.make expr_gen ~print:print_expr)
     (fun expression ->
-       match Topdown_parser.parse_expression (Pretty_printer.expr_to_string expression) with
+       match
+         Topdown_parser.parse_expression (Pretty_printer.expr_to_string expression)
+       with
        | Ok parsed -> parsed = expression
        | Error _ -> false)
 ;;

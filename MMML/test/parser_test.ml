@@ -13,7 +13,6 @@ let var name = Variable name
 let pvar name = PVariable name
 let int value = Constant (Integer value)
 let bool value = Constant (Boolean value)
-
 let parse_expr source = Topdown_parser.parse_expression source
 let parse_program source = Topdown_parser.parse_program source
 
@@ -197,7 +196,8 @@ let cps_fibonacci =
             ] )
     in
     check_program
-      "let rec fib n k = if n < 2 then k n else fib (n - 1) (fun a -> fib (n - 2) (fun b -> k (a + b)))"
+      "let rec fib n k = if n < 2 then k n else fib (n - 1) (fun a -> fib (n - 2) (fun b \
+       -> k (a + b)))"
       [ Definition (Recursive, pvar "fib", function_ [ pvar "n"; pvar "k" ] fib_body) ])
 ;;
 

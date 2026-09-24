@@ -9,11 +9,11 @@
 (** Parsed, untyped MiniML syntax shared by both parsers. *)
 
 type identifier =
-  (string [@gen QCheck.Gen.(map (fun n -> "x" ^ string_of_int n) nat_small)])
+  (string[@gen QCheck.Gen.(map (fun n -> "x" ^ string_of_int n) nat_small)])
 [@@deriving show { with_path = false }, qcheck]
 
 type constant =
-  | Integer of (int [@gen QCheck.Gen.nat_small])
+  | Integer of (int[@gen QCheck.Gen.nat_small])
   | Boolean of bool
   | Unit
 [@@deriving show { with_path = false }, qcheck]

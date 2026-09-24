@@ -86,12 +86,12 @@ and lambda_let_if state =
   | FUN ->
     (let* () = advance in
      let* parameters = collect_parameters in
-     (match parameters with
-      | [] -> unexpected
-      | _ :: _ ->
-        let* () = expect ARROW in
-        let+ body = expr in
-        function_ parameters body))
+     match parameters with
+     | [] -> unexpected
+     | _ :: _ ->
+       let* () = expect ARROW in
+       let+ body = expr in
+       function_ parameters body)
       state
   | IF ->
     (let* () = advance in
@@ -142,7 +142,10 @@ and program state =
 
 and rec_flag state =
   if state.current.token = REC
-  then (let+ () = advance in Recursive) state
+  then
+    (let+ () = advance in
+     Recursive)
+      state
   else Ok (Nonrecursive, state)
 
 and collect_parameters state =
@@ -164,8 +167,14 @@ and parameter_opt state =
 
 and parameter state =
   match state.current.token with
-  | UNDERSCORE -> (let+ () = advance in PWildcard) state
-  | IDENT name -> (let+ () = advance in PVariable name) state
+  | UNDERSCORE ->
+    (let+ () = advance in
+     PWildcard)
+      state
+  | IDENT name ->
+    (let+ () = advance in
+     PVariable name)
+      state
   | LPAREN ->
     (let* () = advance in
      let* name = expect_identifier in
@@ -176,13 +185,22 @@ and parameter state =
 
 and expect_identifier state =
   match state.current.token with
-  | IDENT name -> (let+ () = advance in name) state
+  | IDENT name ->
+    (let+ () = advance in
+     name)
+      state
   | _ -> unexpected state
 
 and binding_pattern state =
   match state.current.token with
-  | UNDERSCORE -> (let+ () = advance in PWildcard) state
-  | IDENT name -> (let+ () = advance in PVariable name) state
+  | UNDERSCORE ->
+    (let+ () = advance in
+     PWildcard)
+      state
+  | IDENT name ->
+    (let+ () = advance in
+     PVariable name)
+      state
   | LPAREN ->
     (let* () = advance in
      let* name = expect_identifier in
@@ -192,13 +210,9 @@ and binding_pattern state =
   | _ -> unexpected state
 
 and disjunction state = binary_level [ OR_OR, "||" ] conjunction state
-
 and conjunction state = binary_level [ AND_AND, "&&" ] comparison state
-
 and comparison state = binary_level comparison_operators additive state
-
 and additive state = binary_level [ PLUS, "+"; MINUS, "-" ] multiplicative state
-
 and multiplicative state = binary_level [ STAR, "*"; SLASH, "/" ] application state
 
 and application state =
@@ -227,15 +241,25 @@ and many parser state =
 and atom state =
   (let* token = peek in
    match token.token with
-   | INT value -> let+ () = advance in Constant (Integer value)
-   | TRUE -> let+ () = advance in Constant (Boolean true)
-   | FALSE -> let+ () = advance in Constant (Boolean false)
-   | IDENT name -> let+ () = advance in Variable name
+   | INT value ->
+     let+ () = advance in
+     Constant (Integer value)
+   | TRUE ->
+     let+ () = advance in
+     Constant (Boolean true)
+   | FALSE ->
+     let+ () = advance in
+     Constant (Boolean false)
+   | IDENT name ->
+     let+ () = advance in
+     Variable name
    | LPAREN ->
      let* () = advance in
      let* inner = peek in
      (match inner.token with
-      | RPAREN -> let+ () = advance in Constant Unit
+      | RPAREN ->
+        let+ () = advance in
+        Constant Unit
       | _ ->
         let* body = expr in
         let+ () = expect RPAREN in
