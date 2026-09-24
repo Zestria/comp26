@@ -19,8 +19,6 @@
   dune
   menhir
   benchmark
-  (angstrom
-   (= "0.16.0"))
   qcheck
   bisect_ppx_ng
   ppx_inline_test

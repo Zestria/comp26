@@ -3,13 +3,6 @@
  (modules ast_gen)
  (libraries qcheck frontend))
 
-(executable
- (name test_qc)
- (modules test_qc)
- (libraries qcheck angstrom)
- (preprocess
-  (pps ppx_deriving_qcheck ppx_deriving.show)))
-
 (rule
  (alias runtest)
  (deps
