@@ -10,10 +10,7 @@ type parser =
   | Recursive_descent
   | Menhir
 
-type extensions =
-  { glued_keywords : bool
-  ; operator_declarations : bool
-  }
+type extensions = Parser_intf.extensions
 
 type t =
   { parser : parser
@@ -23,7 +20,9 @@ type t =
   ; input_file : string option
   }
 
-let default_extensions = { glued_keywords = false; operator_declarations = false }
+let default_extensions : extensions =
+  { glued_keywords = false; operator_declarations = false }
+;;
 
 let default =
   { parser = Recursive_descent

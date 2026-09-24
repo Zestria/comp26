@@ -14,14 +14,11 @@ type parser =
   | Recursive_descent (** нисходящий, [--parser rd] *)
   | Menhir (** восходящий, [--parser menhir] *)
 
-(** Расширения синтаксиса нисходящего парсера (см. #5). По умолчанию выключены. *)
-type extensions =
-  { glued_keywords : bool
-    (** идентификаторы, слипшиеся с ключевыми словами, [--ext-glued-keywords] *)
-  ; operator_declarations : bool
-    (** переопределение арности и ассоциативности операторов,
-        [--ext-operator-declarations] *)
-  }
+(** Расширения синтаксиса --- общий тип из [Parser_intf], см. #5. *)
+type extensions = Parser_intf.extensions
+
+(** Все расширения выключены. *)
+val default_extensions : extensions
 
 type t =
   { parser : parser
