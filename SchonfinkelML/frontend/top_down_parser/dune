@@ -1,5 +1,5 @@
 (library
  (name top_down)
- (modules cursor parser)
+ (modules operators parser)
  (libraries frontend)
  (package SchonfinkelML))

@@ -6,7 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-(** QuickCheck properties for the top-down parser.
+(** QuickCheck properties for the top-down parser and for the operator table it
+    is driven by.
 
     The generator and the canonical printer are hand-written: [Common.expr] has
     no [@@deriving qcheck], and [Common.pp_expr] prints operator forms as
@@ -14,10 +15,11 @@
 
 open Frontend.Common
 module P = Top_down.Parser
+module Operators = Top_down.Operators
 module Gen = QCheck.Gen
 open QCheck.Iter
 
-let binop_ops = [ "+"; "-"; "*"; "/"; "<"; "<="; ">"; ">="; "=" ]
+let binop_ops = [ "+"; "-"; "*"; "/"; "<"; ">"; "=" ]
 let is_binop op = List.mem op binop_ops
 
 let names =
@@ -48,68 +50,19 @@ and surface_pp e =
   | App (l, r) -> "(" ^ surface_operand l ^ " " ^ surface_operand r ^ ")"
 ;;
 
-(* --- Glue-safe source ---
+(* --- Tables used by the properties --- *)
 
-   Spaces are dropped only where the parser can restore them: keyword +
-   identifier. Two identifiers would merge into one name, so application
-   arguments are always parenthesised. *)
-
-let glue_pp e =
-  let b = Buffer.create 128 in
-  let out s = Buffer.add_string b s in
-  let rec pp e =
-    match e with
-    | Ident s -> out s
-    | Const (LitInt n) -> out (string_of_int n)
-    | Abstr (x, body) ->
-      out "fun";
-      out x;
-      out "->";
-      pp body
-    | Let (flag, x, v, body) ->
-      out
-        (match flag with
-         | Recursive -> "letrec"
-         | NotRecursive -> "let");
-      out x;
-      out "=";
-      pp v;
-      out "in";
-      pp body
-    | If (c, t, e) ->
-      out "if";
-      pp c;
-      out "then";
-      pp t;
-      out "else";
-      pp e
-    | App (App (Ident op, a), b) when is_binop op ->
-      out "(";
-      operand a;
-      out op;
-      operand b;
-      out ")"
-    | App (Ident "-", a) ->
-      out "(-";
-      operand a;
-      out ")"
-    | App (l, r) ->
-      out "(";
-      operand l;
-      out "(";
-      pp r;
-      out "))"
-  and operand e =
-    match e with
-    | Let _ | If _ | Abstr _ ->
-      out "(";
-      pp e;
-      out ")"
-    | _ -> pp e
-  in
-  pp e;
-  Buffer.contents b
+let table src =
+  match Operators.of_string src with
+  | Ok t -> t
+  | Error msg -> failwith ("the tests use an invalid operator table: " ^ msg)
 ;;
+
+(* The tables below keep every operator the generator may produce and change one
+   thing only, so that the top-level form is the only thing under test. *)
+let ops_right_plus = table "left 4 = < >; right 6 + -; left 7 * /; prefix 9 -"
+let ops_plus_tighter = table "left 4 = < >; left 9 + -; left 7 * /; prefix 9 -"
+let ops_nonassoc_eq = table "nonassoc 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
 
 (* --- Generator --- *)
 
@@ -138,6 +91,77 @@ let rec gen_expr n =
 ;;
 
 let gen_expr_sized = Gen.sized gen_expr
+
+(* A table is a sequence of words, which is what [--ops] takes.  Every word
+   carries the space that separates it from the next one, so that the
+   concatenation is a well formed table whenever it parses at all. *)
+let table_words =
+  [ "left "
+  ; "right "
+  ; "nonassoc "
+  ; "prefix "
+  ; "+ "
+  ; "- "
+  ; "* "
+  ; "/ "
+  ; "= "
+  ; "< "
+  ; "> "
+  ; "0 "
+  ; "6 "
+  ; "7 "
+  ; "; "
+  ]
+;;
+
+let gen_table_src =
+  Gen.map
+    (String.concat "")
+    (Gen.list_size (Gen.int_range 0 12) (Gen.oneof (List.map Gen.return table_words)))
+;;
+
+let arb_table_src = QCheck.make ~print:String.escaped gen_table_src
+
+(* Sources for the totality property.  [Frontend.Lexer] still leaves the process
+   on a character it does not know and on a comment that is not closed, so the
+   property cannot be run over [QCheck.string].  These are words of the accepted
+   language, always separated by a space -- which keeps the lexer happy, since
+   no two of them can glue into a comment opener -- while still giving the
+   parser plenty of nonsense to reject. *)
+let lexer_words =
+  [ "x"
+  ; "y"
+  ; "f"
+  ; "1"
+  ; "0"
+  ; "17"
+  ; "+"
+  ; "-"
+  ; "*"
+  ; "/"
+  ; "="
+  ; "<"
+  ; ">"
+  ; "("
+  ; ")"
+  ; "let"
+  ; "rec"
+  ; "in"
+  ; "if"
+  ; "then"
+  ; "else"
+  ; "fun"
+  ; "->"
+  ]
+;;
+
+let gen_source =
+  Gen.map
+    (String.concat " ")
+    (Gen.list_size (Gen.int_range 0 20) (Gen.oneof (List.map Gen.return lexer_words)))
+;;
+
+let arb_source = QCheck.make ~print:String.escaped gen_source
 
 (* --- Shrinker --- *)
 
@@ -175,18 +199,17 @@ let arb_triple =
 let tests =
   [ QCheck.Test.make ~name:"round-trip: parse ∘ pp = id" arb_expr (fun e ->
       P.parse_expr (surface_pp e) = Ok e)
-  ; QCheck.Test.make ~name:"glued: glued source" arb_expr (fun e ->
-      P.parse_expr ~glued:true (glue_pp e) = Ok e)
-  ; QCheck.Test.make ~name:"glued: plain source parses the same" arb_expr (fun e ->
-      P.parse_expr ~glued:true (surface_pp e) = Ok e)
   ; QCheck.Test.make ~name:"idempotence pp/parse" arb_expr (fun e ->
       match P.parse_expr (surface_pp e) with
       | Error _ -> false
       | Ok e' -> P.parse_expr (surface_pp e') = Ok e')
-  ; QCheck.Test.make ~name:"totality and error position bounds" QCheck.string (fun s ->
-      match P.parse_expr s with
-      | Ok _ -> true
-      | Error err -> err.pos.pos_cnum >= 0 && err.pos.pos_cnum <= String.length s)
+  ; QCheck.Test.make
+      ~name:"totality and error position bounds, lexable sources"
+      arb_source
+      (fun s ->
+         match P.parse_expr s with
+         | Ok _ -> true
+         | Error err -> err.pos.pos_cnum >= 0 && err.pos.pos_cnum <= String.length s)
   ; QCheck.Test.make ~name:"* binds tighter than +" arb_triple (fun (a, b, c) ->
       P.parse_expr
         (Printf.sprintf
@@ -211,6 +234,53 @@ let tests =
            (surface_operand b)
            (surface_operand c))
       = Ok (elt a (eadd b c)))
+    (* The same source reads differently under another table. *)
+  ; QCheck.Test.make
+      ~name:"table: right 6 + is right-associative"
+      arb_triple
+      (fun (a, b, c) ->
+         P.parse_expr
+           ~ops:ops_right_plus
+           (Printf.sprintf
+              "%s + %s + %s"
+              (surface_operand a)
+              (surface_operand b)
+              (surface_operand c))
+         = Ok (eadd a (eadd b c)))
+  ; QCheck.Test.make
+      ~name:"table: + can be made tighter than *"
+      arb_triple
+      (fun (a, b, c) ->
+         P.parse_expr
+           ~ops:ops_plus_tighter
+           (Printf.sprintf
+              "%s + %s * %s"
+              (surface_operand a)
+              (surface_operand b)
+              (surface_operand c))
+         = Ok (emul (eadd a b) c))
+  ; QCheck.Test.make
+      ~name:"table: nonassoc 4 = rejects chaining"
+      arb_triple
+      (fun (a, b, c) ->
+         match
+           P.parse_expr
+             ~ops:ops_nonassoc_eq
+             (Printf.sprintf
+                "%s = %s = %s"
+                (surface_operand a)
+                (surface_operand b)
+                (surface_operand c))
+         with
+         | Error _ -> true
+         | Ok _ -> false)
+  ; QCheck.Test.make
+      ~name:"table: of_string is total, pp round-trips"
+      arb_table_src
+      (fun src ->
+         match Operators.of_string src with
+         | Error _ -> true
+         | Ok t -> Operators.of_string (Operators.string_of t) = Ok t)
   ]
 ;;
 

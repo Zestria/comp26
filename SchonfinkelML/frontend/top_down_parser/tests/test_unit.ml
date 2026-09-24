@@ -6,10 +6,12 @@
 
 [@@@ocaml.text "/*"]
 
-(** Unit tests for the top-down parser: source -> AST table. *)
+(** Unit tests for the top-down parser: source -> AST table, plus the operator
+    table it is driven by. *)
 
 open Frontend.Common
 module P = Top_down.Parser
+module Operators = Top_down.Operators
 
 let failures = ref 0
 let total = ref 0
@@ -19,9 +21,16 @@ let report_fail name ~expected ~actual =
   Printf.printf "FAIL: %s\n  expected: %s\n  actual:   %s\n%!" name expected actual
 ;;
 
-let check_expr name ?glued src expected =
+(* The table of a test, written in the syntax of [--ops]. *)
+let table src =
+  match Operators.of_string src with
+  | Ok t -> t
+  | Error msg -> failwith ("the tests use an invalid operator table: " ^ msg)
+;;
+
+let check_expr name ?ops src expected =
   incr total;
-  match P.parse_expr ?glued src with
+  match P.parse_expr ?ops src with
   | Ok e when e = expected -> ()
   | Ok e ->
     report_fail name ~expected:(string_of_expr expected) ~actual:(string_of_expr e)
@@ -32,16 +41,16 @@ let check_expr name ?glued src expected =
       ~actual:("error: " ^ P.string_of_error err)
 ;;
 
-let check_error name ?glued src =
+let check_error name ?ops src =
   incr total;
-  match P.parse_expr ?glued src with
+  match P.parse_expr ?ops src with
   | Error _ -> ()
   | Ok e -> report_fail name ~expected:"parse error" ~actual:(string_of_expr e)
 ;;
 
-let check_error_at name src expected_offset =
+let check_error_at name ?ops src expected_offset =
   incr total;
-  match P.parse_expr src with
+  match P.parse_expr ?ops src with
   | Error e when e.pos.pos_cnum = expected_offset -> ()
   | Error e ->
     report_fail
@@ -49,6 +58,18 @@ let check_error_at name src expected_offset =
       ~expected:(string_of_int expected_offset)
       ~actual:(string_of_int e.pos.pos_cnum)
   | Ok e -> report_fail name ~expected:"parse error" ~actual:(string_of_expr e)
+;;
+
+let check_error_at_pos name ?ops src ~line ~col =
+  incr total;
+  let expected = Printf.sprintf "%d:%d" line col in
+  let actual (e : P.error) =
+    Printf.sprintf "%d:%d" e.pos.pos_lnum (e.pos.pos_cnum - e.pos.pos_bol + 1)
+  in
+  match P.parse_expr ?ops src with
+  | Error e when e.pos.pos_lnum = line && e.pos.pos_cnum - e.pos.pos_bol + 1 = col -> ()
+  | Error e -> report_fail name ~expected ~actual:(actual e)
+  | Ok e -> report_fail name ~expected ~actual:(string_of_expr e)
 ;;
 
 let check_does_not_raise name src =
@@ -120,12 +141,13 @@ let () =
   check_expr "binary and unary minus" "1 - -2" (esub (econsti 1) (euminus (econsti 2)));
   check_expr "binary minus" "1 - 2" (esub (econsti 1) (econsti 2));
   check_expr "comparison <" "a < b" (elt a b);
-  check_expr "comparison <=" "a <= b" (elte a b);
   check_expr "comparison >" "a > b" (egt a b);
-  check_expr "comparison >=" "a >= b" (egte a b);
   check_expr "comparison =" "a = b" (eeq a b);
   check_expr "comparison is below +" "a < b + c" (elt a (eadd b c));
-  check_expr "comparisons are left-associative" "a = b = c" (eeq (eeq a b) c)
+  check_expr "comparisons are left-associative" "a = b = c" (eeq (eeq a b) c);
+  (* The lexer has no two-character operators, so these are only errors. *)
+  check_error "no <=" "a <= b";
+  check_error "no >=" "a >= b"
 ;;
 
 (* --- if / fun --- *)
@@ -191,6 +213,30 @@ let () =
   check_expr "extra spaces and parens" "  (  1  +  2  )  " (eadd (econsti 1) (econsti 2))
 ;;
 
+(* --- Names and keywords ---
+
+   A keyword is only a keyword when it is a whole token: the lexer takes the
+   longest match, so a name may start with one. *)
+
+let () =
+  check_expr "a name may start with let" "letter" (Ident "letter");
+  check_expr "the same name in parens" "(letter)" (Ident "letter");
+  check_expr "letters" "letters" (Ident "letters");
+  check_expr "letx is a name" "letx" (Ident "letx");
+  check_expr "letinx is one name" "letinx" (Ident "letinx");
+  check_expr "ifn is a name" "ifn" (Ident "ifn");
+  check_expr "two names separated by a space" "f x" (eapp (Ident "f") (Ident "x"));
+  (* Nothing glues: what is not a boundary for the lexer is application or an
+     error for the parser. *)
+  check_expr "letx=1inx" "letx=1inx" (eeq (Ident "letx") (eapp (econsti 1) (Ident "inx")));
+  check_expr
+    "ifn<1then0else1"
+    "ifn<1then0else1"
+    (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")));
+  check_error "no boundary after ->" "funx->x";
+  check_error "no boundary after in" "let x = 1 inx"
+;;
+
 (* --- CPS factorial and fibonacci --- *)
 
 let () =
@@ -234,65 +280,143 @@ let () =
        (eapp (eapp (Ident "fib") (econsti 10)) (elambda "x" (Ident "x"))))
 ;;
 
-(* --- Glued keywords --- *)
+(* --- The operator table --- *)
 
 let () =
-  check_expr ~glued:true "glued: let/in" "letx=1inx" (elet "x" (econsti 1) (Ident "x"));
-  check_expr ~glued:true "glued: fun" "funx->x" (elambda "x" (Ident "x"));
+  let a = Ident "a"
+  and b = Ident "b"
+  and c = Ident "c"
+  and x = Ident "x" in
+  (* Associativity is data: the same source reads differently. *)
   check_expr
-    ~glued:true
-    "glued: if/then/else"
-    "ifn<1then0else1"
-    (eif (elt (Ident "n") (econsti 1)) (econsti 0) (econsti 1));
+    ~ops:(table "left 6 +")
+    "left +"
+    "1 + 2 + 3"
+    (eadd (eadd (econsti 1) (econsti 2)) (econsti 3));
   check_expr
-    ~glued:true
-    "glued: rec, application in parens"
-    "letrecf=funx->ifx=0then1elsef(x-1)inf(5)"
-    (eletrec
-       "f"
-       (elambda
-          "x"
-          (eif
-             (eeq (Ident "x") (econsti 0))
-             (econsti 1)
-             (eapp (Ident "f") (esub (Ident "x") (econsti 1)))))
-       (eapp (Ident "f") (econsti 5)));
-  (* A name starting with a keyword stays a name while
-     the keyword branch does not parse. *)
-  check_expr ~glued:true "letter as a name" "letter" (Ident "letter");
-  check_expr ~glued:true "letter in parens" "(letter)" (Ident "letter");
-  check_expr ~glued:true "letters as a name" "letters" (Ident "letters");
-  (* Documented ambiguity: keyword-first wins, so this reads as
-     `let ter = 1 in letter`. *)
+    ~ops:(table "right 6 +")
+    "right +"
+    "1 + 2 + 3"
+    (eadd (econsti 1) (eadd (econsti 2) (econsti 3)));
+  (* So is precedence: here [+] is the tighter of the two. *)
   check_expr
-    ~glued:true
-    "letter= ambiguity"
-    "letter=1inletter"
-    (elet "ter" (econsti 1) (Ident "letter"));
-  (* Without gluing the same text reads differently, which is
-     exactly what the flag does: the tree either differs or the text
-     does not parse at all. *)
-  check_error "gluing off: fun" "funx->x";
-  check_error "gluing off: no boundary after in" "let x = 1 inx";
+    ~ops:(table "left 9 +; left 7 *")
+    "+ tighter than *"
+    "1 + 2 * 3"
+    (emul (eadd (econsti 1) (econsti 2)) (econsti 3));
+  (* The precedence of a prefix operator decides how much it takes. *)
   check_expr
-    "gluing off: letx is a name"
-    "letx=1inx"
-    (eeq (Ident "letx") (eapp (econsti 1) (Ident "inx")));
+    ~ops:(table "prefix 9 -; left 6 +")
+    "a tight prefix -"
+    "- a + b"
+    (eadd (euminus a) b);
   check_expr
-    "gluing off: ifn is a name"
-    "ifn<1then0else1"
-    (elt (Ident "ifn") (eapp (econsti 1) (Ident "then0else1")));
-  check_error ~glued:true "name gluing: let x=1 without in" "let x=1";
-  (* Two names separated by a space are still two tokens:
-     only keyword+identifier glues, not everything. *)
+    ~ops:(table "prefix 3 -; left 6 +")
+    "a loose prefix -"
+    "- a + b"
+    (euminus (eadd a b));
+  (* Arity is data as well: without a prefix [-] there is no unary minus. *)
+  check_error ~ops:(table "left 6 -") "no prefix minus" "- a";
+  check_error ~ops:(table "prefix 9 -") "no infix minus" "a - b";
+  (* nonassoc forbids chaining an operator with itself, and with an operator of
+     the same precedence. *)
+  check_expr ~ops:(table "left 4 =") "= chained as left" "a = b = c" (eeq (eeq a b) c);
+  check_error ~ops:(table "nonassoc 4 =") "= chained as nonassoc" "a = b = c";
+  check_error_at ~ops:(table "nonassoc 4 =") "position of a chained =" "a = b = c" 6;
+  check_error ~ops:(table "nonassoc 4 = <") "= and < chained" "a = b < c";
+  (* A table without an operator is a table without that operator. *)
+  check_error ~ops:(table "left 6 +") "no multiplication" "a * b";
+  (* The table only describes operators: [=] of a binding is still a token. *)
   check_expr
-    ~glued:true
-    "two names separated by a space"
-    "f x"
-    (eapp (Ident "f") (Ident "x"))
+    ~ops:(table "right 6 +")
+    "the table does not touch let"
+    "let x = 1 in x + x"
+    (elet "x" (econsti 1) (eadd x x))
 ;;
 
-(* --- Errors --- *)
+(* --- The syntax of a table, as given to [--ops] --- *)
+
+let () =
+  let check_table name src expected =
+    incr total;
+    match Operators.of_string src with
+    | Ok t when String.equal (Operators.string_of t) expected -> ()
+    | Ok t -> report_fail name ~expected ~actual:(Operators.string_of t)
+    | Error msg -> report_fail name ~expected ~actual:("error: " ^ msg)
+  in
+  let check_bad_table name src =
+    incr total;
+    match Operators.of_string src with
+    | Error _ -> ()
+    | Ok t -> report_fail name ~expected:"a table error" ~actual:(Operators.string_of t)
+  in
+  check_table "an empty table" "" "";
+  check_table "one group" "left 6 + -" "left 6 + -";
+  check_table
+    "the default table"
+    "left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
+    (Operators.string_of Operators.default);
+  check_table "spaces and tabs" "  left \t 6\t+  " "left 6 +";
+  check_table "an empty group" "left 6 +;" "left 6 +";
+  check_table "one spelling, two fixities" "prefix 9 -; left 6 -" "prefix 9 -; left 6 -";
+  check_bad_table "unknown fixity" "fat 6 +";
+  check_bad_table "no precedence" "left";
+  check_bad_table "no operators" "left 6";
+  check_bad_table "precedence is not a number" "left + 6";
+  check_bad_table "unknown operator" "left 6 ^";
+  check_bad_table "the same spelling twice" "left 6 +; right 6 +";
+  check_bad_table "the same spelling twice as a prefix" "prefix 9 -; prefix 8 -";
+  (* printing a table and reading it back gives the same table *)
+  List.iter
+    (fun src ->
+       incr total;
+       match Operators.of_string src with
+       | Error msg ->
+         report_fail ("pp round-trip of " ^ src) ~expected:"a table" ~actual:msg
+       | Ok t ->
+         let expected = Operators.string_of t in
+         (match Operators.of_string expected with
+          | Ok t' when t' = t -> ()
+          | Ok t' ->
+            report_fail
+              ("pp round-trip of " ^ src)
+              ~expected
+              ~actual:(Operators.string_of t')
+          | Error msg -> report_fail ("pp round-trip of " ^ src) ~expected ~actual:msg))
+    [ ""
+    ; "left 6 +"
+    ; "prefix 9 -"
+    ; "left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"
+    ; "nonassoc 4 ="
+    ; "prefix 9 -; left 6 -"
+    ];
+  (* a spelling can be looked up as an infix and as a prefix operator *)
+  incr total;
+  let t = table "prefix 9 -; left 6 -" in
+  (match Operators.find_infix t MINUS, Operators.find_prefix t MINUS with
+   | Some i, Some p when i.Operators.prec = 6 && p.Operators.prec = 9 -> ()
+   | _ ->
+     report_fail
+       "find_infix/find_prefix on -"
+       ~expected:"precedences 6 and 9"
+       ~actual:"something else");
+  incr total;
+  match
+    ( Operators.find_infix (table "prefix 9 -") PLUS
+    , Operators.find_prefix (table "left 6 +") PLUS )
+  with
+  | None, None -> ()
+  | _ -> report_fail "lookups of an absent operator" ~expected:"None" ~actual:"Some"
+;;
+
+(* --- Errors ---
+
+   [Frontend.Lexer] is left as it was: on a character it does not know, and on a
+   comment that is not closed, it prints a message and exits the process.  Such
+   inputs cannot be tested at all -- the test binary would die instead of
+   reporting a failure -- so they are absent below.  Nor does the lexer call
+   [Lexing.new_line] yet, so the line of a position is always 1 and a position
+   is read as a character offset. *)
 
 let () =
   check_error "empty input" "";
@@ -306,15 +430,23 @@ let () =
   check_error "let without a name" "let = 1 in x";
   check_error "keyword as a name" "let rec = 1 in x";
   check_error "dangling plus" "1 +";
-  check_error "unclosed comment" "(* unterminated";
-  check_error "invalid character" "1 % 2";
   check_error "keyword as an expression" "in";
+  (* the one lexing failure that is a value and not an exit *)
   check_error "literal overflow" "99999999999999999999";
-  check_error_at "position of an invalid character" "1 % 2" 2;
   check_error_at "position of a missing in" "let x = 1" 9;
+  check_error_at "position of the end of the input" "1 +" 3;
+  check_error_at_pos "position of a missing in" "let x = 1" ~line:1 ~col:10;
+  check_error_at_pos "position of a dangling operator" "1 +" ~line:1 ~col:4;
   List.iter
     (fun src -> check_does_not_raise ("does not raise on " ^ String.escaped src) src)
-    [ "(((((("; "%$#@!"; "(*"; "letx=1inx"; "let rec"; "-->"; "\""; "'''" ]
+    [ "(((((("
+    ; "letx=1inx"
+    ; "let rec"
+    ; "-->"
+    ; String.make 100 '('
+    ; String.make 100 '-'
+    ; String.make 1000 'x'
+    ]
 ;;
 
 if !failures = 0

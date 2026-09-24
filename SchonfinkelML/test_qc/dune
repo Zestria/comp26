@@ -12,16 +12,10 @@
  (action
   (run %{<})))
 
-(executable
- (name test_qc_bottom_up)
- (modules test_qc_bottom_up)
- (libraries frontend qcheck)
- (preprocess
-  (pps ppx_deriving_qcheck)))
+; QuickCheck properties of the top-down parser and of the operator table it is
+; driven by.  Same single-package project, so no (package ...) is needed.
 
-(rule
- (alias runtest)
- (deps
-  (:< test_qc_bottom_up.exe))
- (action
-  (run %{<})))
+(test
+ (name test_top_down_parser)
+ (modules test_top_down_parser)
+ (libraries top_down frontend qcheck))
