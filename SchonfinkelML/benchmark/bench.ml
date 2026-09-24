@@ -1,18 +1,9 @@
 open Benchmark
 open Top_down
+open Bottom_up
 
-let top_down_parser =
-  fun s ->
-  match Top_down.Parser.parse_expr s with
-  | Ok v -> v
-  | Error e ->
-    Format.printf "Error: %a\n" Top_down.Parser.pp_error e;
-    assert false
-;;
-
-let bottom_up_parser =
-  fun s -> Frontend.Bottom_up_parser.program Frontend.Lexer.token (Lexing.from_string s)
-;;
+let top_down_parser = Top_down.Parser.parse_expr
+let bottom_up_parser = Bottom_up.Parser.parse_expr
 
 let read_file p =
   let ic = open_in p in

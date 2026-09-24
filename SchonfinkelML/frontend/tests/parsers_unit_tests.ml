@@ -13,20 +13,7 @@
 
 open Frontend.Common
 module Top_down = Top_down.Parser
-
-(* --- Bottom-up adapter: reduce [program] to a single [expr] --- *)
-
-let parse_expr_bottom_up (src : string) : (expr, unit) result =
-  try
-    match
-      Frontend.Bottom_up_parser.program Frontend.Lexer.token (Lexing.from_string src)
-    with
-    | [ StrEval e ] -> Ok e
-    | _ -> Error ()
-  with
-  | Frontend.Bottom_up_parser.Error -> Error ()
-  | Frontend.Lexer.Lexing_error _ -> Error ()
-;;
+module Bottom_up = Bottom_up.Parser
 
 (* --- Predicates: run both engines, report which one disagrees --- *)
 
@@ -47,7 +34,7 @@ let check_expr_both ?ops src expected =
     match ops with
     | Some _ -> true
     | None ->
-      (match parse_expr_bottom_up src with
+      (match Bottom_up.parse_expr src with
        | Ok e -> e = expected
        | Error () ->
          Printf.eprintf
@@ -74,7 +61,7 @@ let check_error_both ?ops src =
     match ops with
     | Some _ -> true
     | None ->
-      (match parse_expr_bottom_up src with
+      (match Bottom_up.parse_expr src with
        | Error () -> true
        | Ok e ->
          Printf.eprintf
@@ -94,7 +81,7 @@ let does_not_raise_both src =
     with
     | _ -> false
   in
-  safe (fun s -> Top_down.parse_expr s) && safe parse_expr_bottom_up
+  safe (fun s -> Top_down.parse_expr s) && safe Bottom_up.parse_expr
 ;;
 
 (* --- Literals and identifiers --- *)

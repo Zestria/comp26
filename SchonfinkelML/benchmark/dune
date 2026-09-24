@@ -1,7 +1,7 @@
 (executable
  (name bench)
- (libraries benchmark top_down frontend))
+ (libraries benchmark top_down bottom_up frontend))
 
 (executable
  (name gen_benchmarks)
- (libraries ast_gen top_down frontend))
+ (libraries ast_gen frontend))

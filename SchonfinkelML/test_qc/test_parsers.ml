@@ -15,7 +15,8 @@
     position-based error reporting. *)
 
 open Frontend.Common
-module P = Top_down.Parser
+module TD = Top_down.Parser
+module BU = Bottom_up.Parser
 module Operators = Top_down.Operators
 module Gen = QCheck.Gen
 open QCheck.Iter
@@ -28,26 +29,13 @@ type parser =
   ; parse_expr : string -> (expr, unit) result
   }
 
-let bottom_up : parser =
-  { name = "bottom-up"
-  ; parse_expr =
-      (fun s ->
-        let lexbuf = Lexing.from_string ("let x = " ^ s) in
-        try
-          match Frontend.Bottom_up_parser.program Frontend.Lexer.token lexbuf with
-          | [ StrLet (NotRecursive, "x", e) ] -> Ok e
-          | _ -> Error ()
-        with
-        | Frontend.Bottom_up_parser.Error -> Error ()
-        | Frontend.Lexer.Lexing_error _ -> Error ())
-  }
-;;
+let bottom_up : parser = { name = "bottom-up"; parse_expr = BU.parse_expr }
 
 let top_down : parser =
   { name = "top-down"
   ; parse_expr =
       (fun s ->
-        match P.parse_expr s with
+        match TD.parse_expr s with
         | Ok e -> Ok e
         | Error _ -> Error ())
   }
@@ -158,7 +146,7 @@ let test_totality_lexable =
     ~name:"top-down totality and error position bounds, lexable sources"
     arb_source
     (fun s ->
-       match P.parse_expr s with
+       match TD.parse_expr s with
        | Ok _ -> true
        | Error err -> err.pos.pos_cnum >= 0 && err.pos.pos_cnum <= String.length s)
 ;;
@@ -168,7 +156,7 @@ let test_right_plus_assoc =
     ~name:"top-down table: right 6 + is right-associative"
     arb_triple
     (fun (a, b, c) ->
-       P.parse_expr
+       TD.parse_expr
          ~ops:ops_right_plus
          (Printf.sprintf
             "%s + %s + %s"
@@ -183,7 +171,7 @@ let test_plus_tighter_than_mul =
     ~name:"top-down table: + can be made tighter than *"
     arb_triple
     (fun (a, b, c) ->
-       P.parse_expr
+       TD.parse_expr
          ~ops:ops_plus_tighter
          (Printf.sprintf
             "%s + %s * %s"
@@ -199,7 +187,7 @@ let test_nonassoc_eq =
     arb_triple
     (fun (a, b, c) ->
        match
-         P.parse_expr
+         TD.parse_expr
            ~ops:ops_nonassoc_eq
            (Printf.sprintf
               "%s = %s = %s"
