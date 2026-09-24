@@ -104,9 +104,50 @@ let operator_kind offset = function
   | name -> fail offset (Lexicon.operator_error name)
 ;;
 
+(* Ключевые слова по убыванию длины: первое подходящее даёт самое длинное разбиение. *)
+let glued_keywords_desc =
+  [ "false", False
+  ; "then", Then
+  ; "else", Else
+  ; "true", True
+  ; "let", Let
+  ; "rec", Rec
+  ; "and", And
+  ; "fun", Fun
+  ; "in", In
+  ; "if", If
+  ]
+;;
+
+(* Слипшиеся с ключевыми словами идентификаторы: [letx] --- это [let] [x].
+   Слово разделяется по самому длинному ключевому слову-префиксу.
+   Остаток разбирается рекурсивно: [letrecx] --- это
+   [let] [rec] [x]. Результат --- список токенов в прямом порядке. *)
+let rec split_glued offset word =
+  let word_length = String.length word in
+  match
+    List.find_opt
+      (fun (keyword, _) ->
+         let length = String.length keyword in
+         length < word_length
+         && String.sub word 0 length = keyword
+         &&
+         match word.[length] with
+         | 'a' .. 'z' | '_' -> true
+         | _ -> false)
+      glued_keywords_desc
+  with
+  | Some (keyword, kind) ->
+    let length = String.length keyword in
+    let rest = String.sub word length (word_length - length) in
+    { kind; offset } :: split_glued (offset + length) rest
+  | None -> [ { kind = word_kind offset word; offset } ]
+;;
+
 (* Лексер отдельным проходом выкидывает пробелы и комментарии, грамматика
-   видит только токены. *)
-let lex source =
+   видит только токены. При [glue_kw] слова расщепляются по ключевым словам:
+   [letx] --- это [let] [x]. *)
+let lex glue_kw source =
   let length = String.length source in
   let pair_at index =
     if index + 1 < length then Some (source.[index], source.[index + 1]) else None
@@ -150,7 +191,13 @@ let lex source =
         else add (Int (text finish)) finish
       | 'a' .. 'z' | '_' ->
         let finish = take_while is_identifier_char index in
-        add (word_kind index (text finish)) finish
+        let word = text finish in
+        let split =
+          if glue_kw
+          then split_glued index word
+          else [ { kind = word_kind index word; offset = index } ]
+        in
+        loop finish (List.rev_append split tokens)
       | 'A' .. 'Z' ->
         let finish = take_while is_identifier_char index in
         fail index (Lexicon.constructor_error (text finish))
@@ -508,14 +555,14 @@ let location source offset =
 ;;
 
 (* Упёрлись в конец ввода --- сообщение то же, что у menhir-парсера. *)
-let run parse source =
+let run glue_kw parse source =
   let error offset message =
     let message =
       if offset >= String.length source then Lexicon.end_of_input_error else message
     in
     Error (Printf.sprintf "%s: %s" (location source offset) message)
   in
-  match lex source with
+  match lex glue_kw source with
   | tokens ->
     let state = { tokens = Array.of_list tokens; index = 0 } in
     (try
@@ -528,10 +575,23 @@ let run parse source =
   | exception Parse_error (offset, message) -> error offset message
 ;;
 
-let parse_expr source = run parse_expression source
+let check_extensions extensions =
+  match extensions.Parser_intf.operator_declarations with
+  | true -> Error "расширение --ext-operator-declarations пока не реализовано"
+  | false -> Ok ()
+;;
 
-let parse_structure source =
-  run
+let with_extensions extensions parse source =
+  match check_extensions extensions with
+  | Error _ as error -> error
+  | Ok () -> run extensions.Parser_intf.glued_keywords parse source
+;;
+
+let parse_expr extensions source = with_extensions extensions parse_expression source
+
+let parse_structure extensions source =
+  with_extensions
+    extensions
     (fun state ->
        let rec items values =
          match (current state).kind with
