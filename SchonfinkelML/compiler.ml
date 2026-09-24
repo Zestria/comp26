@@ -8,10 +8,40 @@
 
 open Frontend.Config
 
+let write_output path expr =
+  let oc = open_out path in
+  Fun.protect
+    ~finally:(fun () -> close_out oc)
+    (fun () ->
+      output_string oc (Frontend.Common.string_of_expr expr);
+      output_char oc '\n')
+;;
+
 let run input cfg =
-  Printf.printf "parser : %s\n" (string_of_parser_kind cfg.parser);
-  Printf.printf "output : %s\n" cfg.output;
-  Printf.printf "input : %s\n" input
+  let src = In_channel.with_open_bin input In_channel.input_all in
+  match cfg.parser with
+  | Bottom_up ->
+    (match Bottom_up.Parser.parse_expr src with
+     | Ok expr -> write_output cfg.output expr
+     | Error () ->
+       Printf.eprintf "bottom-up parser: syntax error in %s\n" input;
+       exit 1)
+  | Top_down ->
+    let ops =
+      match cfg.parser_settings with
+      | None -> Top_down.Operators.default
+      | Some settings ->
+        (match Top_down.Operators.of_string settings with
+         | Ok ops -> ops
+         | Error msg ->
+           Printf.eprintf "invalid --parser-settings: %s\n" msg;
+           exit 2)
+    in
+    (match Top_down.Parser.parse_expr ~ops src with
+     | Ok expr -> write_output cfg.output expr
+     | Error err ->
+       Printf.eprintf "%s\n" (Top_down.Parser.string_of_error err);
+       exit 1)
 ;;
 
 let die fmt =
