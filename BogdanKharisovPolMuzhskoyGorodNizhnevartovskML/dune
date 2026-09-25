@@ -2,4 +2,4 @@
  (name compiler)
  (public_name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (modules compiler))
+ (modules compiler name))
