@@ -84,13 +84,12 @@ let run_llvm_demo () =
         [ Llvm.const_int i64_type 70 ]
     in
     let (_ : Llvm.llvalue) = Llvm.build_ret (Llvm.const_int i64_type 0) builder in
-    (match Llvm_analysis.verify_function the_function with
-     | true -> ()
-     | false ->
-       Stdlib.Format.printf
-         "invalid function generated\n%s\n"
-         (Llvm.string_of_llvalue the_function);
-       Llvm_analysis.assert_valid_function the_function)
+    if not (Llvm_analysis.verify_function the_function)
+    then (
+      Stdlib.Format.printf
+        "invalid function generated\n%s\n"
+        (Llvm.string_of_llvalue the_function);
+      Llvm_analysis.assert_valid_function the_function)
   in
   let _ =
     Llvm.declare_function
