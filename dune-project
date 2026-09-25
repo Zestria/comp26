@@ -108,6 +108,7 @@
   (angstrom
    (= "0.16.0"))
   menhir
-  qcheck))
+  qcheck
+  ppx_expect))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

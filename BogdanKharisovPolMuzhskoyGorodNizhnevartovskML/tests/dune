@@ -1,0 +1,18 @@
+(env
+ (_
+  (inline_tests enabled)))
+
+(library
+ (name frontend_expect_tests)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (modules test_name test_integer_literal)
+ (libraries frontend)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))
+
+(tests
+ (names test_name_properties test_integer_literal_properties)
+ (modules test_name_properties test_integer_literal_properties test_support)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend qcheck))

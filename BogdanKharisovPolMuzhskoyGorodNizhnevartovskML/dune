@@ -1,5 +1,6 @@
 (library
  (name frontend)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (modules name integer_literal ast))
 
 (executable
