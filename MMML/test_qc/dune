@@ -1,9 +1,9 @@
 (executable
  (name test_qc)
  (modules test_qc)
- (libraries qcheck angstrom)
+ (libraries MMML.frontend qcheck)
  (preprocess
-  (pps ppx_deriving_qcheck ppx_deriving.show)))
+  (pps ppx_deriving.show)))
 
 (rule
  (alias runtest)

@@ -1,4 +1,10 @@
 (test
+ (name parser_test)
+ (package MMML)
+ (modules parser_test)
+ (libraries MMML.frontend qcheck))
+
+(test
  (name pretty_printer_test)
  (package MMML)
  (modules pretty_printer_test)
