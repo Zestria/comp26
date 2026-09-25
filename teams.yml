@@ -38,5 +38,6 @@
 - MMML:
   - mikhailsviriukov
   - pugovkinvladim1
+  - ilyasobased
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
