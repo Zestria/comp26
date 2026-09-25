@@ -13,12 +13,6 @@ module PPrint = Vibecaml.Pprint
 let int value = Ast.Expr_constant (Const_int value)
 let var name = Ast.Expr_ident name
 
-let app function_ arguments =
-  List.fold_left (fun f a -> Ast.Expr_app (f, a)) function_ arguments
-;;
-
-let binary operator left right = app (var operator) [ left; right ]
-
 let gen_name =
   let open Gen in
   let alphanum = oneof [ char_range '0' '9'; char_range 'a' 'z'; char_range 'A' 'Z' ] in
