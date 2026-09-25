@@ -3,6 +3,8 @@
 (using menhir 3.0)
 (name comp26)
 
+(generate_opam_files true)
+
 (using menhir 3.0)
 
 (source
