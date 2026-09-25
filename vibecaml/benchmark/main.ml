@@ -50,9 +50,9 @@ let bench ?(iterations : int = 20) (programs : string list) =
 
 let main () =
   print_endline "Small expressions";
-  bench ~iterations:50 (Generate.generate_expressions 7 300);
+  bench ~iterations:100 (Generate.generate_expressions 5 400);
   print_endline "Large expressions";
-  bench ~iterations:50 (Generate.generate_expressions 30 300)
+  bench ~iterations:100 (Generate.generate_expressions 30 400)
 ;;
 
 main ()
