@@ -8,9 +8,11 @@
 
 open Shmel_lib
 
+type parse_result = (Ast.expr, Parser_comb.error) result
+
 type parser =
   { name : string
-  ; parse : string -> Ast.expr
+  ; parse : string -> parse_result
   }
 
 type benchmark_case =
@@ -25,16 +27,8 @@ type measurement =
   ; minimum_seconds : float
   }
 
-let menhir = { name = "menhir"; parse = Main.parse_with_menhir }
-
-let combinator =
-  let parse source =
-    match Main.parse_with_comb source with
-    | Ok ast -> ast
-    | Error error -> failwith (Format.asprintf "%a" Parser_comb.pp_error error)
-  in
-  { name = "combinator"; parse }
-;;
+let menhir = { name = "menhir"; parse = Main.parse_with_menhir_result }
+let combinator = { name = "combinator"; parse = Main.parse_with_comb }
 
 let arithmetic terms =
   let buffer = Buffer.create (terms * 8) in
@@ -78,7 +72,8 @@ let now () = Unix.gettimeofday ()
 let run_iterations iterations parse source =
   let started = now () in
   for _ = 1 to iterations do
-    ignore (Sys.opaque_identity (parse source))
+    let (_ : parse_result) = Sys.opaque_identity (parse source) in
+    ()
   done;
   now () -. started
 ;;
@@ -107,7 +102,8 @@ let measure parser source =
   let warmup_runs = 5 in
   let sample_count = 15 in
   for _ = 1 to warmup_runs do
-    ignore (Sys.opaque_identity (parser.parse source))
+    let (_ : parse_result) = Sys.opaque_identity (parser.parse source) in
+    ()
   done;
   let iterations = choose_iterations parser.parse source in
   let samples =
@@ -119,10 +115,11 @@ let measure parser source =
 ;;
 
 let verify case =
-  let menhir_ast = menhir.parse case.source in
-  let combinator_ast = combinator.parse case.source in
-  if menhir_ast <> combinator_ast
-  then failwith "the parsers produced different ASTs"
+  match menhir.parse case.source, combinator.parse case.source with
+  | Ok menhir_ast, Ok combinator_ast when menhir_ast = combinator_ast -> Ok ()
+  | Ok _, Ok _ -> Error "the parsers produced different ASTs"
+  | Error error, _ | _, Error error ->
+    Error (Format.asprintf "%a" Parser_comb.pp_error error)
 ;;
 
 let milliseconds seconds = seconds *. 1_000.
@@ -162,29 +159,35 @@ let print_measurement case parser measurement =
 ;;
 
 let run_case index case =
-  try
-    verify case;
-    let parsers = if index mod 2 = 0 then [ menhir; combinator ] else [ combinator; menhir ] in
-    List.iter
-      (fun parser ->
-        try print_measurement case parser (measure parser case.source) with
-        | exn ->
-          Printf.printf
-            "%-12s %8d %9d %-11s ERROR: %s\n%!"
-            case.family
-            case.size
-            (String.length case.source)
-            parser.name
-            (Printexc.to_string exn))
-      parsers
-  with
-  | exn ->
+  let report_verification_error message =
     Printf.printf
       "%-12s %8d %9d verification ERROR: %s\n%!"
       case.family
       case.size
       (String.length case.source)
-      (Printexc.to_string exn)
+      message
+  in
+  try
+    match verify case with
+    | Error message -> report_verification_error message
+    | Ok () ->
+      let parsers =
+        if index mod 2 = 0 then [ menhir; combinator ] else [ combinator; menhir ]
+      in
+      List.iter
+        (fun parser ->
+          try print_measurement case parser (measure parser case.source) with
+          | exn ->
+            Printf.printf
+              "%-12s %8d %9d %-11s ERROR: %s\n%!"
+              case.family
+              case.size
+              (String.length case.source)
+              parser.name
+              (Printexc.to_string exn))
+        parsers
+  with
+  | exn -> report_verification_error (Printexc.to_string exn)
 ;;
 
 let () =

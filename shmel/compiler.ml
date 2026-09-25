@@ -56,11 +56,6 @@ let parse_args () =
   loop default_opts None (List.tl (Array.to_list Sys.argv))
 ;;
 
-let parse_with_menhir_result text =
-  try Result.Ok (Main.parse_with_menhir text) with
-  | _ -> Result.Error (`Parsing_error "menhir: syntax error")
-;;
-
 (* Task-3 LLVM codegen demo, kept behind --llvm-demo so the default
    invocation (task 1: parsing) doesn't require LLVM to be installed. *)
 let run_llvm_demo () =
@@ -120,7 +115,7 @@ let run opts input_text =
       then (
         Format.eprintf "Error: --extended is only supported by the combinator parser\n";
         exit 1)
-      else parse_with_menhir_result text
+      else Main.parse_with_menhir_result text
   in
   match result with
   | Error (`Parsing_error msg) ->
