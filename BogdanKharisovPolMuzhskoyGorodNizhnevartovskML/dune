@@ -1,5 +1,10 @@
+(library
+ (name frontend)
+ (modules name integer_literal ast))
+
 (executable
  (name compiler)
  (public_name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (modules compiler name))
+ (modules compiler)
+ (libraries frontend))
