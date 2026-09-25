@@ -93,9 +93,7 @@ let p_params ctx =
   p_param []
 ;;
 
-let desugar_params params body =
-  List.fold_right (fun p acc -> Ast.elambda p acc) params body
-;;
+let desugar_params params body = List.fold_right Ast.elambda params body
 
 (* The precondition of the right hand side of [e]: a left associative operator
    gives up equality, a right associative one does not. *)
@@ -198,11 +196,11 @@ and p_atom ctx =
 and p_let ctx =
   let* () = expect ctx Ast.LET in
   let is_rec =
-    if cur ctx = Ast.REC
-    then (
+    match cur ctx with
+    | Ast.REC ->
       advance ctx;
-      true)
-    else false
+      true
+    | _ -> false
   in
   let* name = expect_ident ctx in
   let params = p_params ctx in
@@ -227,10 +225,9 @@ and p_if ctx =
 
 and p_fun ctx =
   let* () = expect ctx Ast.FUN in
-  let params = p_params ctx in
-  if params = []
-  then fail ctx "expected a parameter after 'fun'"
-  else
+  match p_params ctx with
+  | [] -> fail ctx "expected a parameter after 'fun'"
+  | params ->
     let* () = expect ctx Ast.RIGHTARROW in
     let* body = p_expr ctx in
     Ok (desugar_params params body)

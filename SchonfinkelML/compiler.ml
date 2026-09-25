@@ -13,8 +13,8 @@ let write_output path expr =
   Fun.protect
     ~finally:(fun () -> close_out oc)
     (fun () ->
-      output_string oc (Frontend.Common.string_of_expr expr);
-      output_char oc '\n')
+       output_string oc (Frontend.Common.string_of_expr expr);
+       output_char oc '\n')
 ;;
 
 let run input cfg =

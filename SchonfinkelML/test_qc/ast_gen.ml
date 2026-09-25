@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2023-2025, Kakadu and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 module Gen = QCheck.Gen
 open Frontend.Common
 
@@ -22,12 +30,12 @@ let rec gen_expr n =
     let gen_pred = gen_expr (pred n) in
     Gen.oneof
       [ Gen.map3 (fun op a b -> eapp (eapp (Ident op) a) b) gen_op gen_half gen_half
-      ; Gen.map2 (fun a b -> eapp a b) gen_half gen_half
-      ; Gen.map3 (fun c t e -> eif c t e) gen_third gen_third gen_third
+      ; Gen.map2 eapp gen_half gen_half
+      ; Gen.map3 eif gen_third gen_third gen_third
       ; Gen.map2 (fun c t -> eif c t eunit) gen_third gen_third
-      ; Gen.map3 (fun x e1 e2 -> elet x e1 e2) gen_name gen_half gen_half
-      ; Gen.map3 (fun x e1 e2 -> eletrec x e1 e2) gen_name gen_half gen_half
-      ; Gen.map2 (fun x body -> elambda x body) gen_name gen_pred
+      ; Gen.map3 elet gen_name gen_half gen_half
+      ; Gen.map3 eletrec gen_name gen_half gen_half
+      ; Gen.map2 elambda gen_name gen_pred
       ])
 ;;
 

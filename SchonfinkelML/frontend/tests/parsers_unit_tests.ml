@@ -75,11 +75,9 @@ let check_error_both ?ops src =
 
 let does_not_raise_both src =
   let safe f =
-    try
-      ignore (f src);
-      true
-    with
-    | _ -> false
+    match f src with
+    | exception _ -> false
+    | _ -> true
   in
   safe (fun s -> Top_down.parse_expr s) && safe Bottom_up.parse_expr
 ;;

@@ -1,7 +1,9 @@
 (executable
  (name bench)
+ (modules bench)
  (libraries benchmark top_down bottom_up frontend))
 
 (executable
  (name gen_benchmarks)
+ (modules gen_benchmarks)
  (libraries ast_gen frontend))

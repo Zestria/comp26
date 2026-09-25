@@ -63,11 +63,9 @@ let check_round_trip src =
 (* Stress tests bounded by [?max_budget]: the parser must not raise even on
    pathological inputs; it must return an [Error] instead. *)
 let does_not_raise src =
-  try
-    ignore (P.parse_expr src);
-    true
-  with
-  | _ -> false
+  match P.parse_expr src with
+  | exception _ -> false
+  | _ -> true
 ;;
 
 (* --- The operator table: custom tables via [~ops] --- 

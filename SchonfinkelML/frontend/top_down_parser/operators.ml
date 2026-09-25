@@ -165,7 +165,7 @@ let rec find_infix t tok =
   | [] -> None
   | e :: rest ->
     (match e.fixity with
-     | Infix _ when e.tok == tok -> Some e
+     | Infix _ when e.tok = tok -> Some e
      | _ -> find_infix rest tok)
 ;;
 
@@ -174,6 +174,6 @@ let rec find_prefix t tok =
   | [] -> None
   | e :: rest ->
     (match e.fixity with
-     | Prefix when e.tok == tok -> Some e
+     | Prefix when e.tok = tok -> Some e
      | _ -> find_prefix rest tok)
 ;;
