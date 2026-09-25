@@ -7,6 +7,6 @@
  (package MMML)
  (name compiler)
  (modules compiler)
- (libraries MMML_LL)
+ (libraries MMML_LL MMML.frontend)
  (instrumentation
   (backend bisect_ppx_ng)))

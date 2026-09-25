@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-let () =
+let llvm_demo () =
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
   let () = assert (Llvm_executionengine.initialize ()) in
@@ -57,4 +57,62 @@ let () =
   in
   prepare_main ();
   Llvm.print_module "out.ll" the_module
+;;
+
+type parse_mode =
+  | Program
+  | Expression
+
+let print_result printer = function
+  | Ok value -> Format.printf "%a@." printer value
+  | Error error ->
+    Format.eprintf "%a@." Error_monad.pp_error error;
+    exit 1
+;;
+
+let parse mode channel =
+  let lexbuf = Lexing.from_channel channel in
+  match mode with
+  | Program -> print_result Ast.pp_program (Parser_menhir.parse_program_lexbuf lexbuf)
+  | Expression -> print_result Ast.pp_expr (Parser_menhir.parse_expression_lexbuf lexbuf)
+;;
+
+let () =
+  let mode = ref None in
+  let input_file = ref None in
+  let select_mode selected =
+    match !mode with
+    | Some current when current <> selected ->
+      raise (Arg.Bad "--parse and --parse-expression are mutually exclusive")
+    | _ -> mode := Some selected
+  in
+  let set_input_file path =
+    match !input_file with
+    | None -> input_file := Some path
+    | Some _ -> raise (Arg.Bad "expected at most one input file")
+  in
+  let options =
+    [ "--parse", Arg.Unit (fun () -> select_mode Program), " Parse a MiniML program"
+    ; ( "--parse-expression"
+      , Arg.Unit (fun () -> select_mode Expression)
+      , " Parse a MiniML expression" )
+    ]
+  in
+  Arg.parse options set_input_file "compiler.exe [--parse | --parse-expression] [file]";
+  match !mode, !input_file with
+  | None, None -> llvm_demo ()
+  | None, Some _ ->
+    Format.eprintf "an input file requires --parse or --parse-expression@.";
+    exit 2
+  | Some mode, input_file ->
+    (try
+       match input_file with
+       | None -> parse mode stdin
+       | Some path ->
+         let channel = open_in_bin path in
+         Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () -> parse mode channel)
+     with
+     | Sys_error message ->
+       Format.eprintf "%s@." message;
+       exit 1)
 ;;

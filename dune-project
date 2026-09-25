@@ -2,6 +2,8 @@
 
 (name comp26)
 
+(using menhir 3.0)
+
 (source
  (github username/reponame))
 
@@ -33,6 +35,7 @@
  (depends
   ocaml
   dune
+  menhir
   (angstrom
    (= "0.16.0"))
   qcheck

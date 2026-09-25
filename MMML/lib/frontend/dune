@@ -1,9 +1,13 @@
 (ocamllex lexer)
 
+(menhir
+ (modules parser)
+ (flags --external-tokens Token --strict))
+
 (library
  (name frontend)
  (public_name MMML.frontend)
- (modules ast error_monad lexer location pretty_printer token)
+ (modules ast error_monad lexer location parser parser_menhir pretty_printer token)
  (wrapped false)
  (instrumentation
   (backend bisect_ppx_ng))
