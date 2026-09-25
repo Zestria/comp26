@@ -27,7 +27,6 @@
 %token EOF
 
 %nonassoc IN
-%nonassoc ELSE
 %left EQUALS LE LT GE GT
 %left PLUS MINUS
 %left TIMES DIVISION
@@ -76,5 +75,4 @@ control:
 
 expr:
   | op = operation {op} %prec IN
-  | e = control { e }
   ;
