@@ -1,5 +1,6 @@
 (lang dune 3.24)
 
+(using menhir 3.0)
 (name comp26)
 
 (generate_opam_files true)
@@ -25,10 +26,7 @@
    (= "0.16.0"))
   qcheck
   bisect_ppx_ng
-  (llvm
-   (= "18-shared"))
-  (ppx_deriving_qcheck
-   (= "0.9"))))
+  ppx_deriving_qcheck))
 
 (package
  (name shmel)
@@ -43,7 +41,10 @@
   (llvm
    (= "18-shared"))
   (ppx_deriving_qcheck
-   (= "0.9"))))
+   (= "0.9"))
+  menhir
+  )
+ )
 
 (package
  (name demo2)

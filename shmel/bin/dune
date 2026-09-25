@@ -1,7 +1,7 @@
 (library
- (name KormilcynKhmelevYakovlev)
- (public_name shmel.KormilcynKhmelevYakovlev)
- (modules KormilcynKhmelevYakovlev)
+ (name Shmel)
+ (public_name shmel.Shmel)
+ (modules Shmel)
  (wrapped false)
  (libraries
   llvm
