@@ -97,7 +97,7 @@
   (llvm
    (= "18-shared"))
   (ppx_deriving_qcheck
-   (= "0.6"))))
+   (>= "0.9"))))
 
 (package
  (name vibecaml)

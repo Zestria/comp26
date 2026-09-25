@@ -4,11 +4,10 @@ open QCheck
 let var name = Variable name
 let pvar name = PVariable name
 let int value = Constant (Integer value)
-let binding pattern expression = { pattern; expression }
-let case case_pattern case_expression = { case_pattern; case_expression }
+let binding pattern expression = pattern, expression
 
 let operators =
-  [ "+"; "-"; "*"; "/"; "="; "<>"; "<"; "<="; ">"; ">="; "&&"; "||"; "::"; "~-"; "~+" ]
+  [ "+"; "-"; "*"; "/"; "="; "<>"; "<"; "<="; ">"; ">="; "&&"; "||" ]
 ;;
 
 let parenthesize source = "( " ^ source ^ " )"
@@ -23,14 +22,9 @@ let constant_source = function
 
 (** An intentionally fully parenthesized test serializer keeps the oracle
     independent of production pretty-printing and operator precedence. *)
-let rec pattern_source = function
+let pattern_source = function
   | PWildcard -> "_"
   | PVariable name -> name_source name
-  | PConstant constant -> parenthesize (constant_source constant)
-  | PList patterns -> "[ " ^ joined pattern_source "; " patterns ^ " ]"
-  | PCons (head, tail) -> parenthesize (pattern_source head ^ " :: " ^ pattern_source tail)
-  | PTuple (first, second, rest) ->
-    parenthesize (joined pattern_source ", " (first :: second :: rest))
 ;;
 
 let rec expression_source expression =
@@ -38,9 +32,6 @@ let rec expression_source expression =
     match expression with
     | Constant constant -> constant_source constant
     | Variable name -> name_source name
-    | Tuple (first, second, rest) ->
-      joined expression_source ", " (first :: second :: rest)
-    | List expressions -> "[ " ^ joined expression_source "; " expressions ^ " ]"
     | Lambda (parameter, body) ->
       "fun " ^ pattern_source parameter ^ " -> " ^ expression_source body
     | Application (function_, argument) ->
@@ -52,42 +43,28 @@ let rec expression_source expression =
       ^ expression_source yes
       ^ " else "
       ^ expression_source no
-    | Let_in (recursive, first, rest, body) ->
-      bindings_source recursive (first :: rest) ^ " in " ^ expression_source body
-    | Function (first, rest) -> "function " ^ cases_source (first :: rest)
-    | Match (scrutinee, first, rest) ->
-      "match " ^ expression_source scrutinee ^ " with " ^ cases_source (first :: rest)
+    | Let_in (recursive, pattern, value, body) ->
+      binding_source recursive (pattern, value) ^ " in " ^ expression_source body
   in
   parenthesize source
 
-and binding_source { pattern; expression } =
-  pattern_source pattern ^ " = " ^ expression_source expression
-
-and bindings_source recursive bindings =
+and binding_source recursive (pattern, expression) =
   let keyword =
     match recursive with
     | Nonrecursive -> "let "
     | Recursive -> "let rec "
   in
-  keyword ^ joined binding_source " and " bindings
-
-and cases_source cases =
-  joined
-    (fun { case_pattern; case_expression } ->
-      "| " ^ pattern_source case_pattern ^ " -> " ^ expression_source case_expression)
-    " "
-    cases
+  keyword ^ pattern_source pattern ^ " = " ^ expression_source expression
 ;;
 
 let program_source program =
   joined
-    (fun (Value (recursive, first, rest)) ->
-      bindings_source recursive (first :: rest) ^ ";;")
+    (fun (Definition (recursive, pattern, value)) ->
+      binding_source recursive (pattern, value))
     "\n"
     program
 ;;
 
-let small_list generator = Gen.list_size (Gen.int_range 0 2) generator
 let names = Gen.oneof_list [ "x"; "y"; "n"; "k"; "xs"; "letx"; "value_1"; "f'"; "_tail" ]
 
 let constants =
@@ -100,25 +77,7 @@ let constants =
 
 let recursive_flags = Gen.oneof_list [ Nonrecursive; Recursive ]
 
-let rec patterns depth =
-  let leaf =
-    Gen.oneof
-      [ Gen.return PWildcard
-      ; Gen.map pvar names
-      ; Gen.map (fun constant -> PConstant constant) constants
-      ]
-  in
-  if depth = 0
-  then leaf
-  else (
-    let child = patterns (depth - 1) in
-    Gen.oneof_weighted
-      [ 4, leaf
-      ; 1, Gen.map (fun values -> PList values) (small_list child)
-      ; 1, Gen.map2 (fun head tail -> PCons (head, tail)) child child
-      ; 1, Gen.map3 (fun a b rest -> PTuple (a, b, rest)) child child (small_list child)
-      ])
-;;
+let patterns = Gen.oneof [ Gen.return PWildcard; Gen.map pvar names ]
 
 let rec expressions depth =
   let leaf =
@@ -132,13 +91,9 @@ let rec expressions depth =
   then leaf
   else (
     let child = expressions (depth - 1) in
-    let pattern = patterns (min 2 (depth - 1)) in
-    let bindings = Gen.map2 binding pattern child in
-    let cases = Gen.map2 case pattern child in
+    let pattern = patterns in
     Gen.oneof_weighted
       [ 4, leaf
-      ; 1, Gen.map3 (fun a b rest -> Tuple (a, b, rest)) child child (small_list child)
-      ; 1, Gen.map (fun values -> List values) (small_list child)
       ; 2, Gen.map2 (fun parameter body -> Lambda (parameter, body)) pattern child
       ; ( 3
         , Gen.map2
@@ -153,18 +108,11 @@ let rec expressions depth =
             child )
       ; ( 1
         , Gen.map4
-            (fun recursive first rest body -> Let_in (recursive, first, rest, body))
+            (fun recursive pattern value body -> Let_in (recursive, pattern, value, body))
             recursive_flags
-            bindings
-            (small_list bindings)
-            child )
-      ; 1, Gen.map2 (fun first rest -> Function (first, rest)) cases (small_list cases)
-      ; ( 1
-        , Gen.map3
-            (fun value first rest -> Match (value, first, rest))
+            pattern
             child
-            cases
-            (small_list cases) )
+            child )
       ])
 ;;
 
@@ -176,16 +124,6 @@ let rec shrink_expression expression yield =
   match expression with
   | Constant (Integer value) -> Shrink.int value (fun smaller -> yield (int smaller))
   | Constant _ | Variable _ -> ()
-  | List expressions ->
-    List.iter yield expressions;
-    Shrink.list ~shrink:shrink_expression expressions (fun smaller ->
-      yield (List smaller))
-  | Tuple (a, b, rest) ->
-    shrink_child (fun smaller -> Tuple (smaller, b, rest)) a;
-    shrink_child (fun smaller -> Tuple (a, smaller, rest)) b;
-    List.iter yield rest;
-    Shrink.list ~shrink:shrink_expression rest (fun smaller ->
-      yield (Tuple (a, b, smaller)))
   | Lambda (parameter, body) ->
     shrink_child (fun smaller -> Lambda (parameter, smaller)) body
   | Application (function_, argument) ->
@@ -195,35 +133,13 @@ let rec shrink_expression expression yield =
     shrink_child (fun smaller -> If_then_else (smaller, yes, no)) condition;
     shrink_child (fun smaller -> If_then_else (condition, smaller, no)) yes;
     shrink_child (fun smaller -> If_then_else (condition, yes, smaller)) no
-  | Let_in (recursive, first, rest, body) ->
-    shrink_child (fun smaller -> Let_in (recursive, first, rest, smaller)) body;
-    shrink_binding first (fun smaller -> yield (Let_in (recursive, smaller, rest, body)));
-    Shrink.list ~shrink:shrink_binding rest (fun smaller ->
-      yield (Let_in (recursive, first, smaller, body)))
-  | Function (first, rest) ->
-    yield first.case_expression;
-    shrink_case first (fun smaller -> yield (Function (smaller, rest)));
-    Shrink.list ~shrink:shrink_case rest (fun smaller ->
-      yield (Function (first, smaller)))
-  | Match (scrutinee, first, rest) ->
-    shrink_child (fun smaller -> Match (smaller, first, rest)) scrutinee;
-    yield first.case_expression;
-    shrink_case first (fun smaller -> yield (Match (scrutinee, smaller, rest)));
-    Shrink.list ~shrink:shrink_case rest (fun smaller ->
-      yield (Match (scrutinee, first, smaller)))
-
-and shrink_binding value yield =
-  shrink_expression value.expression (fun expression -> yield { value with expression })
-
-and shrink_case value yield =
-  shrink_expression value.case_expression (fun case_expression ->
-    yield { value with case_expression })
+  | Let_in (recursive, pattern, value, body) ->
+    shrink_child (fun smaller -> Let_in (recursive, pattern, smaller, body)) value;
+    shrink_child (fun smaller -> Let_in (recursive, pattern, value, smaller)) body
 ;;
 
-let shrink_item (Value (recursive, first, rest)) yield =
-  shrink_binding first (fun smaller -> yield (Value (recursive, smaller, rest)));
-  Shrink.list ~shrink:shrink_binding rest (fun smaller ->
-    yield (Value (recursive, first, smaller)))
+let shrink_item (Definition (recursive, pattern, value)) yield =
+  shrink_expression value (fun smaller -> yield (Definition (recursive, pattern, smaller)))
 ;;
 
 let arbitrary_expression =
@@ -234,13 +150,12 @@ let arbitrary_expression =
 ;;
 
 let arbitrary_program =
-  let bindings = Gen.map2 binding (patterns 2) (expressions 3) in
   let items =
     Gen.map3
-      (fun recursive first rest -> Value (recursive, first, rest))
+      (fun recursive pattern value -> Definition (recursive, pattern, value))
       recursive_flags
-      bindings
-      (small_list bindings)
+      patterns
+      (expressions 3)
   in
   make
     ~print:program_source
@@ -265,11 +180,11 @@ let check_parse ~parse ~equal ~show source expected =
 ;;
 
 let check_expression =
-  check_parse ~parse:Parser_menhir.parse_expression ~equal:equal_expr ~show:show_expr
+  check_parse ~parse:Parser_menhir.parse_expression ~equal:( = ) ~show:show_expr
 ;;
 
 let check_program =
-  check_parse ~parse:Parser_menhir.parse_program ~equal:equal_program ~show:show_program
+  check_parse ~parse:Parser_menhir.parse_program ~equal:( = ) ~show:show_program
 ;;
 
 let expression_round_trip =
@@ -311,7 +226,7 @@ let streaming_expressions =
        check_parse
          ~parse:(fun source ->
            Parser_menhir.parse_expression_lexbuf (refilled_lexbuf source))
-         ~equal:equal_expr
+         ~equal:( = )
          ~show:show_expr
          source
          expression)
@@ -329,53 +244,18 @@ let fixed_expressions =
   ; "a && b && c", infix "&&" a (infix "&&" b c)
   ; "a || b && c", infix "||" a (infix "&&" b c)
   ; "a < b && b <> c", infix "&&" (infix "<" a b) (infix "<>" b c)
-  ; "a :: b :: []", infix "::" a (infix "::" b (List []))
-  ; "a + b :: c", infix "::" (infix "+" a b) c
   ; "f a b + c", infix "+" (application (var "f") [ a; b ]) c
   ; "f (a + b)", Application (var "f", infix "+" a b)
   ; "-f a", prefix "~-" (Application (var "f", a))
-  ; "~-f a", Application (prefix "~-" (var "f"), a)
   ; "+f a", prefix "~+" (Application (var "f", a))
-  ; "~+f a", Application (prefix "~+" (var "f"), a)
   ; "f -1", infix "-" (var "f") (int 1)
   ; "f (-1)", Application (var "f", int (-1))
   ; "-1", int (-1)
   ; "+1", int 1
-  ; "~-1", prefix "~-" (int 1)
-  ; "~+1", prefix "~+" (int 1)
   ; "( * ) 2 3", infix "*" (int 2) (int 3)
-  ; "( :: ) a b", infix "::" a b
-  ; "a, b, c", Tuple (a, b, [ c ])
-  ; ( "[(fun x -> x); (fun y -> y)]"
-    , List [ Lambda (pvar "x", var "x"); Lambda (pvar "y", var "y") ] )
-  ; ( "[(let x = 1 in x); 2]"
-    , List [ Let_in (Nonrecursive, binding (pvar "x") (int 1), [], var "x"); int 2 ] )
   ; "fun x y -> x y", function_ [ pvar "x"; pvar "y" ] (Application (var "x", var "y"))
-  ; ( "let rec f x = x and g y = y in f"
-    , Let_in
-        ( Recursive
-        , binding (pvar "f") (Lambda (pvar "x", var "x"))
-        , [ binding (pvar "g") (Lambda (pvar "y", var "y")) ]
-        , var "f" ) )
-  ; ( "match xs with [] -> 0 | x :: y :: rest -> x"
-    , Match
-        ( var "xs"
-        , case (PList []) (int 0)
-        , [ case (PCons (pvar "x", PCons (pvar "y", pvar "rest"))) (var "x") ] ) )
-  ; ( "function (x, y, _) -> [x; y;]"
-    , Function
-        (case (PTuple (pvar "x", pvar "y", [ PWildcard ])) (List [ var "x"; var "y" ]), [])
-    )
-  ; ( "match a with _ -> match b with _ -> 1 | x -> 2"
-    , Match
-        ( a
-        , case PWildcard (Match (b, case PWildcard (int 1), [ case (pvar "x") (int 2) ]))
-        , [] ) )
-  ; ( "match a with _ -> (match b with _ -> 1) | x -> 2"
-    , Match
-        ( a
-        , case PWildcard (Match (b, case PWildcard (int 1), []))
-        , [ case (pvar "x") (int 2) ] ) )
+  ; ( "let rec f x = x in f"
+    , Let_in (Recursive, pvar "f", Lambda (pvar "x", var "x"), var "f") )
   ; ( "if a then if b then 1 else 2 else 3"
     , If_then_else (a, If_then_else (b, int 1, int 2), int 3) )
   ]
@@ -434,18 +314,16 @@ let cps_examples =
      if n <= 1 then k 1 else fac (n - 1) (fun r -> k (n * r))\n\
      let rec fib n k =\n\
      if n <= 1 then k n else\n\
-     fib (n - 1) (fun a -> fib (n - 2) (fun b -> k (a + b)));;\n\
+     fib (n - 1) (fun a -> fib (n - 2) (fun b -> k (a + b)))\n\
      let answer = fac 5 (fun x -> x)"
   in
   let expected =
-    [ Value (Recursive, factorial, [])
-    ; Value (Recursive, fibonacci, [])
-    ; Value
+    [ Definition (Recursive, fst factorial, snd factorial)
+    ; Definition (Recursive, fst fibonacci, snd fibonacci)
+    ; Definition
         ( Nonrecursive
-        , binding
-            (pvar "answer")
-            (application (var "fac") [ int 5; Lambda (pvar "x", var "x") ])
-        , [] )
+        , pvar "answer"
+        , application (var "fac") [ int 5; Lambda (pvar "x", var "x") ] )
     ]
   in
   Test.make ~name:"Menhir: CPS factorial and Fibonacci programs" ~count:1 unit (fun () ->
@@ -453,7 +331,7 @@ let cps_examples =
     && check_parse
          ~parse:(fun source ->
            Parser_menhir.parse_program_lexbuf (refilled_lexbuf source))
-         ~equal:equal_program
+         ~equal:( = )
          ~show:show_program
          source
          expected)
@@ -481,7 +359,6 @@ let invalid_expressions =
   ; "let x = 1 in"
   ; "if x then y"
   ; "if x else y"
-  ; "match x with"
   ; "function | -> x"
   ; "function x -> x |"
   ; "1 +"

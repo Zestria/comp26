@@ -8,8 +8,8 @@
 
 (** Demand-driven lexical analysis for MiniML. *)
 
-(** Abstract state of a buffered token stream. *)
-type t
+(** Buffered token stream shared with Menhir. *)
+type t = Lexing.lexbuf
 
 (** Create a lexer over an existing string. Tokens are recognized only when
     {!next_token} is called. *)
