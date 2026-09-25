@@ -16,7 +16,7 @@ depends: [
   "bisect_ppx_ng"
   "ppx_deriving"
   "llvm" {= "18-shared"}
-  "ppx_deriving_qcheck" {= "0.6"}
+  "ppx_deriving_qcheck" {>= "0.9"}
   "odoc" {with-doc}
 ]
 build: [
