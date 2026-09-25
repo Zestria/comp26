@@ -13,7 +13,7 @@ type identifier =
 [@@deriving show { with_path = false }, qcheck]
 
 type constant =
-  | Integer of (int[@gen QCheck.Gen.nat_small])
+  | Integer of (int[@gen QCheck.Gen.int_range (-1000) 1000])
   | Boolean of bool
   | Unit
 [@@deriving show { with_path = false }, qcheck]

@@ -85,6 +85,7 @@ let precedence =
   case "operator precedence and associativity" (fun () ->
     check_expr "1 + 2 * 3" (infix "+" (int 1) (infix "*" (int 2) (int 3)));
     check_expr "2 * 3 + 4" (infix "+" (infix "*" (int 2) (int 3)) (int 4));
+    check_expr "1 + (2 + 3)" (infix "+" (int 1) (infix "+" (int 2) (int 3)));
     check_expr "1 - 2 - 3" (infix "-" (infix "-" (int 1) (int 2)) (int 3));
     check_expr "8 / 4 / 2" (infix "/" (infix "/" (int 8) (int 4)) (int 2));
     check_expr
@@ -107,6 +108,16 @@ let applications =
     check_expr "f (g x)" (application (var "f") [ application (var "g") [ var "x" ] ]);
     check_expr "f x + 1" (infix "+" (application (var "f") [ var "x" ]) (int 1));
     check_expr "(f) x" (application (var "f") [ var "x" ]))
+;;
+
+(** Unary minus and plus fold integer literals and prefix other operands. *)
+let unary =
+  case "unary operators" (fun () ->
+    check_expr "-1" (int (-1));
+    check_expr "+1" (int 1);
+    check_expr "-x" (prefix "~-" (var "x"));
+    check_expr "-(1 + 2)" (prefix "~-" (infix "+" (int 1) (int 2)));
+    check_expr "1 - -2" (infix "-" (int 1) (int (-2))))
 ;;
 
 (** Several [fun] parameters become nested abstractions. *)
@@ -221,6 +232,7 @@ let () =
        [ atoms
        ; precedence
        ; applications
+       ; unary
        ; lambdas
        ; conditionals
        ; let_in

@@ -213,7 +213,25 @@ and disjunction state = binary_level [ OR_OR, "||" ] conjunction state
 and conjunction state = binary_level [ AND_AND, "&&" ] comparison state
 and comparison state = binary_level comparison_operators additive state
 and additive state = binary_level [ PLUS, "+"; MINUS, "-" ] multiplicative state
-and multiplicative state = binary_level [ STAR, "*"; SLASH, "/" ] application state
+and multiplicative state = binary_level [ STAR, "*"; SLASH, "/" ] unary state
+
+and unary state =
+  match state.current.token with
+  | MINUS ->
+    (let* () = advance in
+     let+ operand = unary in
+     match operand with
+     | Constant (Integer value) -> Constant (Integer (-value))
+     | operand -> prefix "~-" operand)
+      state
+  | PLUS ->
+    (let* () = advance in
+     let+ operand = unary in
+     match operand with
+     | Constant (Integer _) -> operand
+     | operand -> prefix "~+" operand)
+      state
+  | _ -> application state
 
 and application state =
   (let* first = atom in
