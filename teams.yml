@@ -27,5 +27,8 @@
   - lutik924
   - alken1t
 
+- BogdanKharisovPolMuzhskoyGorodNizhnevartovskML:
+  - shrexer06
+
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo

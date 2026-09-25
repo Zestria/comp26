@@ -90,4 +90,24 @@
    (>= 5.2.1))
   (bisect_ppx_ng :with-test)))
 
+(package
+ (name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (synopsis "OCaml subset compiler")
+ (description "Compiler for a subset of OCaml.")
+ (authors "shrexer06")
+ (maintainers "shrexer06")
+ (license LGPL-3.0-or-later)
+ (source
+  (uri "git+ssh://ssh.sourcecraft.dev/shrexer06/comp26.git"))
+ (homepage "https://sourcecraft.dev/shrexer06/comp26")
+ (documentation
+  "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  menhir
+  qcheck))
+
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
