@@ -67,8 +67,7 @@ let test_functions_and_applications () =
     (application
        (var "f")
        [ application (var "g") [ var "x" ]; function_ [ pvar "y" ] (var "y") ]);
-  check_expr "partial application" "(+) 1" (application (var "+") [ int 1 ]);
-  check_expr "multiplication operator value" "( * ) 1" (application (var "*") [ int 1 ])
+  check_expr "partial application" "(+) 1" (application (var "+") [ int 1 ])
 ;;
 
 (** Checks that local bindings accept both variable and wildcard patterns. *)

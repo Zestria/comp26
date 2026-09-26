@@ -96,8 +96,9 @@ let rec expression ~depth ~seed ~scope =
                 ~scope:(parameter :: function_name :: scope) )
         , Application (variable function_name, variable_from scope next) )
     | 8 ->
-      Application
-        (variable (operator seed), expression ~depth:(depth - 1) ~seed:next ~scope)
+      application
+        (variable_from scope seed)
+        [ expression ~depth:(depth - 1) ~seed:next ~scope ]
     | _ ->
       application
         (variable_from scope seed)

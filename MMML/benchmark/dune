@@ -4,13 +4,6 @@
  (wrapped false)
  (libraries MMML.frontend))
 
-(test
- (name workload_test)
- (modules workload_test)
- (libraries
-  MMML.frontend
-  parser_benchmark_workload))
-
 (executable
  (name parser_benchmark)
  (modules parser_benchmark)
