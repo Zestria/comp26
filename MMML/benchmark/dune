@@ -21,7 +21,5 @@
 
 (rule
  (alias benchmark)
- (enabled_if
-  (= %{env:MMML_ENABLE_PARSER_BENCHMARK=false} true))
  (action
   (run %{exe:parser_benchmark.exe})))
