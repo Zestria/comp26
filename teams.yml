@@ -17,5 +17,11 @@
   - khmelevvova06
   - yacknickovlev
 
+- SchonfinkelML:
+  - nechaika06
+  - neepi
+  - semyonrosin
+
+
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
