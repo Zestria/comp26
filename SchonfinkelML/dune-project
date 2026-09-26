@@ -1,9 +1,10 @@
 (lang dune 3.24)
+
 (using menhir 2.0)
 
 (name SchonfinkelML)
 
-(generate_opam_files)
+(generate_opam_files true)
 
 (authors "Samodurov Nikita, Rosin Semyon, Nechaeva Darya")
 
