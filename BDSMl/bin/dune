@@ -10,3 +10,9 @@
   )
  (instrumentation
   (backend bisect_ppx_ng)))
+
+(cram
+ (package BDSMl)
+ (deps
+  runtime.c
+  %{exe:../compiler.exe}))
