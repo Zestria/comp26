@@ -1,0 +1,4 @@
+(test
+ (name frontend_tests)
+ (package shmel)
+ (libraries shmel.Lib))

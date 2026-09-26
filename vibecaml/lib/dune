@@ -22,4 +22,4 @@
 
 (menhir
  (modules menhir_parser)
- (flags --explain --strict))
+ (flags --strict))

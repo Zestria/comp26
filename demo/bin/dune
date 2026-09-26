@@ -13,4 +13,5 @@
   (backend bisect_ppx_ng)))
 
 (cram
+ (package demo)
  (deps ../compiler.exe runtime.c))
