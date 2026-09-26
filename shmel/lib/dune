@@ -1,0 +1,13 @@
+(library
+ (name shmel_lib)
+ (public_name shmel.Lib)
+ (modules Ast Printast Parser Lexer Main Parser_comb)
+ (libraries angstrom)
+ (preprocess
+  (pps ppx_deriving.show))
+ (instrumentation
+  (backend bisect_ppx_ng)))
+(menhir
+ (modules parser))
+
+(ocamllex lexer)
