@@ -32,6 +32,7 @@ if [ -z "$COMPILER_NAME" ]; then
     echo "error: could not resolve compiler (got empty name)" >&2
     exit 1
 fi
+
 echo "compiler = $COMPILER_NAME"
 
 cd "$WORKSPACE"
@@ -44,7 +45,12 @@ case "$CMD" in
         opam install "$COMPILER_NAME" --deps-only --with-test --with-doc --yes
         ;;
     build)
-        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" "@$COMPILER_NAME/check" "@$COMPILER_NAME/runtest" @install
+        /usr/bin/time -f "%U" opam exec -- dune build \
+            -p "$COMPILER_NAME" \
+            --promote-install-files=false \
+            "@$COMPILER_NAME/check" \
+            "@$COMPILER_NAME/runtest" \
+            @install
         ;;
     *)
         usage
