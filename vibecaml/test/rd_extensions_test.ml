@@ -67,5 +67,23 @@ let () =
     (Expr_if
        ( binary "<>" (var "x") (int 0)
        , Expr_constant (Const_bool true)
-       , Expr_constant (Const_bool false) ))
+       , Expr_constant (Const_bool false) ));
+  check_expression
+    "if ythen 1 else 2"
+    (Expr_if (var "y", Expr_constant (Const_int 1), Expr_constant (Const_int 2)));
+  check_expression
+    "let a = 1in a + 2"
+    (Expr_let (Non_recursive, binding "a" (int 1), [], binary "+" (var "a") (int 2)));
+  (* Специальный тест, который показывает что расширение для RD не ломает обычные программы *)
+  check_expression
+    "let android = 1 in let inc = 1 in android + inc"
+    (Expr_let
+       ( Non_recursive
+       , binding "android" (int 1)
+       , []
+       , Expr_let
+           ( Non_recursive
+           , binding "inc" (int 1)
+           , []
+           , binary "+" (var "android") (var "inc") ) ))
 ;;
