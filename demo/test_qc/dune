@@ -1,13 +1,7 @@
-(executable
+(test
  (name test_qc)
+ (package demo)
  (modules test_qc)
  (libraries qcheck angstrom)
  (preprocess
   (pps ppx_deriving_qcheck ppx_deriving.show)))
-
-(rule
- (alias runtest)
- (deps
-  (:< test_qc.exe))
- (action
-  (run %{<})))

@@ -1,4 +1,5 @@
 (cram
+ (package shmel)
  (applies_to NewGVNtricky)
  (deps NewGVNtricky.ll))
 

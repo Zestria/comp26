@@ -1,3 +1,4 @@
 (cram
+ (package shmel)
  (deps 1.cpp)
  (applies_to *))
