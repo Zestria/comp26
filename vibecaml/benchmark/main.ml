@@ -17,10 +17,10 @@ let glued_keywords =
 ;;
 
 let measureTime parser program =
-  let startTime = Unix.gettimeofday () in
+  let start_time = Unix.gettimeofday () in
   let _ = ignore (parser program) in
-  let endTime = Unix.gettimeofday () in
-  print_float (endTime -. startTime);
+  let end_time = Unix.gettimeofday () in
+  print_float (end_time -. start_time);
   print_string ", "
 ;;
 
@@ -29,19 +29,19 @@ let bench ?(iterations : int = 20) (programs : string list) =
   let rd = Rd_parser.parse_expr default_extension in
   let rd_ext = Rd_parser.parse_expr glued_keywords in
   print_string "menhir = [";
-  for i = 1 to iterations do
+  for _ = 1 to iterations do
     Gc.full_major ();
     List.map (measureTime menhir) programs |> ignore
   done;
   print_string "]\n";
   print_string "rd = [";
-  for i = 1 to iterations do
+  for _ = 1 to iterations do
     Gc.full_major ();
     List.map (measureTime rd) programs |> ignore
   done;
   print_string "]\n";
   print_string "rd_ext = [";
-  for i = 1 to iterations do
+  for _ = 1 to iterations do
     Gc.full_major ();
     List.map (measureTime rd_ext) programs |> ignore
   done;

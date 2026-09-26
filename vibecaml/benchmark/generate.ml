@@ -58,14 +58,9 @@ let gen_constant =
 ;;
 
 let gen_pattern =
-  (* Name & constants patterns are highly more frequent than wildcard and bool ones *)
   let open Gen in
   oneof_weighted
-    [ 1, return Ast.Pat_wildcard
-    ; 10, map (fun n -> Ast.Pat_var n) gen_name
-    ; 10, map (fun n -> Ast.Pat_constant (Const_int n)) (int_range 0 1000)
-    ; 1, map (fun n -> Ast.Pat_constant (Const_bool n)) bool
-    ]
+    [ 1, return Ast.Pat_wildcard; 10, map (fun n -> Ast.Pat_var n) gen_identifier ]
 ;;
 
 let gen_rec_flag =
