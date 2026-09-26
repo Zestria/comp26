@@ -28,6 +28,8 @@ let parsers =
   ]
 ;;
 
+let extensions = Config.default_extensions
+
 let round_trip print parse tree =
   let printed = print tree in
   match parse printed with
@@ -48,7 +50,7 @@ let () =
                  ~print:Pprint.string_of_expression
                  ~shrink:Generate.shrink_expression
                  (Generate.expression identifiers))
-              (round_trip Pprint.string_of_expression P.parse_expr)
+              (round_trip Pprint.string_of_expression (P.parse_expr extensions))
           ; QCheck.Test.make
               ~count:1000
               ~name:(name ^ ": программа разбирается в то же дерево")
@@ -56,7 +58,7 @@ let () =
                  ~print:Pprint.string_of_structure
                  ~shrink:Generate.shrink_structure
                  (Generate.structure identifiers))
-              (round_trip Pprint.string_of_structure P.parse_structure)
+              (round_trip Pprint.string_of_structure (P.parse_structure extensions))
           ])
        parsers)
 ;;
@@ -93,7 +95,7 @@ let () =
     if candidate = origin then fail "shrink: кандидат равен исходному: %s" printed;
     List.iter
       (fun (name, (module P : Parser_intf.S)) ->
-         match P.parse_expr printed with
+         match P.parse_expr extensions printed with
          | Ok parsed when parsed = candidate -> ()
          | Ok _ | Error _ ->
            fail

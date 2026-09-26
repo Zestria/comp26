@@ -73,32 +73,45 @@
   vibecaml: missing.ml: No such file or directory
   [1]
 
-Расширения ещё не реализованы: флаг даёт ошибку до чтения входа, поэтому
-несуществующий файл не мешает.
+Проверка опции `--ext-glued-keywords` для нисходящего парсера:
+корректная обработка слипшегося ключевого слова и идентификатора.
 
-  $ vibecamlc --ext-glued-keywords missing.ml
-  vibecaml: расширение --ext-glued-keywords пока не реализовано
-  [1]
+  $ echo 'letx = 1 letrecf n = if n <= 1 then 1 else n * f (n - 1)' > glued.ml
 
-  $ vibecamlc --ext-operator-declarations missing.ml
+  $ vibecamlc --ext-glued-keywords glued.ml
+  let x = 1
+  let rec f n = if n <= 1 then 1 else n * f (n - 1)
+
+  $ echo 'let y = letx' > ident.ml
+
+  $ vibecamlc ident.ml
+  let y = letx
+
+Опция `--ext-operator-declarations` для восходящего парсера не реализована
+
+  $ echo 'let x = 1' > ext.ml
+
+  $ vibecamlc --ext-operator-declarations ext.ml
   vibecaml: расширение --ext-operator-declarations пока не реализовано
   [1]
 
-  $ vibecamlc --parser menhir --ext-glued-keywords missing.ml
+Восходящий парсер не поддерживает любые из расширений
+
+  $ vibecamlc --parser menhir --ext-glued-keywords ext.ml
   vibecaml: расширение --ext-glued-keywords не поддерживается в menhir-парсере
   [1]
 
-  $ vibecamlc --parser menhir --ext-operator-declarations missing.ml
+  $ vibecamlc --parser menhir --ext-operator-declarations ext.ml
   vibecaml: расширение --ext-operator-declarations не поддерживается в menhir-парсере
   [1]
 
 С двумя флагами сообщение про первое расширение из Config, порядок в командной
 строке не важен.
 
-  $ vibecamlc --ext-operator-declarations --ext-glued-keywords missing.ml
-  vibecaml: расширение --ext-glued-keywords пока не реализовано
+  $ vibecamlc --ext-operator-declarations --ext-glued-keywords ext.ml
+  vibecaml: расширение --ext-operator-declarations пока не реализовано
   [1]
 
-  $ vibecamlc --parser menhir --ext-operator-declarations --ext-glued-keywords missing.ml
+  $ vibecamlc --parser menhir --ext-operator-declarations --ext-glued-keywords ext.ml
   vibecaml: расширение --ext-glued-keywords не поддерживается в menhir-парсере
   [1]

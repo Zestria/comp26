@@ -104,9 +104,132 @@ let operator_kind offset = function
   | name -> fail offset (Lexicon.operator_error name)
 ;;
 
+(* Ключевые слова по убыванию длины: первое подходящее даёт самое длинное разбиение. *)
+let glued_keywords_desc =
+  [ "false", False
+  ; "then", Then
+  ; "else", Else
+  ; "true", True
+  ; "let", Let
+  ; "rec", Rec
+  ; "and", And
+  ; "fun", Fun
+  ; "in", In
+  ; "if", If
+  ]
+;;
+
+let is_keyword_kind = function
+  | Let | Rec | And | In | Fun | If | Then | Else | True | False -> true
+  | _ -> false
+;;
+
+(* Слипшиеся с ключевыми словами идентификаторы: [letx] --- это [let] [x].
+   Слово разделяется по самому длинному ключевому слову-префиксу.
+   Остаток разбирается рекурсивно: [letrecx] --- это
+   [let] [rec] [x]. Результат --- список токенов в прямом порядке. *)
+let rec split_glued_front offset word =
+  let word_length = String.length word in
+  match
+    List.find_opt
+      (fun (keyword, _) ->
+         let length = String.length keyword in
+         length < word_length
+         && String.sub word 0 length = keyword
+         &&
+         match word.[length] with
+         | 'a' .. 'z' | '_' -> true
+         | _ -> false)
+      glued_keywords_desc
+  with
+  | Some (keyword, kind) ->
+    let length = String.length keyword in
+    let rest = String.sub word length (word_length - length) in
+    { kind; offset } :: split_glued_front (offset + length) rest
+  | None -> [ { kind = word_kind offset word; offset } ]
+;;
+
+(* То же с конца: [ythen] --- это [y] [then]. Токены в прямом порядке. *)
+let rec split_glued_back offset word =
+  let word_length = String.length word in
+  match
+    List.find_opt
+      (fun (keyword, _) ->
+         let length = String.length keyword in
+         length < word_length
+         && String.sub word (word_length - length) length = keyword
+         &&
+         match word.[word_length - length - 1] with
+         | 'a' .. 'z' | '_' -> true
+         | _ -> false)
+      glued_keywords_desc
+  with
+  | Some (keyword, kind) ->
+    let length = String.length keyword in
+    let rest = String.sub word 0 (word_length - length) in
+    let keyword_token = { kind; offset = offset + word_length - length } in
+    split_glued_back offset rest @ [ keyword_token ]
+  | None -> [ { kind = word_kind offset word; offset } ]
+;;
+
+(* Регион --- непрерывный кусок исходника; кандидаты --- его возможные
+   токенизации. У обычных токенов и слов без ключевых слов внутри один
+   кандидат, у «склеенных» слов --- несколько. *)
+type region =
+  { offset : int
+  ; candidates : token list list
+  }
+
+(* Допустимые разбиения одного слова: самое жадное с начала, потом с конца,
+   потом целиком идентификатором. Неудачные варианты (остаток оказался
+   зарезервированным словом и т. п.) пропускаются. Если не годится ни один,
+   сообщение об ошибке берём от классификации всего слова. *)
+let word_candidates offset word =
+  let front =
+    try split_glued_front offset word with
+    | Parse_error _ -> []
+  in
+  let back =
+    try split_glued_back offset word with
+    | Parse_error _ -> []
+  in
+  let whole =
+    try [ { kind = word_kind offset word; offset } ] with
+    | Parse_error _ -> []
+  in
+  let rec dedup seen = function
+    | [] -> List.rev seen
+    | candidate :: rest when List.mem candidate seen -> dedup seen rest
+    | candidate :: rest -> dedup (candidate :: seen) rest
+  in
+  match dedup [] [ front; back; whole ] with
+  | [] ->
+    (match word_kind offset word with
+     | _ -> assert false
+     | exception Parse_error (_, message) -> fail offset message)
+  | candidates -> candidates
+;;
+
+(* В режиме склейки после числа можно оставить ключевое слово: [1in] --- это
+   [1] [in]. Если хвост с ключевого слова не начинается, литерал остаётся
+   ошибкой, как и без расширения. *)
+let number_glued_keyword_tokens glue_kw finish glued source =
+  if not glue_kw
+  then None
+  else (
+    let tail = String.sub source finish (glued - finish) in
+    match split_glued_front finish tail with
+    | exception Parse_error _ -> None
+    | [] -> None
+    | first :: _ as tokens -> if is_keyword_kind first.kind then Some tokens else None)
+;;
+
 (* Лексер отдельным проходом выкидывает пробелы и комментарии, грамматика
-   видит только токены. *)
-let lex source =
+   видит только токены. При [glue_kw] слова расщепляются по ключевым словам:
+   [letx] --- это [let] [x], [1in] --- это [1] [in]. Расщепление обязательным
+   не бывает: слово, которое можно оставить идентификатором ([android]), так
+   и остаётся, потому что разбор перебирает кандидатов каждого слова. *)
+let lex glue_kw source =
   let length = String.length source in
   let pair_at index =
     if index + 1 < length then Some (source.[index], source.[index + 1]) else None
@@ -126,37 +249,58 @@ let lex source =
     then take_while predicate (index + 1)
     else index
   in
-  let rec loop index tokens =
+  let rec loop index regions =
     if index >= length
-    then List.rev ({ kind = Eof; offset = length } :: tokens)
+    then (
+      let eof = { kind = Eof; offset = length } in
+      List.rev ({ offset = length; candidates = [ [ eof ] ] } :: regions))
     else if is_space source.[index]
-    then loop (index + 1) tokens
+    then loop (index + 1) regions
     else if pair_at index = Some ('(', '*')
-    then loop (skip_comment index 1 (index + 2)) tokens
+    then loop (skip_comment index 1 (index + 2)) regions
     else (
-      let add kind finish = loop finish ({ kind; offset = index } :: tokens) in
+      let single kind finish =
+        let token = { kind; offset = index } in
+        loop finish ({ offset = index; candidates = [ [ token ] ] } :: regions)
+      in
       let text finish = String.sub source index (finish - index) in
       match source.[index] with
-      | '(' -> add Lparen (index + 1)
-      | ')' -> add Rparen (index + 1)
-      | ',' -> add Comma (index + 1)
+      | '(' -> single Lparen (index + 1)
+      | ')' -> single Rparen (index + 1)
+      | ',' -> single Comma (index + 1)
       | '0' .. '9' ->
         let finish = take_while Lexicon.is_digit index in
         (* [1x], [1L], [0x1F], [1_000] и [1.5] для OCaml --- один литерал, а не
            число и что-то следом. *)
         let glued = take_while (fun c -> is_identifier_char c || c = '.') finish in
         if glued > finish
-        then fail index (Lexicon.literal_error (text glued))
-        else add (Int (text finish)) finish
+        then (
+          let literal = text glued in
+          match number_glued_keyword_tokens glue_kw finish glued source with
+          | Some tokens ->
+            let digits = String.sub source index (finish - index) in
+            let digit = { kind = Int digits; offset = index } in
+            let candidates = [ [ digit ] @ tokens ] in
+            loop glued ({ offset = index; candidates } :: regions)
+          | None -> fail index (Lexicon.literal_error literal))
+        else single (Int (text finish)) finish
       | 'a' .. 'z' | '_' ->
         let finish = take_while is_identifier_char index in
-        add (word_kind index (text finish)) finish
+        let word = text finish in
+        let region =
+          if glue_kw
+          then { offset = index; candidates = word_candidates index word }
+          else (
+            let token = { kind = word_kind index word; offset = index } in
+            { offset = index; candidates = [ [ token ] ] })
+        in
+        loop finish (region :: regions)
       | 'A' .. 'Z' ->
         let finish = take_while is_identifier_char index in
         fail index (Lexicon.constructor_error (text finish))
       | character when is_operator_char character ->
         let finish = take_while is_operator_char index in
-        add (operator_kind index (text finish)) finish
+        single (operator_kind index (text finish)) finish
       | character -> fail index (Lexicon.unexpected_char_error character))
   in
   loop 0 []
@@ -508,30 +652,76 @@ let location source offset =
 ;;
 
 (* Упёрлись в конец ввода --- сообщение то же, что у menhir-парсера. *)
-let run parse source =
+let run glue_kw parse source =
   let error offset message =
     let message =
       if offset >= String.length source then Lexicon.end_of_input_error else message
     in
     Error (Printf.sprintf "%s: %s" (location source offset) message)
   in
-  match lex source with
-  | tokens ->
-    let state = { tokens = Array.of_list tokens; index = 0 } in
-    (try
-       let result = parse state in
-       match current state with
-       | { kind = Eof; _ } -> Ok result
-       | { offset; _ } -> error offset "лишний текст после программы"
-     with
-     | Parse_error (offset, message) -> error offset message)
+  match lex glue_kw source with
   | exception Parse_error (offset, message) -> error offset message
+  | regions ->
+    let parse_tokens tokens =
+      let state = { tokens; index = 0 } in
+      try
+        let result = parse state in
+        match current state with
+        | { kind = Eof; _ } -> Ok result
+        | { offset; _ } -> error offset "лишний текст после программы"
+      with
+      | Parse_error (offset, message) -> error offset message
+    in
+    (* Первая комбинация --- жадная, первый кандидат каждого слова. Если она
+       не разбирается, перебираем остальные и берём первый успешный разбор.
+       Перебор полный, для «обычных» слов кандидат один, так что обычно это
+       ровно один проход. При полном провале отдаём ошибку жадной комбинации. *)
+    let first_error = ref None in
+    let parse_and_record tokens =
+      let result = parse_tokens tokens in
+      (match result, !first_error with
+       | Error message, None -> first_error := Some message
+       | _ -> ());
+      result
+    in
+    let rec search acc_tokens pending =
+      match pending with
+      | [] -> parse_and_record (Array.of_list (List.rev acc_tokens))
+      | region :: rest ->
+        let rec try_candidates = function
+          | [] -> Error "нет кандитатов для разбора"
+          | candidate :: more ->
+            (match search (List.rev_append candidate acc_tokens) rest with
+             | Ok _ as ok -> ok
+             | Error _ -> try_candidates more)
+        in
+        try_candidates region.candidates
+    in
+    (match search [] regions with
+     | Ok _ as ok -> ok
+     | Error _ ->
+       (match !first_error with
+        | Some message -> Error message
+        | None -> Error "нет кандитатов"))
 ;;
 
-let parse_expr source = run parse_expression source
+let check_extensions extensions =
+  if extensions.Parser_intf.operator_declarations
+  then Error "расширение --ext-operator-declarations пока не реализовано"
+  else Ok ()
+;;
 
-let parse_structure source =
-  run
+let with_extensions extensions parse source =
+  match check_extensions extensions with
+  | Error _ as error -> error
+  | Ok () -> run extensions.Parser_intf.glued_keywords parse source
+;;
+
+let parse_expr extensions source = with_extensions extensions parse_expression source
+
+let parse_structure extensions source =
+  with_extensions
+    extensions
     (fun state ->
        let rec items values =
          match (current state).kind with

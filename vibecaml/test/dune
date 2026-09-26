@@ -4,7 +4,8 @@
   config_test
   parsers_test
   parsers_qcheck_test
-  rd_parser_test)
+  rd_parser_test
+  rd_extensions_test)
  (package vibecaml)
  ; Иначе прошедший тест берётся из кэша и новый QCHECK_SEED не применяется.
  (deps

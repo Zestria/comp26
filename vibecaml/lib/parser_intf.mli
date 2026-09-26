@@ -8,10 +8,20 @@
 
 (** Общий контракт для нисходящего и Menhir-парсеров. *)
 
+(** Расширения синтаксиса, по умолчанию выключены. Парсер сам решает, что поддерживает: включённое
+    расширение, которое он не реализует, --- [Error]. *)
+type extensions =
+  { glued_keywords : bool
+    (** идентификаторы, слипшиеся с ключевыми словами, [--ext-glued-keywords] *)
+  ; operator_declarations : bool
+    (** переопределение арности и ассоциативности операторов,
+        [--ext-operator-declarations] *)
+  }
+
 module type S = sig
   (** Разобрать последовательность объявлений верхнего уровня. *)
-  val parse_structure : string -> (Ast.structure, string) result
+  val parse_structure : extensions -> string -> (Ast.structure, string) result
 
   (** Разобрать одно выражение. *)
-  val parse_expr : string -> (Ast.expression, string) result
+  val parse_expr : extensions -> string -> (Ast.expression, string) result
 end

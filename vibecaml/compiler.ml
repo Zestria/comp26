@@ -16,27 +16,8 @@ let read_source = function
 
 let parse_structure config source =
   match config.Config.parser with
-  | Config.Recursive_descent -> Rd_parser.parse_structure source
-  | Config.Menhir -> Menhir_frontend.parse_structure source
-;;
-
-(* Расширения пока нигде не реализованы (#5). Флаг, который молча ничего не
-   включает, хуже явной ошибки, поэтому отказываем до чтения входа. *)
-let check_extensions config =
-  let { Config.glued_keywords; operator_declarations } = config.Config.extensions in
-  let enabled =
-    List.find_opt
-      snd
-      [ "--ext-glued-keywords", glued_keywords
-      ; "--ext-operator-declarations", operator_declarations
-      ]
-  in
-  match enabled, config.Config.parser with
-  | None, _ -> Ok ()
-  | Some (flag, _), Config.Recursive_descent ->
-    Error (Printf.sprintf "расширение %s пока не реализовано" flag)
-  | Some (flag, _), Config.Menhir ->
-    Error (Printf.sprintf "расширение %s не поддерживается в menhir-парсере" flag)
+  | Config.Recursive_descent -> Rd_parser.parse_structure config.Config.extensions source
+  | Config.Menhir -> Menhir_frontend.parse_structure config.Config.extensions source
 ;;
 
 let fail message =
@@ -55,7 +36,6 @@ let print_outputs config structure =
 
 let run config =
   let ( let* ) = Result.bind in
-  let* () = check_extensions config in
   let* source = read_source config.Config.input_file in
   let* structure = parse_structure config source in
   Ok (print_outputs config structure)

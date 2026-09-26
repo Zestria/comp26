@@ -46,8 +46,8 @@ let check_expression =
   check
     Pprint.string_of_expression
     [ "ocaml", Reparse.expression
-    ; "menhir", Menhir_frontend.parse_expr
-    ; "rd", Rd_parser.parse_expr
+    ; "menhir", Menhir_frontend.parse_expr Config.default_extensions
+    ; "rd", Rd_parser.parse_expr Config.default_extensions
     ]
 ;;
 
@@ -60,8 +60,8 @@ let check_structure =
   check
     Pprint.string_of_structure
     [ "ocaml", Reparse.structure
-    ; "menhir", Menhir_frontend.parse_structure
-    ; "rd", Rd_parser.parse_structure
+    ; "menhir", Menhir_frontend.parse_structure Config.default_extensions
+    ; "rd", Rd_parser.parse_structure Config.default_extensions
     ]
 ;;
 
