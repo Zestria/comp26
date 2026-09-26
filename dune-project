@@ -47,6 +47,22 @@
  )
 
 (package
+ (name SchonfinkelML)
+ (synopsis "A small compiler")
+ (depends
+  ocaml
+  dune
+  menhir
+  benchmark
+  qcheck
+  bisect_ppx_ng
+  ppx_inline_test
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (= "0.9"))))
+
+(package
  (name demo2)
  (allow_empty)
  (synopsis "A short synopsis")
