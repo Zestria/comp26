@@ -777,6 +777,45 @@ end
 let%test_module "Angstrom" = (module Make (Frontend.Parser))
 let%test_module "Menhir" = (module Make (Frontend.Menhir_parser))
 
+module Diagnostics = struct
+  let print_error source =
+    match Parser.parse_program source with
+    | Error message -> print_endline message
+    | Ok program ->
+      Format.printf "Unexpectedly accepted %S: %a@." source Ast_print.program program
+  ;;
+
+  let%expect_test "missing then branch after another definition" =
+    print_error "let x = 1 let y = if x then";
+    [%expect {| binding expression > expression after then: not enough input |}]
+  ;;
+
+  let%expect_test "missing else branch keeps the conditional context" =
+    print_error "if x then y else";
+    [%expect {| expression after else: not enough input |}]
+  ;;
+
+  let%expect_test "missing local body does not become a top-level definition" =
+    print_error "let x = 1 in";
+    [%expect {| expression after in: not enough input |}]
+  ;;
+
+  let%expect_test "missing function body keeps the function context" =
+    print_error "fun x ->";
+    [%expect {| function body: not enough input |}]
+  ;;
+
+  let%expect_test "missing binding expression keeps the binding context" =
+    print_error "let x =";
+    [%expect {| binding expression: not enough input |}]
+  ;;
+
+  let%expect_test "missing condition keeps the conditional context" =
+    print_error "if";
+    [%expect {| if condition: not enough input |}]
+  ;;
+end
+
 module Lexical_rules = struct
   open Grammar
 

@@ -65,7 +65,7 @@ let custom_operator_kind =
         ; "**", Power
         ]
     in
-    let* suffix = strings "!$%&*+-./:<=>?@^|~" in
+    let* suffix = QCheck.get_gen (strings "!$%&*+-./:<=>?@^|~") in
     return (prefix ^ suffix, expected)
   in
   QCheck.Test.make

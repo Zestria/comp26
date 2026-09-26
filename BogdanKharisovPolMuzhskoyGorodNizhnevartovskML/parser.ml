@@ -208,6 +208,7 @@ let function_body parameters body =
 
 let binding expression =
   Lexeme.keyword Keyword.Let
+  *> commit
   *>
   let* recursion =
     Lexeme.keyword Keyword.Rec *> return Recursive <|> return Nonrecursive
@@ -222,7 +223,7 @@ let binding expression =
     Lexeme.exact_symbol "=" *> return (pattern, [])
   in
   let* pattern, parameters = named <|> destructuring in
-  let* body = expression in
+  let* body = commit *> (expression <?> "binding expression") in
   return { recursion; pattern; expression = function_body parameters body }
 ;;
 
@@ -357,28 +358,38 @@ let make_expression operators =
     let local_let =
       let* binding = binding expression in
       Lexeme.keyword Keyword.In
+      *> commit
       *>
-      let* body = expression in
+      let* body = expression <?> "expression after in" in
       return (Let (binding, body))
     in
     let function_ =
       Lexeme.keyword Keyword.Fun
+      *> commit
       *>
       let* parameter = simple_pattern in
       let* parameters = many simple_pattern in
       Lexeme.exact_symbol "->"
       *>
-      let* body = expression in
+      let* body = expression <?> "function body" in
       return (Fun { parameter; parameters; body })
     in
     let conditional =
       Lexeme.keyword Keyword.If
+      *> commit
       *>
-      let* condition = expression in
+      let* condition = expression <?> "if condition" in
       Lexeme.keyword Keyword.Then
       *>
-      let* yes = expression in
-      let* no = option None (Lexeme.keyword Keyword.Else *> expression >>| Option.some) in
+      let* yes = expression <?> "expression after then" in
+      let* no =
+        option
+          None
+          (Lexeme.keyword Keyword.Else
+           *> commit
+           *> (expression <?> "expression after else")
+           >>| Option.some)
+      in
       return (If (condition, yes, no))
     in
     let open_expression = local_let <|> function_ <|> conditional in
@@ -463,7 +474,7 @@ let program ~operator_extension =
       let local =
         if allow_evaluation
         then
-          Lexeme.keyword Keyword.In *> expression
+          Lexeme.keyword Keyword.In *> commit *> (expression <?> "expression after in")
           >>| fun body -> Evaluation (Let (binding, body))
         else fail "Expected a top-level definition"
       in

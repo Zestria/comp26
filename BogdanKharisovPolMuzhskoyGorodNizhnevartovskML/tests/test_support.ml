@@ -35,14 +35,14 @@ let equal ~print ~expected actual =
 ;;
 
 let strings alphabet =
-  QCheck.Gen.(
-    string_size ~gen:(oneof_list (List.of_seq (String.to_seq alphabet))) (int_range 0 30))
+  let generator =
+    QCheck.Gen.(
+      string_size
+        ~gen:(oneof_list (List.of_seq (String.to_seq alphabet)))
+        (int_range 0 30))
+  in
+  QCheck.make ~print:print_string ~shrink:QCheck.Shrink.string generator
+  |> QCheck.add_shrink_invariant (String.for_all (String.contains alphabet))
 ;;
 
-let property name generator check =
-  QCheck.Test.make
-    ~name
-    ~count:2000
-    (QCheck.make ~print:print_string ~shrink:QCheck.Shrink.string generator)
-    check
-;;
+let property name arbitrary check = QCheck.Test.make ~name ~count:2000 arbitrary check

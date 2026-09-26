@@ -48,4 +48,24 @@ let properties =
   ]
 ;;
 
-let () = QCheck_runner.run_tests_main properties
+let suffix_shrinking =
+  QCheck.Test.make
+    ~name:"integer suffix shrinking stays within decimal digits and underscores"
+    ~count:1
+    QCheck.unit
+    (fun () ->
+       let arbitrary = strings "0123456789_" in
+       match arbitrary.shrink with
+       | None -> QCheck.Test.fail_report "Expected a shrinker for integer suffixes"
+       | Some shrink ->
+         shrink "9_" (fun candidate ->
+           if not (String.for_all (String.contains "0123456789_") candidate)
+           then
+             QCheck.Test.fail_reportf
+               "Shrinking %S produced an invalid suffix: %S"
+               "9_"
+               candidate);
+         true)
+;;
+
+let () = QCheck_runner.run_tests_main (suffix_shrinking :: properties)

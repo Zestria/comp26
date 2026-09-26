@@ -164,16 +164,20 @@ struct
     let ( let* ) = ( >>= ) in
     let symbolic starts alphabet =
       let* first = oneof_list starts in
-      let* rest = Test_support.strings alphabet in
+      let* rest = QCheck.get_gen (Test_support.strings alphabet) in
       return (first ^ rest)
     in
-    oneof
-      [ oneof_list [ "mod"; ":=" ]
-      ; symbolic [ "!"; "~!"; "?!"; "#!" ] "!$%&*+-./:<=>?@^|~#"
-      ; symbolic
-          [ "="; "<>"; "|+"; "&"; "$"; "@"; "^"; "+"; "-+"; "*"; "/"; "%" ]
-          "!$%&*+-./:<=>?@^|~"
-      ]
+    let generator =
+      oneof
+        [ oneof_list [ "mod"; ":=" ]
+        ; symbolic [ "!"; "~!"; "?!"; "#!" ] "!$%&*+-./:<=>?@^|~#"
+        ; symbolic
+            [ "="; "<>"; "|+"; "&"; "$"; "@"; "^"; "+"; "-+"; "*"; "/"; "%" ]
+            "!$%&*+-./:<=>?@^|~"
+        ]
+    in
+    QCheck.make ~print:Test_support.print_string ~shrink:QCheck.Shrink.string generator
+    |> QCheck.add_shrink_invariant (fun text -> Result.is_ok (Name.of_operator text))
   ;;
 
   let operator_values =
@@ -350,7 +354,24 @@ module Extended = Make (struct
     let name = "Angstrom with operator extension"
   end)
 
+let operator_shrinking =
+  QCheck.Test.make
+    ~name:"operator shrinking preserves the original failure on mod"
+    ~count:1
+    QCheck.unit
+    (fun () ->
+       let arbitrary = QCheck.set_gen (QCheck.Gen.return "mod") Angstrom.operator_names in
+       let cell =
+         QCheck.Test.make_cell ~count:1 arbitrary (fun text ->
+           Name.to_string (Test_support.operator text) <> "mod")
+       in
+       match QCheck.TestResult.get_state (QCheck.Test.check_cell cell) with
+       | Failed { instances = [ { instance; _ } ] } ->
+         Test_support.equal ~print:Test_support.print_string ~expected:"mod" instance
+       | _ -> QCheck.Test.fail_report "Expected a minimized failure on mod")
+;;
+
 let () =
   QCheck_runner.run_tests_main
-    ((Extended.program_roundtrip :: Angstrom.tests) @ Menhir.tests)
+    ((operator_shrinking :: Extended.program_roundtrip :: Angstrom.tests) @ Menhir.tests)
 ;;
