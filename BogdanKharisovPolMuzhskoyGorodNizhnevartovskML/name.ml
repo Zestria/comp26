@@ -13,15 +13,43 @@ let is_keyword = function
   | name -> is_word_operator name
 ;;
 
-let is_identifier_start = function
-  | 'a' .. 'z' | '_' -> true
-  | _ -> false
-;;
+module Syntax = struct
+  let is_identifier_start = function
+    | 'a' .. 'z' | '_' -> true
+    | _ -> false
+  ;;
 
-let is_identifier_char = function
-  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '\'' -> true
-  | _ -> false
-;;
+  let is_identifier_char = function
+    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '\'' -> true
+    | _ -> false
+  ;;
+
+  let is_symbol_char = function
+    | '!'
+    | '$'
+    | '%'
+    | '&'
+    | '*'
+    | '+'
+    | '-'
+    | '.'
+    | '/'
+    | ':'
+    | '<'
+    | '='
+    | '>'
+    | '?'
+    | '@'
+    | '^'
+    | '|'
+    | '~' -> true
+    | _ -> false
+  ;;
+
+  let is_symbol_char_or_hash char = is_symbol_char char || char = '#'
+end
+
+open Syntax
 
 let of_identifier name =
   if
@@ -33,30 +61,6 @@ let of_identifier name =
   then Ok name
   else Error (Invalid_identifier name)
 ;;
-
-let is_symbol_char = function
-  | '!'
-  | '$'
-  | '%'
-  | '&'
-  | '*'
-  | '+'
-  | '-'
-  | '.'
-  | '/'
-  | ':'
-  | '<'
-  | '='
-  | '>'
-  | '?'
-  | '@'
-  | '^'
-  | '|'
-  | '~' -> true
-  | _ -> false
-;;
-
-let is_symbol_char_or_hash char = is_symbol_char char || char = '#'
 
 let is_symbol_operator name =
   match name with

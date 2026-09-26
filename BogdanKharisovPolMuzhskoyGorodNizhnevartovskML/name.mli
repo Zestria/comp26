@@ -15,3 +15,12 @@ val of_operator : string -> (t, error) result
 
 val to_string : t -> string
 val error_to_string : error -> string
+
+(** Character classes shared by validation and tokenization.
+    Membership alone does not make a complete name valid. *)
+module Syntax : sig
+  val is_identifier_start : char -> bool
+  val is_identifier_char : char -> bool
+  val is_symbol_char : char -> bool
+  val is_symbol_char_or_hash : char -> bool
+end

@@ -1,7 +1,8 @@
 (library
  (name frontend)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (modules name integer_literal ast))
+ (modules name integer_literal ast parser)
+ (libraries angstrom))
 
 (executable
  (name compiler)
