@@ -5,6 +5,7 @@ open Ast
 type state =
   { lexer : Lexer.t
   ; current : Token.located
+  ; lookahead : Token.located option
   }
 
 type 'a parser = state -> ('a * state) Error_monad.t
@@ -28,15 +29,27 @@ let return value state = Ok (value, state)
 let make_state lexer =
   match Lexer.next_token lexer with
   | Error error -> Error error
-  | Ok current -> Ok { lexer; current }
+  | Ok current -> Ok { lexer; current; lookahead = None }
 ;;
 
 let peek state = return state.current state
 
 let advance state =
-  match Lexer.next_token state.lexer with
-  | Error error -> Error error
-  | Ok current -> Ok ((), { state with current })
+  match state.lookahead with
+  | Some current -> Ok ((), { state with current; lookahead = None })
+  | None ->
+    (match Lexer.next_token state.lexer with
+     | Error error -> Error error
+     | Ok current -> Ok ((), { state with current }))
+;;
+
+let peek_next state =
+  match state.lookahead with
+  | Some next -> Ok (next, state)
+  | None ->
+    (match Lexer.next_token state.lexer with
+     | Error error -> Error error
+     | Ok next -> Ok (next, { state with lookahead = Some next }))
 ;;
 
 let unexpected state =
@@ -278,6 +291,29 @@ and atom state =
       | RPAREN ->
         let+ () = advance in
         Constant Unit
+      | EQUAL
+      | NOT_EQUAL
+      | LESS
+      | LESS_EQUAL
+      | GREATER
+      | GREATER_EQUAL
+      | PLUS
+      | MINUS
+      | STAR
+      | SLASH
+      | AND_AND
+      | OR_OR ->
+        let operator = to_lexeme inner.token in
+        let* next = peek_next in
+        if next.token = RPAREN
+        then (
+          let* () = advance in
+          let+ () = expect RPAREN in
+          Variable operator)
+        else (
+          let* body = expr in
+          let+ () = expect RPAREN in
+          body)
       | _ ->
         let* body = expr in
         let+ () = expect RPAREN in

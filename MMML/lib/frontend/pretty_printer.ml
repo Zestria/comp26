@@ -49,7 +49,10 @@ let is_operator_name name =
 
 let pp_identifier formatter name =
   if is_operator_name name
-  then Format.fprintf formatter "(%s)" name
+  then
+    if String.equal name "*"
+    then Format.fprintf formatter "( * )"
+    else Format.fprintf formatter "(%s)" name
   else Format.pp_print_string formatter name
 ;;
 
