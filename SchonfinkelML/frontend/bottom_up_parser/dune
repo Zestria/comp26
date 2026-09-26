@@ -6,4 +6,4 @@
 
 (menhir
  (modules parser_gen)
- (flags --explain --external-tokens Frontend.Common))
+ (flags --external-tokens Frontend.Common))
