@@ -1,6 +1,6 @@
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-open Frontend
+open BDSMl_frontend
 open Ast
 open LL_parser.Parser
 
@@ -144,7 +144,9 @@ let regression_tests () =
   (match Parse.parse "fun _ -> ()" with
    | Ok [ StrEval (Abs (PUnderscore, Unit)) ] -> ()
    | _ -> failwith "Parse.parse compatibility entry point failed");
-  match LR_parser.Parser.expression LR_parser.Lexer.token (Lexing.from_string "1 + 2") with
+  match
+    LR_parser.Parser.expression LR_parser.Lexer.token (Lexing.from_string "1 + 2")
+  with
   | BinOp (Plus, Int 1, Int 2) -> ()
   | _ -> failwith "LR_parser.Parser.expression entry point failed"
 ;;

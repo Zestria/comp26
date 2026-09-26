@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open BDSMl_frontend
 open LL_parser.Parser
 open Printer
 

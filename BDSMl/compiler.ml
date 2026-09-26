@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open BDSMl_frontend
 
 type parser_kind =
   | LL

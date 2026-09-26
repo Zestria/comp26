@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open BDSMl_frontend
 open LL_parser.Lexer
 open Tokens
 
@@ -153,11 +153,23 @@ let error_position_tests =
 
 let comment_tests =
   [ case ~name:"empty comment" "(* *)" "Ok [TEOF]"
-  ; case ~name:"between tokens" "a(* ignored *)b" "Ok [TIdent(\"a\"); TIdent(\"b\"); TEOF]"
+  ; case
+      ~name:"between tokens"
+      "a(* ignored *)b"
+      "Ok [TIdent(\"a\"); TIdent(\"b\"); TEOF]"
   ; case ~name:"nested comment" "(* outer (* inner *) rest *)42" "Ok [TInt(42); TEOF]"
-  ; case ~name:"comment with line breaks" "(*\r\ninside\r*)\n@" "Error: 4:1: unexpected character '@'"
-  ; case ~name:"unterminated comment" "  (* outer (* inner *)" "Error: 1:3: unterminated comment"
-  ; case ~name:"unterminated after newline" "x\n(* never closed" "Error: 2:1: unterminated comment"
+  ; case
+      ~name:"comment with line breaks"
+      "(*\r\ninside\r*)\n@"
+      "Error: 4:1: unexpected character '@'"
+  ; case
+      ~name:"unterminated comment"
+      "  (* outer (* inner *)"
+      "Error: 1:3: unterminated comment"
+  ; case
+      ~name:"unterminated after newline"
+      "x\n(* never closed"
+      "Error: 2:1: unterminated comment"
   ]
 ;;
 
@@ -168,7 +180,10 @@ let lazy_lr_tests =
       | Seq.Cons (Ok (TInt 1), rest) ->
         (match rest () with
          | Seq.Cons (Error (`lexer_error message), after_error) ->
-           Alcotest.(check string) "error position" "1:3: unexpected character '@'" message;
+           Alcotest.(check string)
+             "error position"
+             "1:3: unexpected character '@'"
+             message;
            (match after_error () with
             | Seq.Nil -> ()
             | _ -> failwith "lazy lexer continued after an error")

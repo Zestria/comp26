@@ -1,4 +1,4 @@
-open Frontend
+open BDSMl_frontend
 
 type dataset =
   { name : string

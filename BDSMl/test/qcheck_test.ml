@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend.Ast
+open BDSMl_frontend.Ast
 open QCheck.Gen
 
 let gen_var_name =
@@ -115,11 +115,7 @@ let rec source_of_expr = function
       (source_of_expr left)
       (binop_text op)
       (source_of_expr right)
-  | UnOp (op, body) ->
-    Printf.sprintf
-      "(%s %s)"
-      (unop_text op)
-      (source_of_expr body)
+  | UnOp (op, body) -> Printf.sprintf "(%s %s)" (unop_text op) (source_of_expr body)
   | If (condition, yes, no) ->
     Printf.sprintf
       "(if %s then %s else %s)"
@@ -130,19 +126,19 @@ let rec source_of_expr = function
     Printf.sprintf
       "(let %s%s = %s in %s)"
       (if flag = Rec then "rec " else "")
-      (Frontend.Printer.print_pattern pattern)
+      (BDSMl_frontend.Printer.print_pattern pattern)
       (source_of_expr value)
       (source_of_expr body)
   | Abs (pattern, body) ->
     Printf.sprintf
       "(fun %s -> %s)"
-      (Frontend.Printer.print_pattern pattern)
+      (BDSMl_frontend.Printer.print_pattern pattern)
       (source_of_expr body)
   | App (fn, arg) -> Printf.sprintf "(%s %s)" (source_of_expr fn) (source_of_expr arg)
 ;;
 
-let parse_ll = Frontend.LL_parser.Parser.parse_string_LL
-let parse_lr = Frontend.Parse.parse
+let parse_ll = BDSMl_frontend.LL_parser.Parser.parse_string_LL
+let parse_lr = BDSMl_frontend.Parse.parse
 
 let expr_matches source expected =
   let program = Ok [ StrEval expected ] in
@@ -167,11 +163,8 @@ let arb_three_ints =
 ;;
 
 let print_parse_roundtrip =
-  QCheck.Test.make
-    ~count:1000
-    ~name:"AST -> source -> LL/LR AST"
-    arb_expr
-    (fun expr -> expr_matches (source_of_expr expr ^ ";;") expr)
+  QCheck.Test.make ~count:1000 ~name:"AST -> source -> LL/LR AST" arb_expr (fun expr ->
+    expr_matches (source_of_expr expr ^ ";;") expr)
 ;;
 
 let parse_int_literal =
@@ -208,24 +201,34 @@ let parse_app_associativity =
       ~print:(fun (fn, x, y) -> Printf.sprintf "%s %s %s" fn x y)
       (triple gen_var_name gen_var_name gen_var_name)
   in
-  QCheck.Test.make ~count:300 ~name:"parse application associativity" arb (fun (fn, x, y) ->
-    expr_matches
-      (Printf.sprintf "%s %s %s" fn x y)
-      (App (App (Var fn, Var x), Var y)))
+  QCheck.Test.make
+    ~count:300
+    ~name:"parse application associativity"
+    arb
+    (fun (fn, x, y) ->
+       expr_matches (Printf.sprintf "%s %s %s" fn x y) (App (App (Var fn, Var x), Var y)))
 ;;
 
 let parse_binop_precedence_add_mult =
-  QCheck.Test.make ~count:300 ~name:"parse precedence + vs *" arb_three_ints (fun (a, b, c) ->
-    expr_matches
-      (Printf.sprintf "%d + %d * %d" a b c)
-      (BinOp (Plus, Int a, BinOp (Mult, Int b, Int c))))
+  QCheck.Test.make
+    ~count:300
+    ~name:"parse precedence + vs *"
+    arb_three_ints
+    (fun (a, b, c) ->
+       expr_matches
+         (Printf.sprintf "%d + %d * %d" a b c)
+         (BinOp (Plus, Int a, BinOp (Mult, Int b, Int c))))
 ;;
 
 let parse_binop_precedence_mult_add =
-  QCheck.Test.make ~count:300 ~name:"parse precedence * vs +" arb_three_ints (fun (a, b, c) ->
-    expr_matches
-      (Printf.sprintf "%d * %d + %d" a b c)
-      (BinOp (Plus, BinOp (Mult, Int a, Int b), Int c)))
+  QCheck.Test.make
+    ~count:300
+    ~name:"parse precedence * vs +"
+    arb_three_ints
+    (fun (a, b, c) ->
+       expr_matches
+         (Printf.sprintf "%d * %d + %d" a b c)
+         (BinOp (Plus, BinOp (Mult, Int a, Int b), Int c)))
 ;;
 
 let parse_if_then_else =
