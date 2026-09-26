@@ -1,0 +1,9 @@
+(library
+ (name bottom_up)
+ (modules parser parser_gen)
+ (libraries frontend)
+ (package SchonfinkelML))
+
+(menhir
+ (modules parser_gen)
+ (flags --external-tokens Frontend.Common))
