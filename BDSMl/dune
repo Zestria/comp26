@@ -7,6 +7,6 @@
  (package BDSMl)
  (name compiler)
  (modules compiler)
- (libraries LL BDSMl.frontend)
+ (libraries BDSMl BDSMl.frontend)
  (instrumentation
   (backend bisect_ppx_ng)))

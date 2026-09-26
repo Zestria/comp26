@@ -71,6 +71,7 @@
   benchmark
   base
   (ppx_expect :with-test)
+  (alcotest :with-test)
   (angstrom
    (= "0.16.0"))
   qcheck
