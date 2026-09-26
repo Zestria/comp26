@@ -31,7 +31,7 @@
   - shrexer06
 
 - BDSMl:
-    - bogban893
+    - bogbanrvd-gmail-com
     - shamashaehmitov
     - garry2311
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
