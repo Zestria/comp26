@@ -1,9 +1,13 @@
 (executable
+ (public_name SchonfinkelML.bench)
+ (package SchonfinkelML)
  (name bench)
  (modules bench)
  (libraries benchmark top_down bottom_up frontend))
 
 (executable
+ (public_name SchonfinkelML.gen_benchmarks)
+ (package SchonfinkelML)
  (name gen_benchmarks)
  (modules gen_benchmarks)
  (libraries ast_gen frontend))
