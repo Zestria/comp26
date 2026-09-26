@@ -38,7 +38,7 @@ cd "$WORKSPACE"
 
 case "$CMD" in
     pin)
-        opam pin add "$COMPILER_NAME" . --no-action --yes
+        opam pin add -y "$COMPILER_NAME" "./$COMPILER_NAME"
         ;;
     deps)
         opam install "$COMPILER_NAME" --deps-only --with-test --with-doc --yes
