@@ -22,7 +22,7 @@ let preview input =
 ;;
 
 let repeat count text = String.concat "" (List.init count (fun _ -> text))
-let variable text = Var (Result.get_ok (Name.of_identifier text))
+let variable text = Var (Test_support.identifier text)
 let indexed index = variable ("x" ^ string_of_int index)
 let binary operator left right = Apply (Var operator, left, [ right ])
 
@@ -37,7 +37,7 @@ let application () =
 ;;
 
 let chain operator associativity () =
-  let name = Result.get_ok (Name.of_operator operator) in
+  let name = Test_support.operator operator in
   let indices = List.init 10_000 Fun.id in
   let expected =
     match associativity with
@@ -69,7 +69,7 @@ let long_comment () = "(*" ^ String.make 1_000_000 ' ' ^ "*)x", variable "x"
 let long_quoted_comment body () =
   let delimiter = String.make 40_000 'a' in
   ( "(* {" ^ delimiter ^ "|" ^ String.make 40_000 body ^ "|" ^ delimiter ^ "} *) 1"
-  , Constant (Int (Result.get_ok (Integer_literal.of_string "1"))) )
+  , Constant (Int (Test_support.integer_literal "1")) )
 ;;
 
 let constructors () =
@@ -89,8 +89,8 @@ let constructors () =
 let program () =
   let binding =
     { recursion = Nonrecursive
-    ; pattern = PVar (Result.get_ok (Name.of_identifier "x"))
-    ; expression = Constant (Int (Result.get_ok (Integer_literal.of_string "1")))
+    ; pattern = PVar (Test_support.identifier "x")
+    ; expression = Constant (Int (Test_support.integer_literal "1"))
     }
   in
   ( repeat 2_000 "let x = 1 in x;;"
@@ -113,8 +113,8 @@ let unfinished suffix fixture () =
 ;;
 
 module Make (Parser : sig
-    include module type of Frontend.Parser
-
+    val parse_expression : string -> (Ast.expression, string) result
+    val parse_program : string -> (Ast.program, string) result
     val name : string
   end) =
 struct

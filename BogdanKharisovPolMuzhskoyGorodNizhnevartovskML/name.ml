@@ -76,26 +76,6 @@ let of_identifier name =
   else Error (Invalid_identifier name)
 ;;
 
-let is_symbol_operator name =
-  match name with
-  | "" | "->" | "<-" | "|" -> false
-  | ":=" -> true
-  | _ ->
-    (match name.[0] with
-     | '!' -> String.for_all is_symbol_char_or_hash name
-     | '~' | '?' | '#' ->
-       String.length name > 1 && String.for_all is_symbol_char_or_hash name
-     | '=' | '<' | '>' | '|' | '&' | '$' | '@' | '^' | '+' | '-' | '*' | '/' | '%' ->
-       String.for_all is_symbol_char name
-     | _ -> false)
-;;
-
-let of_operator name =
-  if is_word_operator name || is_symbol_operator name
-  then Ok name
-  else Error (Invalid_operator name)
-;;
-
 let operator_kind name =
   match name with
   | "&" | "&&" -> Some Conjunction
@@ -113,6 +93,24 @@ let operator_kind name =
      | '*' when String.starts_with ~prefix:"**" name -> Some Power
      | '*' | '/' | '%' -> Some Multiplicative
      | _ -> None)
+;;
+
+let is_symbol_operator name =
+  match name with
+  | "" | "->" | "<-" | "|" -> false
+  | _ ->
+    (match operator_kind name with
+     | Some Prefix | Some Hash ->
+       (name = "!" || String.length name > 1)
+       && String.for_all is_symbol_char_or_hash name
+     | Some _ -> String.for_all is_symbol_char name
+     | None -> false)
+;;
+
+let of_operator name =
+  if is_word_operator name || is_symbol_operator name
+  then Ok name
+  else Error (Invalid_operator name)
 ;;
 
 let to_string name = name

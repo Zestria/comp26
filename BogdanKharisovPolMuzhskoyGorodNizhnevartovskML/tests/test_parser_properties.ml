@@ -10,24 +10,14 @@ open Frontend
 open Ast
 
 module Make (Parser : sig
-    include module type of Frontend.Parser
-
+    val parse_expression : string -> (Ast.expression, string) result
+    val parse_program : string -> (Ast.program, string) result
     val name : string
   end) =
 struct
   let test ~name = QCheck.Test.make ~name:(Parser.name ^ ": " ^ name)
-
-  let name text =
-    match Name.of_identifier text with
-    | Ok name -> name
-    | Error error -> failwith (Name.error_to_string error)
-  ;;
-
-  let integer text =
-    match Integer_literal.of_string text with
-    | Ok literal -> Constant (Int literal)
-    | Error error -> failwith (Integer_literal.error_to_string error)
-  ;;
+  let name = Test_support.identifier
+  let integer text = Constant (Int (Test_support.integer_literal text))
 
   let name_source name =
     let text = Name.to_string name in
@@ -191,7 +181,7 @@ struct
       (Parser.name ^ ": validated operator names parse as parenthesized values")
       operator_names
       (fun text ->
-         let expected = Result.get_ok (Name.of_operator text) in
+         let expected = Test_support.operator text in
          match Parser.parse_expression ("( " ^ text ^ " )") with
          | Ok (Var actual) when actual = expected -> true
          | Ok actual ->
@@ -223,9 +213,7 @@ struct
            (fun (right, rp, _) ->
               let input = "a " ^ left ^ " b " ^ right ^ " c" in
               test ~name:("precedence: " ^ input) ~count:1 QCheck.unit (fun () ->
-                let apply op a b =
-                  Apply (Var (Result.get_ok (Name.of_operator op)), a, [ b ])
-                in
+                let apply op a b = Apply (Var (Test_support.operator op), a, [ b ]) in
                 let a, b, c = Var (name "a"), Var (name "b"), Var (name "c") in
                 let expected =
                   if lp < rp || (lp = rp && assoc = `Right)
@@ -356,4 +344,13 @@ module Menhir = Make (struct
     let name = "Menhir"
   end)
 
-let () = QCheck_runner.run_tests_main (Angstrom.tests @ Menhir.tests)
+module Extended = Make (struct
+    let parse_expression = Frontend.Parser.parse_expression
+    let parse_program = Frontend.Parser.parse_program_with_operators
+    let name = "Angstrom with operator extension"
+  end)
+
+let () =
+  QCheck_runner.run_tests_main
+    ((Extended.program_roundtrip :: Angstrom.tests) @ Menhir.tests)
+;;

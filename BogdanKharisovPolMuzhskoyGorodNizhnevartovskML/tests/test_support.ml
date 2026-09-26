@@ -8,6 +8,25 @@
 
 let print_string = Printf.sprintf "%S"
 
+let require_valid create print_error input =
+  match create input with
+  | Ok value -> value
+  | Error error ->
+    QCheck.Test.fail_reportf
+      "Expected valid test input %S; got %s"
+      input
+      (print_error error)
+;;
+
+let identifier = require_valid Frontend.Name.of_identifier Frontend.Name.error_to_string
+let operator = require_valid Frontend.Name.of_operator Frontend.Name.error_to_string
+
+let integer_literal =
+  require_valid
+    Frontend.Integer_literal.of_string
+    Frontend.Integer_literal.error_to_string
+;;
+
 let equal ~print ~expected actual =
   if actual = expected
   then true

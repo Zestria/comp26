@@ -40,7 +40,7 @@ let properties =
       "double negation preserves literal spelling"
       (strings "0123456789_")
       (fun suffix ->
-         let literal = Result.get_ok (Integer_literal.of_string ("-1" ^ suffix)) in
+         let literal = Test_support.integer_literal ("-1" ^ suffix) in
          equal
            ~print:Integer_literal.to_string
            ~expected:literal

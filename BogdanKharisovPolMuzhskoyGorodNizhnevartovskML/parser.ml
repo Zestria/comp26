@@ -167,13 +167,6 @@ module Lexeme = struct
     of_result Name.error_to_string (Name.of_operator text)
   ;;
 
-  let operator_of_kind expected =
-    let* name = operator in
-    if Name.operator_kind name = Some expected
-    then return name
-    else fail "Expected operator"
-  ;;
-
   let integer =
     let* text = word in
     of_result Integer_literal.error_to_string (Integer_literal.of_string text)
@@ -233,28 +226,133 @@ let binding expression =
   return { recursion; pattern; expression = function_body parameters body }
 ;;
 
-let chain_left_with combine operand operator =
-  let rec rest left =
-    (let* name = operator in
-     let* right = operand in
-     rest (combine name left right))
-    <|> return left
+module Operators = struct
+  let max_precedence = 9
+  let hash_precedence = max_precedence + 1
+
+  type associativity =
+    | Left
+    | Right
+
+  type fixity =
+    | Prefix of int
+    | Infix of int * associativity
+
+  module Table = Map.Make (struct
+      type t = Name.t
+
+      let compare a b = String.compare (Name.to_string a) (Name.to_string b)
+    end)
+
+  let default name =
+    match Name.operator_kind name with
+    | Some Prefix -> Some (Prefix 1)
+    | Some Hash -> Some (Infix (hash_precedence, Left))
+    | Some Power -> Some (Infix (8, Right))
+    | Some Multiplicative -> Some (Infix (7, Left))
+    | Some Additive -> Some (Infix (6, Left))
+    | Some Concatenation -> Some (Infix (5, Right))
+    | Some Comparison -> Some (Infix (4, Left))
+    | Some Conjunction -> Some (Infix (3, Right))
+    | Some Disjunction -> Some (Infix (2, Right))
+    | Some Assignment -> Some (Infix (0, Right))
+    | None -> None
+  ;;
+
+  let find table name =
+    match Table.find_opt name table with
+    | Some fixity -> Some fixity
+    | None -> default name
+  ;;
+
+  let infix table precedence =
+    let* name = Lexeme.operator in
+    match find table name with
+    | Some (Infix (actual, associativity)) when actual = precedence ->
+      return (name, associativity)
+    | _ -> fail "Expected infix operator"
+  ;;
+
+  let prefix table =
+    let* name = Lexeme.operator in
+    match find table name with
+    | Some (Prefix arity) -> return (name, arity)
+    | _ -> fail "Expected prefix operator"
+  ;;
+
+  let unary_minus table =
+    let* name = Lexeme.operator in
+    match Name.to_string name, find table name with
+    | "-", Some (Infix _) -> return ()
+    | _ -> fail "Expected unary minus"
+  ;;
+
+  let declaration_start =
+    option
+      None
+      (Lexeme.exact_word "infixl" *> return (Some (`Infix Left))
+       <|> Lexeme.exact_word "infixr" *> return (Some (`Infix Right))
+       <|> Lexeme.exact_word "prefix" *> return (Some `Prefix))
+  ;;
+
+  let declaration kind =
+    let* literal = Lexeme.integer in
+    let* number =
+      match int_of_string_opt (Integer_literal.to_string literal) with
+      | Some number -> return number
+      | None -> fail "Operator declaration number is out of range"
+    in
+    let* fixity =
+      match kind with
+      | `Prefix when number >= 1 -> return (Prefix number)
+      | `Prefix -> fail "Prefix arity must be positive"
+      | `Infix associativity when number >= 0 && number <= max_precedence ->
+        return (Infix (number, associativity))
+      | `Infix _ ->
+        fail (Printf.sprintf "Infix precedence must be between 0 and %d" max_precedence)
+    in
+    let* name = Lexeme.punctuation "(" *> Lexeme.operator <* Lexeme.punctuation ")" in
+    Lexeme.punctuation ";;" *> return (name, fixity)
+  ;;
+end
+
+let chain combine operand operator =
+  let* first = operand in
+  let* rest =
+    many
+      (let* name, associativity = operator in
+       let* right = operand in
+       return (name, associativity, right))
   in
-  operand >>= rest
+  match rest with
+  | [] -> return first
+  | (_, associativity, _) :: _ ->
+    if List.exists (fun (_, next, _) -> next <> associativity) rest
+    then
+      fail "Operators with the same precedence need matching associativity or parentheses"
+    else (
+      match associativity with
+      | Operators.Left ->
+        return
+          (List.fold_left
+             (fun left (name, _, right) -> combine name left right)
+             first
+             rest)
+      | Operators.Right ->
+        let last, reversed =
+          List.fold_left
+            (fun (left, reversed) (name, _, right) -> right, (name, left) :: reversed)
+            (first, [])
+            rest
+        in
+        return
+          (List.fold_left
+             (fun right (name, left) -> combine name left right)
+             last
+             reversed))
 ;;
 
-let chain_left = chain_left_with Ast_helper.binary
-
-let chain_right operand operator =
-  fix (fun expression ->
-    let* left = operand in
-    (let* name = operator in
-     let* right = expression in
-     return (Ast_helper.binary name left right))
-    <|> return left)
-;;
-
-let expression =
+let make_expression operators =
   fix (fun expression ->
     let local_let =
       let* binding = binding expression in
@@ -304,17 +402,25 @@ let expression =
     in
     let prefix =
       fix (fun prefix ->
-        (let* name = Lexeme.operator_of_kind Name.Prefix in
-         let* argument = prefix in
-         return (`Expression (Apply (Var name, to_expression argument, []))))
+        (let* name, arity = Operators.prefix operators in
+         let* first = prefix in
+         let rec arguments remaining accumulated =
+           if remaining = 0
+           then return (List.rev accumulated)
+           else
+             let* argument = prefix in
+             arguments (remaining - 1) (to_expression argument :: accumulated)
+         in
+         let* rest = arguments (arity - 1) [] in
+         return (`Expression (Apply (Var name, to_expression first, rest))))
         <|> atom)
     in
     let hash =
-      chain_left_with
+      chain
         (fun name left right ->
            `Expression (Ast_helper.binary name (to_expression left) (to_expression right)))
         prefix
-        (Lexeme.operator_of_kind Name.Hash)
+        (Operators.infix operators Operators.hash_precedence)
     in
     let application =
       let* function_ = hash in
@@ -332,26 +438,26 @@ let expression =
     in
     let unary =
       fix (fun unary ->
-        Lexeme.exact_symbol "-" *> unary
+        Operators.unary_minus operators *> unary
         >>| Ast_helper.negate
         <|> open_expression
         <|> application)
     in
-    let power = chain_right unary (Lexeme.operator_of_kind Name.Power) in
-    let product = chain_left power (Lexeme.operator_of_kind Name.Multiplicative) in
-    let sum = chain_left product (Lexeme.operator_of_kind Name.Additive) in
-    let concatenation = chain_right sum (Lexeme.operator_of_kind Name.Concatenation) in
-    let comparison = chain_left concatenation (Lexeme.operator_of_kind Name.Comparison) in
-    let conjunction = chain_right comparison (Lexeme.operator_of_kind Name.Conjunction) in
-    let disjunction =
-      chain_right conjunction (Lexeme.operator_of_kind Name.Disjunction)
+    let rec infix precedence =
+      if precedence > Operators.max_precedence
+      then unary
+      else
+        chain
+          Ast_helper.binary
+          (infix (precedence + 1))
+          (Operators.infix operators precedence)
     in
-    let tuple_ = tuple (fun a b rest -> Tuple (a, b, rest)) disjunction in
-    chain_right tuple_ (Lexeme.operator_of_kind Name.Assignment))
+    let tuple_ = tuple (fun a b rest -> Tuple (a, b, rest)) (infix 1) in
+    chain Ast_helper.binary tuple_ (Operators.infix operators 0))
 ;;
 
-let program =
-  let next_item allow_evaluation =
+let program ~operator_extension =
+  let next_item expression allow_evaluation =
     let definition_or_local =
       let* binding = binding expression in
       let local =
@@ -371,21 +477,31 @@ let program =
     Lexeme.punctuation ";;" *> return None
     <|> (definition_or_local <|> evaluation >>| Option.some)
   in
-  let rec items allow_evaluation accumulated =
+  let rec items operators expression allow_evaluation accumulated =
     Lexeme.spaces
     *>
     let* next = peek_char in
     match next with
     | None -> return (List.rev accumulated)
     | Some _ ->
-      let* item = next_item allow_evaluation in
-      (match item with
-       | None -> items true accumulated
-       | Some item -> items false (item :: accumulated))
+      let* declaration =
+        if operator_extension then Operators.declaration_start else return None
+      in
+      (match declaration with
+       | Some kind ->
+         let* name, fixity = Operators.declaration kind in
+         let operators = Operators.Table.add name fixity operators in
+         items operators (make_expression operators) true accumulated
+       | None ->
+         let* item = next_item expression allow_evaluation in
+         (match item with
+          | None -> items operators expression true accumulated
+          | Some item -> items operators expression false (item :: accumulated)))
   in
-  items true []
+  items Operators.Table.empty (make_expression Operators.Table.empty) true []
 ;;
 
 let parse parser source = parse_string ~consume:All (parser <* Lexeme.spaces) source
-let parse_expression = parse expression
-let parse_program = parse program
+let parse_expression = parse (make_expression Operators.Table.empty)
+let parse_program = parse (program ~operator_extension:false)
+let parse_program_with_operators = parse (program ~operator_extension:true)

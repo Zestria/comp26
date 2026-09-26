@@ -9,71 +9,27 @@
 open Frontend
 open Ast
 
-module Make (Parser : module type of Frontend.Parser) = struct
-  let list show items = "[" ^ String.concat "; " (List.map show items) ^ "]"
-
-  let rec pattern = function
-    | PVar name -> Printf.sprintf "PVar %S" (Name.to_string name)
-    | PWildcard -> "_"
-    | PUnit -> "()"
-    | PTuple (a, b, rest) -> "PTuple " ^ list pattern (a :: b :: rest)
-  ;;
-
-  let rec expression = function
-    | Constant (Int literal) ->
-      Printf.sprintf "Int %S" (Integer_literal.to_string literal)
-    | Constant (Bool value) -> string_of_bool value
-    | Constant Unit -> "()"
-    | Var name -> Printf.sprintf "Var %S" (Name.to_string name)
-    | Tuple (a, b, rest) -> "Tuple " ^ list expression (a :: b :: rest)
-    | Apply (f, a, rest) ->
-      "Apply (" ^ expression f ^ ", " ^ list expression (a :: rest) ^ ")"
-    | Fun { parameter; parameters; body } ->
-      "Fun (" ^ list pattern (parameter :: parameters) ^ ", " ^ expression body ^ ")"
-    | Let (definition, body) ->
-      "Let (" ^ binding definition ^ ", " ^ expression body ^ ")"
-    | If (condition, yes, no) ->
-      "If ("
-      ^ expression condition
-      ^ ", "
-      ^ expression yes
-      ^ ", "
-      ^ (match no with
-         | None -> "None"
-         | Some e -> "Some (" ^ expression e ^ ")")
-      ^ ")"
-
-  and binding { recursion; pattern = p; expression = e } =
-    (match recursion with
-     | Nonrecursive -> ""
-     | Recursive -> "rec ")
-    ^ pattern p
-    ^ " = "
-    ^ expression e
-  ;;
-
+module Make (Parser : sig
+    val parse_expression : string -> (Ast.expression, string) result
+    val parse_program : string -> (Ast.program, string) result
+  end) =
+struct
   let print_expression source =
     match Parser.parse_expression source with
-    | Ok result -> print_endline (expression result)
+    | Ok result -> Format.printf "%a@." Ast_print.expression result
     | Error error -> Printf.printf "Error: %s\n" error
   ;;
 
   let print_program source =
     match Parser.parse_program source with
+    | Ok items -> Format.printf "%a@." Ast_print.program items
     | Error error -> Printf.printf "Error: %s\n" error
-    | Ok items ->
-      print_endline
-        (list
-           (function
-             | Definition b -> "Definition (" ^ binding b ^ ")"
-             | Evaluation e -> "Evaluation (" ^ expression e ^ ")")
-           items)
   ;;
 
   let reject parse source =
     match parse source with
     | Error _ -> print_endline "Rejected"
-    | Ok _ -> failwith ("Unexpectedly accepted: " ^ source)
+    | Ok _ -> Printf.printf "Unexpectedly accepted: %S\n" source
   ;;
 
   module Expressions = struct
@@ -695,48 +651,75 @@ module Make (Parser : module type of Frontend.Parser) = struct
   end
 
   module Cps = struct
-    let name text = Result.get_ok (Name.of_identifier text)
-    let variable text = Var (name text)
-    let integer text = Constant (Int (Result.get_ok (Integer_literal.of_string text)))
-    let call f argument rest = Apply (f, argument, rest)
-    let operator text a b = call (Var (Result.get_ok (Name.of_operator text))) a [ b ]
+    let ( let* ) = Result.bind
+    let name text = Result.map_error Name.error_to_string (Name.of_identifier text)
 
-    let lambda parameter body =
-      Fun { parameter = PVar (name parameter); parameters = []; body }
+    let integer text =
+      let* literal =
+        Result.map_error Integer_literal.error_to_string (Integer_literal.of_string text)
+      in
+      Ok (Constant (Int literal))
     ;;
 
-    let definition function_name body =
+    let call f argument rest = Apply (f, argument, rest)
+
+    let operator text =
+      let* name = Result.map_error Name.error_to_string (Name.of_operator text) in
+      Ok (fun a b -> call (Var name) a [ b ])
+    ;;
+
+    let lambda parameter body = Fun { parameter = PVar parameter; parameters = []; body }
+
+    let definition function_name parameter continuation body =
       Definition
         { recursion = Recursive
-        ; pattern = PVar (name function_name)
+        ; pattern = PVar function_name
         ; expression =
-            Fun { parameter = PVar (name "n"); parameters = [ PVar (name "k") ]; body }
+            Fun { parameter = PVar parameter; parameters = [ PVar continuation ]; body }
         }
     ;;
 
-    let check source expected =
-      match Parser.parse_program source with
-      | Ok actual when actual = expected -> print_endline "Matches expected AST"
-      | _ ->
-        print_program source;
-        failwith "CPS program did not produce the expected AST"
+    let check source = function
+      | Error error -> Printf.printf "Invalid expected AST for %S: %s\n" source error
+      | Ok expected ->
+        (match Parser.parse_program source with
+         | Ok actual when actual = expected -> print_endline "Matches expected AST"
+         | Ok actual ->
+           Format.printf
+             "Input: %S@.Expected: %a@.Actual: %a@."
+             source
+             Ast_print.program
+             expected
+             Ast_print.program
+             actual
+         | Error error -> Printf.printf "Unexpected parse error for %S: %s\n" source error)
     ;;
 
     let%expect_test "factorial" =
-      let n = variable "n" in
-      let k = variable "k" in
       let expected =
-        [ definition
-            "fact"
-            (If
-               ( operator "=" n (integer "0")
-               , call k (integer "1") []
-               , Some
-                   (call
-                      (variable "fact")
-                      (operator "-" n (integer "1"))
-                      [ lambda "r" (call k (operator "*" n (variable "r")) []) ]) ))
-        ]
+        let* fact = name "fact" in
+        let* n = name "n" in
+        let* k = name "k" in
+        let* r = name "r" in
+        let* zero = integer "0" in
+        let* one = integer "1" in
+        let* equal = operator "=" in
+        let* subtract = operator "-" in
+        let* multiply = operator "*" in
+        Ok
+          [ definition
+              fact
+              n
+              k
+              (If
+                 ( equal (Var n) zero
+                 , call (Var k) one []
+                 , Some
+                     (call
+                        (Var fact)
+                        (subtract (Var n) one)
+                        [ lambda r (call (Var k) (multiply (Var n) (Var r)) []) ]) ))
+          ]
       in
       check
         {|let rec fact n k =
@@ -747,29 +730,37 @@ module Make (Parser : module type of Frontend.Parser) = struct
     ;;
 
     let%expect_test "fibonacci" =
-      let n = variable "n" in
-      let k = variable "k" in
       let expected =
-        [ definition
-            "fib"
-            (If
-               ( operator "<=" n (integer "1")
-               , call k n []
-               , Some
-                   (call
-                      (variable "fib")
-                      (operator "-" n (integer "1"))
-                      [ lambda
-                          "a"
-                          (call
-                             (variable "fib")
-                             (operator "-" n (integer "2"))
-                             [ lambda
-                                 "b"
-                                 (call k (operator "+" (variable "a") (variable "b")) [])
-                             ])
-                      ]) ))
-        ]
+        let* fib = name "fib" in
+        let* n = name "n" in
+        let* k = name "k" in
+        let* a = name "a" in
+        let* b = name "b" in
+        let* one = integer "1" in
+        let* two = integer "2" in
+        let* less_equal = operator "<=" in
+        let* subtract = operator "-" in
+        let* add = operator "+" in
+        Ok
+          [ definition
+              fib
+              n
+              k
+              (If
+                 ( less_equal (Var n) one
+                 , call (Var k) (Var n) []
+                 , Some
+                     (call
+                        (Var fib)
+                        (subtract (Var n) one)
+                        [ lambda
+                            a
+                            (call
+                               (Var fib)
+                               (subtract (Var n) two)
+                               [ lambda b (call (Var k) (add (Var a) (Var b)) []) ])
+                        ]) ))
+          ]
       in
       check
         {|let rec fib n k =

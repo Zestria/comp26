@@ -10,3 +10,6 @@
 val parse_expression : string -> (Ast.expression, string) result
 
 val parse_program : string -> (Ast.program, string) result
+
+(** Top-level [infixl], [infixr] and [prefix] declarations affect subsequent input. *)
+val parse_program_with_operators : string -> (Ast.program, string) result

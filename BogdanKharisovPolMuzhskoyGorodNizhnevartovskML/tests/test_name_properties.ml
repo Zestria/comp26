@@ -73,7 +73,7 @@ let custom_operator_kind =
     ~count:2000
     (QCheck.make ~print:(fun (text, _) -> print_string text) generator)
     (fun (text, expected) ->
-       let name = Result.get_ok (Name.of_operator text) in
+       let name = Test_support.operator text in
        equal ~print:print_kind ~expected:(Some expected) (Name.operator_kind name))
 ;;
 
@@ -87,7 +87,7 @@ let properties =
       "ordinary identifiers have no operator class"
       (strings "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'")
       (fun suffix ->
-         let name = Result.get_ok (Name.of_identifier ("x" ^ suffix)) in
+         let name = Test_support.identifier ("x" ^ suffix) in
          equal ~print:print_kind ~expected:None (Name.operator_kind name))
   ; property
       "identifier rejects embedded whitespace"
