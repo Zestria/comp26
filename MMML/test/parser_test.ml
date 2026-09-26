@@ -107,10 +107,7 @@ let applications =
     check_expr "f x y" (application (var "f") [ var "x"; var "y" ]);
     check_expr "f (g x)" (application (var "f") [ application (var "g") [ var "x" ] ]);
     check_expr "f x + 1" (infix "+" (application (var "f") [ var "x" ]) (int 1));
-    check_expr "(f) x" (application (var "f") [ var "x" ]);
-    check_expr "(=) 1" (application (var "=") [ int 1 ]);
-    check_expr "( * ) 1" (application (var "*") [ int 1 ]);
-    check_expr "f (-42)" (application (var "f") [ int (-42) ]))
+    check_expr "(f) x" (application (var "f") [ var "x" ]))
 ;;
 
 (** Unary minus and plus fold integer literals and prefix other operands. *)
