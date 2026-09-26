@@ -1,5 +1,6 @@
 (lang dune 3.24)
 
+(using menhir 3.0)
 (name comp26)
 
 (generate_opam_files true)
@@ -25,9 +26,25 @@
    (= "0.16.0"))
   qcheck
   bisect_ppx_ng
+  ppx_deriving_qcheck))
+
+(package
+ (name shmel)
+ (synopsis "A short LLVM demo")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
   (llvm
    (= "18-shared"))
-  ppx_deriving_qcheck))
+  (ppx_deriving_qcheck
+   (= "0.9"))
+  menhir
+  )
+ )
 
 (package
  (name demo2)
