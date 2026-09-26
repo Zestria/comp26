@@ -8,6 +8,25 @@ let print_result = function
     Printf.printf "Error (Invalid_integer_literal %S)\n" text
 ;;
 
+let negate text =
+  Integer_literal.of_string text |> Result.map Integer_literal.negate |> print_result
+;;
+
+let%expect_test "negation preserves leading zeroes and separators" =
+  negate "001__2_";
+  [%expect {| Ok "-001__2_" |}]
+;;
+
+let%expect_test "negation removes the sign from a negative literal" =
+  negate "-001__2_";
+  [%expect {| Ok "001__2_" |}]
+;;
+
+let%expect_test "negation preserves signed zero spelling" =
+  negate "0";
+  [%expect {| Ok "-0" |}]
+;;
+
 let%expect_test "integer accepts: zero" =
   Integer_literal.of_string "0" |> print_result;
   [%expect {| Ok "0" |}]
