@@ -26,6 +26,10 @@ module Lexeme = struct
   ;;
 
   let comment =
+    let is_delimiter_char = function
+      | 'a' .. 'z' | '_' -> true
+      | _ -> false
+    in
     let character =
       let digit =
         satisfy (function
@@ -73,18 +77,17 @@ module Lexeme = struct
           | ' ' | '\t' | '\012' -> true
           | _ -> false)
       in
-      char '{'
-      *> option () extension
-      *> take_while (function
-        | 'a' .. 'z' | '_' -> true
-        | _ -> false)
-      <* char '|'
+      char '{' *> option () extension *> take_while is_delimiter_char <* char '|'
     in
     let quoted_contents delimiter =
-      let closing = "|" ^ delimiter ^ "}" in
       fix (fun rest ->
-        let* closes = starts closing in
-        if closes then string closing *> return () else any_char *> rest)
+        skip_while (fun c -> c <> '|')
+        *> char '|'
+        *> let* candidate = take_while is_delimiter_char in
+           let* next = peek_char in
+           if next = Some '}' && String.equal candidate delimiter
+           then char '}' *> return ()
+           else rest)
     in
     fix (fun comment ->
       string "(*"
@@ -124,11 +127,12 @@ module Lexeme = struct
   let token parser = spaces *> parser
   let word = token (take_while1 Name.Syntax.is_identifier_char)
 
-  let keyword expected =
+  let exact_word expected =
     let* actual = word in
     if actual = expected then return () else fail ("Expected " ^ expected)
   ;;
 
+  let keyword keyword = exact_word (Keyword.to_string keyword)
   let punctuation text = token (string text) *> return ()
 
   let symbol =
@@ -151,22 +155,29 @@ module Lexeme = struct
   ;;
 
   let operator =
-    let* text = keyword "mod" *> return "mod" <|> symbol in
+    let* text =
+      keyword Keyword.Mod *> return (Keyword.to_string Keyword.Mod) <|> symbol
+    in
     of_result Name.error_to_string (Name.of_operator text)
   ;;
 
-  let operator_where predicate =
+  let operator_of_kind expected =
     let* name = operator in
-    if predicate (Name.to_string name) then return name else fail "Expected operator"
+    if Name.operator_kind name = Some expected
+    then return name
+    else fail "Expected operator"
   ;;
-
-  let value_name = identifier <|> (punctuation "(" *> operator <* punctuation ")")
 
   let integer =
     let* text = word in
     of_result Integer_literal.error_to_string (Integer_literal.of_string text)
   ;;
 end
+
+let value_name =
+  Lexeme.identifier
+  <|> (Lexeme.punctuation "(" *> Lexeme.operator <* Lexeme.punctuation ")")
+;;
 
 let tuple make element =
   let* first = element in
@@ -181,8 +192,8 @@ let simple_pattern, pattern =
   let tuple_pattern = tuple (fun a b rest -> PTuple (a, b, rest)) in
   let simple =
     fix (fun simple ->
-      Lexeme.keyword "_" *> return PWildcard
-      <|> (Lexeme.value_name >>| fun name -> PVar name)
+      Lexeme.exact_word "_" *> return PWildcard
+      <|> (value_name >>| fun name -> PVar name)
       <|> Lexeme.punctuation "("
           *> (Lexeme.punctuation ")" *> return PUnit
               <|> (tuple_pattern simple <* Lexeme.punctuation ")")))
@@ -197,11 +208,13 @@ let function_body parameters body =
 ;;
 
 let binding expression =
-  Lexeme.keyword "let"
+  Lexeme.keyword Keyword.Let
   *>
-  let* recursion = Lexeme.keyword "rec" *> return Recursive <|> return Nonrecursive in
+  let* recursion =
+    Lexeme.keyword Keyword.Rec *> return Recursive <|> return Nonrecursive
+  in
   let named =
-    let* name = Lexeme.value_name in
+    let* name = value_name in
     let* parameters = many simple_pattern in
     Lexeme.exact_symbol "=" *> return (PVar name, parameters)
   in
@@ -214,8 +227,6 @@ let binding expression =
   return { recursion; pattern; expression = function_body parameters body }
 ;;
 
-let binary name left right = Apply (Var name, left, [ right ])
-
 let chain_left_with combine operand operator =
   let rec rest left =
     (let* name = operator in
@@ -226,43 +237,28 @@ let chain_left_with combine operand operator =
   operand >>= rest
 ;;
 
-let chain_left = chain_left_with binary
+let chain_left = chain_left_with Ast_helper.binary
 
 let chain_right operand operator =
   fix (fun expression ->
     let* left = operand in
     (let* name = operator in
      let* right = expression in
-     return (binary name left right))
+     return (Ast_helper.binary name left right))
     <|> return left)
-;;
-
-let negate = function
-  | Constant (Int literal) ->
-    let text = Integer_literal.to_string literal in
-    let text =
-      if text.[0] = '-' then String.sub text 1 (String.length text - 1) else "-" ^ text
-    in
-    let* literal =
-      of_result Integer_literal.error_to_string (Integer_literal.of_string text)
-    in
-    return (Constant (Int literal))
-  | expression ->
-    let* name = of_result Name.error_to_string (Name.of_operator "~-") in
-    return (Apply (Var name, expression, []))
 ;;
 
 let expression =
   fix (fun expression ->
     let local_let =
       let* binding = binding expression in
-      Lexeme.keyword "in"
+      Lexeme.keyword Keyword.In
       *>
       let* body = expression in
       return (Let (binding, body))
     in
     let function_ =
-      Lexeme.keyword "fun"
+      Lexeme.keyword Keyword.Fun
       *>
       let* parameter = simple_pattern in
       let* parameters = many simple_pattern in
@@ -272,19 +268,19 @@ let expression =
       return (Fun { parameter; parameters; body })
     in
     let conditional =
-      Lexeme.keyword "if"
+      Lexeme.keyword Keyword.If
       *>
       let* condition = expression in
-      Lexeme.keyword "then"
+      Lexeme.keyword Keyword.Then
       *>
       let* yes = expression in
-      let* no = option None (Lexeme.keyword "else" *> expression >>| Option.some) in
+      let* no = option None (Lexeme.keyword Keyword.Else *> expression >>| Option.some) in
       return (If (condition, yes, no))
     in
     let open_expression = local_let <|> function_ <|> conditional in
     let constructor =
-      Lexeme.keyword "true" *> return (Bool true)
-      <|> Lexeme.keyword "false" *> return (Bool false)
+      Lexeme.keyword Keyword.True *> return (Bool true)
+      <|> Lexeme.keyword Keyword.False *> return (Bool false)
       <|> Lexeme.punctuation "(" *> Lexeme.punctuation ")" *> return Unit
     in
     let to_expression = function
@@ -295,17 +291,14 @@ let expression =
       constructor
       >>| (fun constant -> `Constructor constant)
       <|> (Lexeme.integer >>| fun literal -> `Expression (Constant (Int literal)))
-      <|> (Lexeme.value_name >>| fun name -> `Expression (Var name))
+      <|> (value_name >>| fun name -> `Expression (Var name))
       <|> (Lexeme.punctuation "(" *> expression
            <* Lexeme.punctuation ")"
            >>| fun expression -> `Expression expression)
     in
     let prefix =
       fix (fun prefix ->
-        (let* name =
-           Lexeme.operator_where (fun s ->
-             s <> "!=" && (s.[0] = '!' || s.[0] = '~' || s.[0] = '?'))
-         in
+        (let* name = Lexeme.operator_of_kind Name.Prefix in
          let* argument = prefix in
          return (`Expression (Apply (Var name, to_expression argument, []))))
         <|> atom)
@@ -313,9 +306,9 @@ let expression =
     let hash =
       chain_left_with
         (fun name left right ->
-           `Expression (binary name (to_expression left) (to_expression right)))
+           `Expression (Ast_helper.binary name (to_expression left) (to_expression right)))
         prefix
-        (Lexeme.operator_where (fun s -> s.[0] = '#'))
+        (Lexeme.operator_of_kind Name.Hash)
     in
     let application =
       let* function_ = hash in
@@ -333,47 +326,22 @@ let expression =
     in
     let unary =
       fix (fun unary ->
-        Lexeme.exact_symbol "-" *> unary >>= negate <|> open_expression <|> application)
+        Lexeme.exact_symbol "-" *> unary
+        >>| Ast_helper.negate
+        <|> open_expression
+        <|> application)
     in
-    let power =
-      chain_right unary (Lexeme.operator_where (String.starts_with ~prefix:"**"))
-    in
-    let product =
-      chain_left
-        power
-        (Lexeme.operator_where (fun s ->
-           s = "mod"
-           || (s.[0] = '*' && not (String.starts_with ~prefix:"**" s))
-           || s.[0] = '/'
-           || s.[0] = '%'))
-    in
-    let sum =
-      chain_left product (Lexeme.operator_where (fun s -> s.[0] = '+' || s.[0] = '-'))
-    in
-    let concatenation =
-      chain_right sum (Lexeme.operator_where (fun s -> s.[0] = '@' || s.[0] = '^'))
-    in
-    let comparison =
-      chain_left
-        concatenation
-        (Lexeme.operator_where (fun s ->
-           s = "!="
-           || (s <> "&"
-               && s <> "&&"
-               && s <> "||"
-               &&
-               match s.[0] with
-               | '=' | '<' | '>' | '|' | '&' | '$' -> true
-               | _ -> false)))
-    in
-    let conjunction =
-      chain_right comparison (Lexeme.operator_where (fun s -> s = "&&" || s = "&"))
-    in
+    let power = chain_right unary (Lexeme.operator_of_kind Name.Power) in
+    let product = chain_left power (Lexeme.operator_of_kind Name.Multiplicative) in
+    let sum = chain_left product (Lexeme.operator_of_kind Name.Additive) in
+    let concatenation = chain_right sum (Lexeme.operator_of_kind Name.Concatenation) in
+    let comparison = chain_left concatenation (Lexeme.operator_of_kind Name.Comparison) in
+    let conjunction = chain_right comparison (Lexeme.operator_of_kind Name.Conjunction) in
     let disjunction =
-      chain_right conjunction (Lexeme.operator_where (String.equal "||"))
+      chain_right conjunction (Lexeme.operator_of_kind Name.Disjunction)
     in
     let tuple_ = tuple (fun a b rest -> Tuple (a, b, rest)) disjunction in
-    chain_right tuple_ (Lexeme.operator_where (String.equal ":=")))
+    chain_right tuple_ (Lexeme.operator_of_kind Name.Assignment))
 ;;
 
 let program =
@@ -383,7 +351,7 @@ let program =
       let local =
         if allow_evaluation
         then
-          Lexeme.keyword "in" *> expression
+          Lexeme.keyword Keyword.In *> expression
           >>| fun body -> Evaluation (Let (binding, body))
         else fail "Expected a top-level definition"
       in

@@ -9,4 +9,5 @@ type error = Invalid_integer_literal of string
 val of_string : string -> (t, error) result
 
 val to_string : t -> string
+val negate : t -> t
 val error_to_string : error -> string

@@ -6,12 +6,20 @@ type error =
   | Invalid_identifier of string
   | Invalid_operator of string
 
-let is_word_operator name = String.equal name "mod"
+let unary_minus = "~-"
+let is_word_operator name = String.equal name (Keyword.to_string Keyword.Mod)
 
-let is_keyword = function
-  | "else" | "false" | "fun" | "if" | "in" | "let" | "rec" | "then" | "true" -> true
-  | name -> is_word_operator name
-;;
+type operator_kind =
+  | Prefix
+  | Hash
+  | Comparison
+  | Concatenation
+  | Additive
+  | Multiplicative
+  | Power
+  | Conjunction
+  | Disjunction
+  | Assignment
 
 module Syntax = struct
   let is_identifier_start = function
@@ -57,7 +65,7 @@ let of_identifier name =
     && is_identifier_start name.[0]
     && String.for_all is_identifier_char name
     && name <> "_"
-    && not (is_keyword name)
+    && Option.is_none (Keyword.of_string name)
   then Ok name
   else Error (Invalid_identifier name)
 ;;
@@ -80,6 +88,25 @@ let of_operator name =
   if is_word_operator name || is_symbol_operator name
   then Ok name
   else Error (Invalid_operator name)
+;;
+
+let operator_kind name =
+  match name with
+  | "&" | "&&" -> Some Conjunction
+  | "||" -> Some Disjunction
+  | ":=" -> Some Assignment
+  | "!=" -> Some Comparison
+  | _ when is_word_operator name -> Some Multiplicative
+  | _ ->
+    (match name.[0] with
+     | '!' | '~' | '?' -> Some Prefix
+     | '#' -> Some Hash
+     | '=' | '<' | '>' | '|' | '&' | '$' -> Some Comparison
+     | '@' | '^' -> Some Concatenation
+     | '+' | '-' -> Some Additive
+     | '*' when String.starts_with ~prefix:"**" name -> Some Power
+     | '*' | '/' | '%' -> Some Multiplicative
+     | _ -> None)
 ;;
 
 let to_string name = name

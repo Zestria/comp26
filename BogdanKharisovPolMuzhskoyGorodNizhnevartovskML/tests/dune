@@ -12,7 +12,7 @@
   (pps ppx_expect)))
 
 (tests
- (names test_name_properties test_integer_literal_properties test_parser_properties)
- (modules test_name_properties test_integer_literal_properties test_parser_properties test_support)
+ (names test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress)
+ (modules test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress test_support)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend qcheck))

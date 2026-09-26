@@ -1,8 +1,14 @@
 (library
  (name frontend)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (modules name integer_literal ast parser)
+ (modules keyword name integer_literal ast ast_helper parser grammar lexer menhir_parser)
  (libraries angstrom))
+
+(menhir
+ (modules grammar)
+ (flags --strict))
+
+(ocamllex lexer)
 
 (executable
  (name compiler)

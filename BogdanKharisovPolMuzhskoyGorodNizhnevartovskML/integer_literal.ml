@@ -23,6 +23,12 @@ let of_string text =
 
 let to_string literal = literal
 
+let negate literal =
+  if literal.[0] = '-'
+  then String.sub literal 1 (String.length literal - 1)
+  else "-" ^ literal
+;;
+
 let error_to_string (Invalid_integer_literal text) =
   Printf.sprintf "Invalid integer literal: %S" text
 ;;

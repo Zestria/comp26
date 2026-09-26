@@ -13,7 +13,23 @@ val of_identifier : string -> (t, error) result
 (** A prefix or infix operator name without surrounding parentheses. *)
 val of_operator : string -> (t, error) result
 
+type operator_kind =
+  | Prefix
+  | Hash
+  | Comparison
+  | Concatenation
+  | Additive
+  | Multiplicative
+  | Power
+  | Conjunction
+  | Disjunction
+  | Assignment
+
+(** [None] for an ordinary identifier. *)
+val operator_kind : t -> operator_kind option
+
 val to_string : t -> string
+val unary_minus : t
 val error_to_string : error -> string
 
 (** Character classes shared by validation and tokenization.
