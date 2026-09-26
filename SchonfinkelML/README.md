@@ -12,12 +12,3 @@ dune test  -p SchonfinkelML
 dune exec SchonfinkelML/compiler.exe -- <input.ml>            # top-down
 dune exec SchonfinkelML/compiler.exe -- --bottom-up <input.ml>
 ```
-
-## Notes / limitations
-
-- `--parser-settings` is declared as `Arg.Unit`, so the operator-override table
-  cannot be set from the CLI. The table and its tests work; the flag needs wiring.
-- `-o` usage text says "default: stdout", but the actual default is `a.out`.
-- The maximal-munch extension is not implemented: `funx->x` is one identifier, and
-  tests assert that. Only the operator-override extension was taken.
-- Floats, strings, and bools are commented out in the shared AST.
