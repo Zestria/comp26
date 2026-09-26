@@ -1,7 +1,6 @@
 (library
- (name LL)
- (public_name BDSMl.LL)
- (modules LL)
+ (name BDSMl)
+ (public_name BDSMl)
  (wrapped false)
  (libraries
   llvm

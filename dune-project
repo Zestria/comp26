@@ -1,6 +1,7 @@
 (lang dune 3.24)
 
 (using menhir 3.0)
+
 (name comp26)
 
 (generate_opam_files true)
@@ -42,9 +43,7 @@
    (= "18-shared"))
   (ppx_deriving_qcheck
    (= "0.9"))
-  menhir
-  )
- )
+  menhir))
 
 (package
  (name SchonfinkelML)
@@ -57,6 +56,25 @@
   qcheck
   bisect_ppx_ng
   ppx_inline_test
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (= "0.9"))))
+
+(package
+ (name BDSMl)
+ (synopsis "A small compiler")
+ (depends
+  ocaml
+  dune
+  (menhir :build)
+  benchmark
+  base
+  (ppx_expect :with-test)
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
   (llvm
    (= "18-shared"))
   (ppx_deriving_qcheck
