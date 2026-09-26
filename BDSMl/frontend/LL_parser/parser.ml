@@ -108,6 +108,9 @@ let parse_pattern tokens =
   match step tokens with
   | Cons (TIdent s, ts) -> Ok (PVar s, ts)
   | Cons (TUnit, ts) -> Ok (PUnit, ts)
+  | Cons (TLParen, ts) ->
+    let* (), ts = expect TRParen ts in
+    Ok (PUnit, ts)
   | Cons (TUnderscore, ts) -> Ok (PUnderscore, ts)
   | Cons (t, _) ->
     Error (`parse_error ("Expected pattern, got '" ^ token_to_string t ^ "'"))
@@ -117,7 +120,7 @@ let parse_pattern tokens =
 
 let rec parse_pattern_list tokens =
   match step tokens with
-  | Cons ((TIdent _ | TUnderscore | TUnit), _) ->
+  | Cons ((TIdent _ | TUnderscore | TUnit | TLParen), _) ->
     let* p, ts = parse_pattern tokens in
     let* ps, ts = parse_pattern_list ts in
     Ok (p :: ps, ts)
@@ -247,9 +250,13 @@ and parse_atom config tokens =
   | Cons (TUnit, ts) -> Ok (Unit, ts)
   | Cons (TIdent s, ts) -> Ok (Var s, ts)
   | Cons (TLParen, ts) ->
-    let* e, ts = parse_expr config ts in
-    let* (), ts = expect TRParen ts in
-    Ok (e, ts)
+    (match step ts with
+     | Cons (TRParen, rest) -> Ok (Unit, rest)
+     | Cons _ | Nil ->
+       let* e, ts = parse_expr config ts in
+       let* (), ts = expect TRParen ts in
+       Ok (e, ts)
+     | LexError e -> Error (e :> [> error ]))
   | Cons (t, _) -> Error (`parse_error ("unexpected token '" ^ token_to_string t ^ "'"))
   | Nil -> Error (`parse_error "unexpected end of input")
   | LexError e -> Error (e :> [> error ])
