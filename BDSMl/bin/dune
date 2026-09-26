@@ -11,6 +11,3 @@
   )
  (instrumentation
   (backend bisect_ppx_ng)))
-
-(cram
- (deps ../compiler.exe runtime.c))
