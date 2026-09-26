@@ -113,9 +113,7 @@ let gen_expr_depth =
         ]))
 ;;
 
-let gen_expr_limit limit =
-  Gen.sized_size (Gen.int_bound limit) (fun size -> gen_expr_depth size)
-;;
+let gen_expr_limit limit = Gen.sized_size (Gen.int_bound limit) gen_expr_depth
 
 let generate_expressions depth n =
   List.map PPrint.string_of_expression (Gen.generate ~n (gen_expr_limit depth))

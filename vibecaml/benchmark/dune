@@ -1,6 +1,6 @@
 (executable
  (public_name benchmark)
- (name bench_main)
+ (name main)
  (modules generate main)
  (libraries vibecaml unix qcheck-core)
  (package vibecaml))

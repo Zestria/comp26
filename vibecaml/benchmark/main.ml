@@ -18,7 +18,7 @@ let glued_keywords =
 
 let measureTime parser program =
   let start_time = Unix.gettimeofday () in
-  let _ = ignore (parser program) in
+  let (_ : (Ast.expression, string) result) = parser program in
   let end_time = Unix.gettimeofday () in
   print_float (end_time -. start_time);
   print_string ", "
@@ -31,19 +31,19 @@ let bench ?(iterations : int = 20) (programs : string list) =
   print_string "menhir = [";
   for _ = 1 to iterations do
     Gc.full_major ();
-    List.map (measureTime menhir) programs |> ignore
+    List.iter (measureTime menhir) programs
   done;
   print_string "]\n";
   print_string "rd = [";
   for _ = 1 to iterations do
     Gc.full_major ();
-    List.map (measureTime rd) programs |> ignore
+    List.iter (measureTime rd) programs
   done;
   print_string "]\n";
   print_string "rd_ext = [";
   for _ = 1 to iterations do
     Gc.full_major ();
-    List.map (measureTime rd_ext) programs |> ignore
+    List.iter (measureTime rd_ext) programs
   done;
   print_endline "]"
 ;;
