@@ -1,7 +1,3 @@
-(cram
- (applies_to NewGVNtricky)
- (deps NewGVNtricky.ll))
-
 (executable
  (public_name SchonfinkelML.compiler)
  (package SchonfinkelML)
