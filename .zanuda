@@ -1,1 +1,3 @@
 ignore BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/grammar.ml
+ignore shmel/lib/parser.ml
+ignore shmel/lib/parser.mli
