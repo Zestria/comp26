@@ -46,6 +46,7 @@ let elapsed repetitions operation =
 ;;
 
 let measure ~minimum_seconds operation =
+  Gc.compact ();
   run_repeatedly 3 operation;
   let rec calibrate repetitions =
     let seconds = elapsed repetitions operation in
@@ -54,6 +55,8 @@ let measure ~minimum_seconds operation =
     else calibrate (repetitions * 2)
   in
   let repetitions = calibrate 1 in
+  (* Calibration allocates parser results. Compact once more outside the timed
+     interval so that both parsers begin their measured run in the same state. *)
   Gc.compact ();
   let seconds = elapsed repetitions operation in
   { repetitions; seconds }
@@ -65,7 +68,8 @@ let milliseconds_per_run measurement =
 
 let validate_parser workload parser =
   let actual = parse parser workload.Workload.source in
-  if actual <> workload.program
+  let expected = workload.Workload.program in
+  if not (String.equal (Ast.show_program actual) (Ast.show_program expected))
   then (
     Format.eprintf "%s parser produced an unexpected AST.\n%!" parser.name;
     exit 2)

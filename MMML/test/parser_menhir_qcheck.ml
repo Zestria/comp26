@@ -236,29 +236,40 @@ let fixed_expressions =
   let a = var "a"
   and b = var "b"
   and c = var "c" in
-  [ "a - b - c", infix "-" (infix "-" a b) c
-  ; "a / b * c", infix "*" (infix "/" a b) c
-  ; "a + b * c", infix "+" a (infix "*" b c)
-  ; "a < b = c", infix "=" (infix "<" a b) c
-  ; "a || b || c", infix "||" a (infix "||" b c)
-  ; "a && b && c", infix "&&" a (infix "&&" b c)
-  ; "a || b && c", infix "||" a (infix "&&" b c)
-  ; "a < b && b <> c", infix "&&" (infix "<" a b) (infix "<>" b c)
-  ; "f a b + c", infix "+" (application (var "f") [ a; b ]) c
-  ; "f (a + b)", Application (var "f", infix "+" a b)
-  ; "-f a", prefix "~-" (Application (var "f", a))
-  ; "+f a", prefix "~+" (Application (var "f", a))
-  ; "f -1", infix "-" (var "f") (int 1)
-  ; "f (-1)", Application (var "f", int (-1))
-  ; "-1", int (-1)
-  ; "+1", int 1
-  ; "( * ) 2 3", infix "*" (int 2) (int 3)
-  ; "fun x y -> x y", function_ [ pvar "x"; pvar "y" ] (Application (var "x", var "y"))
-  ; ( "let rec f x = x in f"
-    , Let_in (Recursive, pvar "f", Lambda (pvar "x", var "x"), var "f") )
-  ; ( "if a then if b then 1 else 2 else 3"
-    , If_then_else (a, If_then_else (b, int 1, int 2), int 3) )
-  ]
+  let precedence_cases =
+    [ "a - b - c", infix "-" (infix "-" a b) c
+    ; "a / b * c", infix "*" (infix "/" a b) c
+    ; "a + b * c", infix "+" a (infix "*" b c)
+    ; "a < b = c", infix "=" (infix "<" a b) c
+    ; "a || b || c", infix "||" a (infix "||" b c)
+    ; "a && b && c", infix "&&" a (infix "&&" b c)
+    ; "a || b && c", infix "||" a (infix "&&" b c)
+    ; "a < b && b <> c", infix "&&" (infix "<" a b) (infix "<>" b c)
+    ; "f a b + c", infix "+" (application (var "f") [ a; b ]) c
+    ; "f (a + b)", Application (var "f", infix "+" a b)
+    ; "-f a", prefix "~-" (Application (var "f", a))
+    ; "+f a", prefix "~+" (Application (var "f", a))
+    ; "f -1", infix "-" (var "f") (int 1)
+    ; "f (-1)", Application (var "f", int (-1))
+    ; "-1", int (-1)
+    ; "+1", int 1
+    ; "( * ) 2 3", infix "*" (int 2) (int 3)
+    ; "fun x y -> x y", function_ [ pvar "x"; pvar "y" ] (Application (var "x", var "y"))
+    ; ( "let rec f x = x in f"
+      , Let_in (Recursive, pvar "f", Lambda (pvar "x", var "x"), var "f") )
+    ; ( "if a then if b then 1 else 2 else 3"
+      , If_then_else (a, If_then_else (b, int 1, int 2), int 3) )
+    ]
+  in
+  let every_infix_operator =
+    List.map (fun operator -> "a " ^ operator ^ " b", infix operator a b) operators
+  in
+  let every_parenthesized_operator =
+    List.map
+      (fun operator -> "( " ^ operator ^ " ) a b", application (var operator) [ a; b ])
+      operators
+  in
+  precedence_cases @ every_infix_operator @ every_parenthesized_operator
 ;;
 
 let precedence_and_syntax =

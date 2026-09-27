@@ -19,5 +19,5 @@ Results (milliseconds per parse; negative difference means Menhir was faster):
 ```
 
 CPU: 11th Gen Intel Core i5-11400H @ 2.70GHz   
-OS: Ubuntu 26.04.1 LTS (Linux 7.0.0-34-generic)   
+OS: Ubuntu 26.04.1 
 Compiler: OCaml 5.5.1 
