@@ -1,4 +1,5 @@
 (executable
  (name benchmark)
+ (public_name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML.benchmark)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend))
