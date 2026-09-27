@@ -3,22 +3,25 @@
  (package MMML)
  (modules parser_test)
  (libraries MMML.frontend qcheck))
-
+ 
 (test
  (name pretty_printer_test)
  (package MMML)
- (modules lexer_test pretty_printer_test)
- (libraries MMML.frontend)
- (inline_tests)
- (preprocess
-  (pps ppx_inline_test)))
+ (modules pretty_printer_test)
+ (libraries MMML.frontend))
+
+(test
+ (name lexer_test)
+ (package MMML)
+ (modules lexer_test)
+ (libraries MMML.frontend qcheck))
 
 (test
  (name lexer_qcheck)
  (package MMML)
  (modules lexer_qcheck)
  (libraries MMML.frontend qcheck))
- 
+
 (test
  (name parser_menhir_qcheck)
  (package MMML)
