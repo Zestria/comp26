@@ -81,6 +81,15 @@
    (= "0.9"))))
 
 (package
+ (name demo2)
+ (allow_empty)
+ (synopsis "A short synopsis")
+ (description "A longer description")
+ (depends ocaml)
+ (tags
+  ("add topics" "to describe" your project)))
+
+(package
  (name MMML)
  (synopsis "A short LLVM project")
  (depends
@@ -127,6 +136,14 @@
   (uri "git+ssh://ssh.sourcecraft.dev/shrexer06/comp26.git"))
  (homepage "https://sourcecraft.dev/shrexer06/comp26")
  (documentation
-  "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend"))
+    "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  menhir
+  qcheck
+  ppx_expect))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
