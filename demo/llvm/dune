@@ -1,9 +1,0 @@
-(cram
- (package demo)
- (deps 1.cpp)
- (applies_to 1))
-
-(cram
- (package demo)
- (deps fac.cpp)
- (applies_to fac))
