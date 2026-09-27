@@ -12,6 +12,11 @@
   - Kakadu2
   - Kakadu
 
+- MMML:
+  - mikhailsviriukov
+  - pugovkinvladim1
+  - ilyasobased
+
 - shmel:
   - kormyltsyn-roman-gmail-com
   - khmelevvova06
@@ -35,9 +40,8 @@
     - shamashaehmitov
     - garry2311
 
-- MMML:
-  - mikhailsviriukov
-  - pugovkinvladim1
-  - ilyasobased
+# $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
+# demo
+
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
