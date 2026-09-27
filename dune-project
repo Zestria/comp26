@@ -5,8 +5,6 @@
 
 (generate_opam_files true)
 
-(using menhir 3.0)
-
 (source
  (github username/reponame))
 
