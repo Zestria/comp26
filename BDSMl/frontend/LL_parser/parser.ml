@@ -289,6 +289,9 @@ let rec parse_items config tokens =
        Ok (item :: items)
      | Nil -> Error (`parse_error "unexpected end of input")
      | LexError e -> Error (e :> [> error ]))
+  | Cons (TLet, _) ->
+    let* items = parse_items config ts in
+    Ok (item :: items)
   | Cons (t, _) ->
     Error
       (`parse_error
