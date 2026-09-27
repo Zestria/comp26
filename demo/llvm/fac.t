@@ -4,6 +4,7 @@ $ clang++-18  -emit-llvm -c 1.cpp -O1 -o fO1.bc
 $ clang++-18  -emit-llvm -c 1.cpp -O2 -o fO2.bc
 $ clang++-18  -emit-llvm -c 1.cpp -O2 -o fO3.bc
 $ export SHORT=""
+
   $ llvm-extract-18 -func=factorial -S main.ll -o fac.ll
   $ cat fac.ll | grep -v -e datalay -e attributes -e '!{i32' -e triple -e source_filename -e '!llvm.' -e  '^;' -e '^$' -e 'clang version'
   define dso_local i32 @factorial(i32 noundef %0) #0 {
