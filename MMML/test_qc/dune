@@ -4,7 +4,7 @@
  (libraries MMML.frontend qcheck)
  (preprocess
   (pps ppx_deriving.show)))
-  
+
 (rule
  (alias runtest)
  (deps
