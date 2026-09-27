@@ -124,6 +124,21 @@ module Ast_gen = struct
   ;;
 
   let arbitrary = QCheck.make ~print ~shrink:shrink_expr expr
+
+  let program =
+    let decl =
+      Gen.oneof_weighted
+        [ 3, Gen.map2 (fun name value -> Ast.DLet (name, value)) name expr
+        ; 1, Gen.map3 (fun fn param body -> Ast.DLetRec (fn, param, body)) name name expr
+        ]
+    in
+    Gen.map2
+      (fun first decls -> Option.to_list (Option.map (fun e -> Ast.DExpr e) first) @ decls)
+      (Gen.option expr)
+      (Gen.list_size (Gen.int_range 0 5) decl)
+  ;;
+
+  let program_arbitrary = QCheck.make ~print:Printast.show_program program
 end
 
 let expect_parse ~parser_name parser source expected =
@@ -201,6 +216,13 @@ let syntax_cases =
       "recursive binding"
       "let rec f x = f x in f"
       (LetRec ("f", "x", App (Var "f", Var "x"), Var "f"))
+  ; fixed_case
+      "subtraction without spaces"
+      "f (n-1)"
+      (App (Var "f", BinOp (Sub, Var "n", Const 1)))
+  ; fixed_case "minus after a function is subtraction" "f -1" (BinOp (Sub, Var "f", Const 1))
+  ; fixed_case "nested functions" "fun x -> fun y -> x" (Abs ("x", Abs ("y", Var "x")))
+  ; fixed_case "equals without spaces" "let x =1 in x" (Let ("x", Const 1, Var "x"))
   ]
   @ operator_cases
 ;;
@@ -272,6 +294,26 @@ let round_trip name parser =
     true)
 ;;
 
+(* The menhir grammar does not support declarations yet. *)
+let program_round_trip =
+  QCheck.Test.make
+    ~name:"combinator program round-trip"
+    ~count:300
+    Ast_gen.program_arbitrary
+    (fun expected ->
+       let source = Printast.show_program expected in
+       match Main.parse_program_with_comb source with
+       | Ok actual when actual = expected -> true
+       | Ok actual ->
+         QCheck.Test.fail_reportf
+           "different program for\n%s\nactual: %a"
+           source
+           Ast.pp_program
+           actual
+       | Error error ->
+         QCheck.Test.fail_reportf "rejected\n%s\n%a" source Parser_comb.pp_error error)
+;;
+
 let tests =
   syntax_cases
   @ [ successful_for_both "CPS factorial" cps_factorial
@@ -280,6 +322,7 @@ let tests =
   @ invalid_cases
   @ [ round_trip "menhir round-trip" Parse.menhir
     ; round_trip "combinator round-trip" Parse.combinator
+    ; program_round_trip
     ]
 ;;
 
