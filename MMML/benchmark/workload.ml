@@ -24,7 +24,10 @@ let name prefix seed depth = Printf.sprintf "%s_%d_%d" prefix depth (choose seed
 let variable_from scope seed =
   match scope with
   | [] -> variable "input"
-  | _ -> variable (List.nth scope (choose seed (List.length scope)))
+  | _ ->
+    (match List.nth_opt scope (choose seed (List.length scope)) with
+     | Some name -> variable name
+     | None -> variable "input")
 ;;
 
 let leaf scope seed =
