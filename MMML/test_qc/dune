@@ -1,0 +1,13 @@
+(executable
+ (name test_qc)
+ (modules test_qc)
+ (libraries MMML.frontend qcheck)
+ (preprocess
+  (pps ppx_deriving.show)))
+
+(rule
+ (alias runtest)
+ (deps
+  (:< test_qc.exe))
+ (action
+  (run %{<})))
