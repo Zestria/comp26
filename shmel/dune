@@ -1,4 +1,5 @@
 (cram
+ (package shmel)
  (applies_to NewGVNtricky)
  (deps NewGVNtricky.ll))
 
@@ -7,6 +8,6 @@
  (package shmel)
  (name compiler)
  (modules compiler)
- (libraries shmel_lib Shmel)
+ (libraries shmel_lib shmel_middleend Shmel)
  (instrumentation
   (backend bisect_ppx_ng)))

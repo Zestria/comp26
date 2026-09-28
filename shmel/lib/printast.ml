@@ -42,3 +42,16 @@ let show term =
   pp_print_flush fmt ();
   Buffer.contents buf
 ;;
+
+let pp_decl fmt = function
+  | DLet (x, e) -> fprintf fmt "let %s = %a" x pp e
+  | DLetRec (f, p, b) -> fprintf fmt "let rec %s %s = %a" f p pp b
+  | DExpr e -> pp fmt e
+;;
+
+(* One declaration per line. *)
+let pp_program fmt decls =
+  pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "\n") pp_decl fmt decls
+;;
+
+let show_program decls = asprintf "%a" pp_program decls

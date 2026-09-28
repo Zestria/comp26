@@ -1,0 +1,22 @@
+(env
+ (_
+  (inline_tests enabled)))
+
+(cram
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (deps ../compiler.exe))
+
+(library
+ (name frontend_expect_tests)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (modules test_name test_integer_literal test_parser test_operator_extension)
+ (libraries frontend)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))
+
+(tests
+ (names test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress test_operator_extension_properties)
+ (modules test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress test_operator_extension_properties test_support)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend qcheck))

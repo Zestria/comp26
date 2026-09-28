@@ -1,0 +1,15 @@
+(library
+ (name test_unit)
+ (modules top_down_unit_tests)
+ (libraries top_down frontend)
+ (inline_tests)
+ (preprocess
+  (pps ppx_inline_test))
+ (package SchonfinkelML))
+
+; Dune disables inline tests in the release profile, and [-p] implies it, so
+; [dune test -p SchonfinkelML] would otherwise skip every [let%test] silently.
+
+(env
+ (release
+  (inline_tests enabled)))

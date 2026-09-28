@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+
+import matplotlib.pyplot as plt
+import numpy as np
+import re
+import os
+import sys
+
+# I like to use these commands before doing benchmarks:
+#
+# # Fix the freq of cpu
+#  sudo cpupower frequency-set -g performance
+#  sudo cpupower frequency-set -d 800Mhz
+#  sudo cpupower frequency-set -u 4000Mhz
+#
+# # Remove turbo
+#  echo "1" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
+#
+# # off the Hyper-Threading
+# echo off | sudo tee /sys/devices/system/cpu/smt/active
+#
+# # Isolate 1 2 core as a linux kernel parameter
+# isolcpus=2,3
+#
+# # tick mode whatever as a linux kernel parameter
+# nohz_full=2,3
+#
+# # use isolated cpus
+# taskset -c 2, 3 ./my-realtime-program
+
+sample_len = 2
+
+plt.rcParams["font.family"] = "sans-serif"
+plt.rcParams["font.sans-serif"] = ["Nimbus Sans"]
+
+parser_names = ["top_down_parser", "bottom_up_parser"]
+colors = ["red", "blue"]
+assert len(colors) == len(parser_names)
+
+default_filename = "log_benchmarking0.log"
+default_output = "output_table0.png"
+
+
+def read_samples(path=default_filename):
+    print(f"Using {path}")
+    blocks = []
+    current = None
+    parser = None
+    with open(path) as f:
+        for line in f:
+            line = line.rstrip("\n")
+
+            if line.startswith("Throughputs"):
+                current = {name: [] for name in parser_names}
+                blocks.append(current)
+                parser = None
+                continue
+
+            if current is None or not line.strip():
+                continue
+
+            head = re.match(r"\s*(\w+):", line)
+            if head:
+                parser = head.group(1)
+            if parser is None:
+                continue
+
+            value = re.search(r"@\s*([0-9.]+)/s", line)
+            if value:
+                current[parser].append(float(value.group(1)))
+
+    samples = np.array(
+        [[blocks[b][name] for name in parser_names] for b in range(len(blocks))]
+    )
+    return samples
+
+
+def parser_dots(samples, parser_index):
+    return np.mean(samples[:, parser_index, :], axis=1)
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else default_filename
+    output_table = sys.argv[2] if len(sys.argv) > 2 else default_output
+    samples = read_samples(path)
+
+    if samples.size == 0:
+        print("Error: No valid benchmark results.")
+        return 1
+
+    rows = []
+    for j, name in enumerate(parser_names):
+        dots = parser_dots(samples, j)
+        mean = float(np.mean(dots))
+        median = float(np.median(dots))
+        std = float(np.std(dots, ddof=1))
+        n = len(dots)
+        ci = 3.0 * std / np.sqrt(n)
+        rows.append((name, dots, mean, median, std, ci, n))
+
+    fig = plt.figure(figsize=(12, 5))
+    gs = fig.add_gridspec(2, 1, height_ratios=[1, 2], hspace=0.15)
+
+    ax_table = fig.add_subplot(gs[0, 0])
+    ax_table.axis("off")
+
+    columns = ["parser", "n", "mean", "median", "stddev", "ci (3*SE)"]
+    cell_text = []
+    for name, dots, mean, median, std, ci, n in rows:
+        cell_text.append(
+            [name, str(n), f"{mean:.2f}", f"{median:.2f}", f"{std:.2f}", f"± {ci:.2f}"]
+        )
+
+    table = ax_table.table(
+        cellText=cell_text, colLabels=columns, loc="center", cellLoc="center"
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(14)
+    table.scale(1, 1.8)
+    ax_table.set_title("Benchmark summary", fontsize=13, pad=24)
+
+    ax = fig.add_subplot(gs[1, 0])
+    for j, (name, dots, mean, median, std, ci, n) in enumerate(rows):
+        y = len(parser_names) - 1 - j
+        ax.scatter(
+            dots,
+            [y] * n,
+            color=colors[j],
+            s=25,
+            alpha=0.55,
+            label="sample dots" if j == 0 else None,
+        )
+        ax.plot(
+            [mean, mean],
+            [y - 0.15, y + 0.15],
+            color=colors[j],
+            linewidth=3,
+            label="mean" if j == 0 else None,
+        )
+        ax.plot(
+            [median, median],
+            [y - 0.2, y + 0.2],
+            color=colors[j],
+            linewidth=2,
+            linestyle=":",
+            label="median" if j == 0 else None,
+        )
+
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["bottom_up", "top_down"], fontsize=12)
+    ax.set_xlabel("Throughput (items/second)", fontsize=12)
+    ax.set_title("Sample dots (per-benchmark mean)", fontsize=16)
+    ax.grid(True, axis="x", alpha=0.3)
+    ax.legend(loc="upper right", fontsize=12)
+    try:
+        fig.savefig(output_table, bbox_inches="tight")
+        print(f"\nTable saved to: {output_table}")
+        plt.show()
+        return 0
+    except ValueError as e:
+        print(f"Unsupported format: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,18 @@
+(library
+ (name parser_benchmark_workload)
+ (modules workload)
+ (wrapped false)
+ (libraries MMML.frontend))
+
+(executable
+ (name parser_benchmark)
+ (modules parser_benchmark)
+ (libraries
+  MMML.frontend
+  parser_benchmark_workload
+  unix))
+
+(rule
+ (alias benchmark)
+ (action
+  (run %{exe:parser_benchmark.exe})))

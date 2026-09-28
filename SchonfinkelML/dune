@@ -1,0 +1,8 @@
+(executable
+ (public_name SchonfinkelML.compiler)
+ (package SchonfinkelML)
+ (name compiler)
+ (modules compiler)
+ (libraries frontend top_down bottom_up)
+ (instrumentation
+  (backend bisect_ppx_ng)))

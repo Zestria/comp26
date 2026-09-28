@@ -1,0 +1,115 @@
+# BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
+
+Compiler for a subset of OCaml.
+
+Current stage: parsing and AST output.
+
+Two parsers produce the same AST:
+
+- Angstrom: top-down parser.
+- Menhir + ocamllex: bottom-up parser.
+
+## Build and test
+
+```console
+comp26 $ opam install ./BogdanKharisovPolMuzhskoyGorodNizhnevartovskML.opam --deps-only --with-test
+comp26 $ dune build -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
+comp26 $ dune test -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
+```
+
+## Run
+
+```console
+comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe
+[Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
+```
+
+- `--parser angstrom|menhir`: select the parser; defaults to Angstrom.
+- `--operator-extension`: enable [operator declarations](#operator-declarations) (Angstrom only).
+- `FILE`: input file; omit it or use `-` to read stdin.
+
+## Syntax
+
+- Decimal integers with optional underscores, `true`, `false` and `()`.
+- ASCII identifiers: `[a-z_][a-zA-Z0-9_']*`, excluding keywords and the wildcard `_`.
+- Arithmetic: `+`, `-`, `*`, `/`, `mod` and unary minus.
+- Comparisons: `=`, `<>`, `<`, `<=`, `>` and `>=`; logical operators `&&` and `||`.
+- Functions with multiple parameters, partial application and functions as values.
+  `not x` is an ordinary function application.
+- Top-level `let`, local `let ... in` and `let rec`. Recursive groups with
+  `and` are not supported.
+- `if ... then ...` with an optional `else`.
+- Tuples.
+- Patterns in bindings and parameters: names, `_`, `()` and tuples.
+- Custom symbolic operators and operator names in parentheses, such as `( + )`
+  and `( mod )`. Operators can be bound with `let`.
+- Nested `(* ... *)` comments. Quoted-string
+  delimiters inside comments use lowercase ASCII letters and underscores.
+
+Definitions can follow one another without `;;`. An expression following
+another structure item needs `;;`; the first item can be an expression.
+
+Keywords: `else`, `false`, `fun`, `if`, `in`, `let`, `rec`, `then`, `true`, `mod`.
+Other OCaml keywords, such as `class`, remain valid identifiers.
+
+Type annotations, string and character literals, lists, `match` expressions,
+modules, and labelled or optional arguments are outside this subset.
+Integer ranges and recursive-value restrictions are not checked during parsing.
+
+```ocaml
+let rec factorial n k =
+  if n = 0 then k 1
+  else factorial (n - 1) (fun r -> k (n * r))
+
+let rec fibonacci n k =
+  if n < 2 then k n
+  else fibonacci (n - 1) (fun a ->
+    fibonacci (n - 2) (fun b -> k (a + b)))
+
+;; factorial 10 (fun x -> x)
+;; fibonacci 10 (fun x -> x)
+```
+
+## Operator declarations
+
+| Declaration | Meaning |
+| --- | --- |
+| `infixl P (OP);;` | Binary infix operator, left associative. |
+| `infixr P (OP);;` | Binary infix operator, right associative. |
+| `prefix N (OP);;` | Prefix operator taking `N` operands. |
+
+`P` ranges from `0` to `9`; larger values bind more tightly. Ordinary addition
+has precedence `6`, multiplication `7`, and power operators `8`.
+`N` is a positive integer.
+
+Declarations occur at the top level, end with `;;`, and affect subsequent
+input. A later declaration for the same operator replaces the earlier one.
+Bind operator values separately with `let`.
+
+```ocaml
+infixr 6 (+);;
+a + b + c
+```
+
+This groups as `a + (b + c)`. Operators at the same precedence with different
+associativities require parentheses.
+
+```ocaml
+prefix 3 (%%);;
+let (%%) a b c = a + b + c;;
+%% 1 2 3
+```
+
+Parenthesize compound prefix operands: `(f x)`, `(a + b)`, `(-1)`.
+`(%%) 1` remains an ordinary partial application.
+
+Application and prefix operators bind more tightly than declared infix
+operators. Tuple commas bind between precedence `0` and `1`.
+
+Without the flag, `infixl`, `infixr` and `prefix` are ordinary identifiers.
+
+## Parser benchmark
+
+```console
+comp26 $ dune exec --profile release BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/bench/benchmark.exe > _build/parser-benchmark.csv
+```

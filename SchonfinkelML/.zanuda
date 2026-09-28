@@ -1,0 +1,3 @@
+-no-mutability_check
+-no-exc_failwith
+-no-top_level_eval
