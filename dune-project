@@ -146,4 +146,11 @@
   qcheck
   ppx_expect))
 
+(package
+ (name unnamed)
+ (synopsis "TODO: rename once the team picks a name")
+ (depends
+  ocaml
+  dune))
+
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
