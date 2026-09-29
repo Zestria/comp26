@@ -1,10 +1,13 @@
 (executable
  (name parser_bench)
+ (public_name BDSMl-parser-bench)
+ (package BDSMl)
  (libraries
   BDSMl.frontend
   benchmark))
 
 (rule
  (alias bench)
+ (package BDSMl)
  (action
   (run %{exe:parser_bench.exe})))

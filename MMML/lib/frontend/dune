@@ -1,0 +1,16 @@
+(ocamllex lexer)
+
+(menhir
+ (modules parser)
+ (flags --external-tokens Token --strict))
+
+(library
+ (name frontend)
+ (public_name MMML.frontend)
+ (modules ast error_monad lexer location parser parser_menhir topdown_parser pretty_printer token)
+ (wrapped false)
+ (libraries qcheck)
+ (instrumentation
+  (backend bisect_ppx_ng))
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving_qcheck)))
