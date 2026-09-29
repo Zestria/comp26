@@ -22,7 +22,9 @@ let pp_rec_flag ppf = function
 ;;
 
 let pp_ident ppf name =
-  if Syntax.is_operator name then fprintf ppf "(%s)" name else fprintf ppf "%s" name
+  if Syntax.is_operator Syntax.default_table name
+  then fprintf ppf "(%s)" name
+  else fprintf ppf "%s" name
 ;;
 
 let pp_comma_separated pp_element =
@@ -72,9 +74,11 @@ let rec pp_expression ppf = function
   | EApply _ as application -> pp_application ppf application
 
 and pp_application ppf = function
-  | EApply (EApply (EIdent name, left), right) when Syntax.lookup_infix name <> None ->
+  | EApply (EApply (EIdent name, left), right)
+    when Syntax.lookup_infix Syntax.default_table name <> None ->
     fprintf ppf "%a %s %a" pp_atom left name pp_atom right
-  | EApply (EIdent name, argument) when Syntax.lookup_prefix name <> None ->
+  | EApply (EIdent name, argument)
+    when Syntax.lookup_prefix Syntax.default_table name <> None ->
     fprintf ppf "%s %a" name pp_atom argument
   | EApply (fn, argument) -> fprintf ppf "%a %a" pp_head fn pp_atom argument
   | atom -> fprintf ppf "%a" pp_atom atom

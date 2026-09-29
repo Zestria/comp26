@@ -6,5 +6,5 @@
 
 [@@@ocaml.text "/*"]
 
-val parse_structure : string -> (Ast.structure, string) result
-val parse_expr : string -> (Ast.expression, string) result
+val parse_structure : ?table:Syntax.table -> string -> (Ast.structure, string) result
+val parse_expr : ?table:Syntax.table -> string -> (Ast.expression, string) result

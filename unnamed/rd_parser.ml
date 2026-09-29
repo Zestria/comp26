@@ -138,10 +138,10 @@ let parse_cases self =
 ;;
 
 (* Parses [()], [(e)], [(a, b)], and [( + )]. *)
-let parse_expr_paren self =
+let parse_expr_paren table self =
   let operator_value =
     choice
-      (List.map Syntax.operator_names ~f:(fun name ->
+      (List.map (Syntax.operator_names table) ~f:(fun name ->
          attempt (p_operator_token name) >>| fun _ -> EIdent name))
   in
   let inner =
@@ -156,11 +156,11 @@ let parse_expr_paren self =
   attempt (token "(" *> inner <* token ")")
 ;;
 
-let parse_atom self =
+let parse_atom table self =
   choice
     [ (parse_const >>| fun c -> EConst c)
     ; (parse_ident >>| fun name -> EIdent name)
-    ; parse_expr_paren self
+    ; parse_expr_paren table self
     ]
 ;;
 
@@ -171,23 +171,46 @@ let parse_expr_application atom =
 
 (* Prefix ops bind tighter than infix but looser than application:
    [-a * b] is [(-a) * b], while [-f x] is [-(f x)]. *)
-let parse_expr_prefix application =
+let parse_expr_prefix table atom application =
+  let operators =
+    List.concat_map
+      (fun (entry : Syntax.prefix_entry) ->
+         List.map (fun name -> name, entry.arity) entry.operators)
+      (Syntax.prefix_entries table)
+  in
   let p_op =
     choice
-      (List.map Syntax.prefix_names ~f:(fun name ->
-         p_operator_token name >>| fun _ -> name))
+      (List.map operators ~f:(fun (name, arity) ->
+         p_operator_token name >>| fun _ -> name, arity))
   in
-  attempt (p_op >>= fun name -> application >>| fun e -> EApply (EIdent name, e))
+  let p_applied name = application >>| fun operand -> EApply (EIdent name, operand) in
+  let p_arity name arity =
+    let rec go n operands =
+      if n = 0
+      then return (List.rev operands)
+      else atom >>= fun operand -> go (n - 1) (operand :: operands)
+    in
+    go arity []
+    >>| fun operands ->
+    List.fold_left (fun acc operand -> EApply (acc, operand)) (EIdent name) operands
+  in
+  attempt
+    (p_op
+     >>= fun (name, arity) -> if arity = 1 then p_applied name else p_arity name arity)
   <|> application
 ;;
 
-let parse_expr_infix lower =
+let parse_expr_infix table lower =
   List.fold_right
-    Syntax.infix_operators
+    (Syntax.infix_entries table)
     ~init:lower
-    ~f:(fun (associativity, names) inner ->
-      let p_op = choice (List.map names ~f:(fun name -> token name >>| fun _ -> name)) in
-      match associativity with
+    ~f:(fun (entry : Syntax.infix_entry) inner ->
+      let p_op =
+        choice
+          (List.map entry.operators ~f:(fun name ->
+             p_operator_token name >>| fun _ -> name))
+      in
+      match entry.associativity with
       | Left -> chain_left p_op inner
       | Right -> chain_right p_op inner)
 ;;
@@ -236,10 +259,11 @@ let parse_expr_let self =
   ws1 *> keyword "in" *> self >>| fun body -> ELet (rec_flag, first, rest, body)
 ;;
 
-let parse_expression =
+let make_expression table =
   fix (fun self ->
-    let application = parse_expr_application (parse_atom self) in
-    let infix = parse_expr_infix (parse_expr_prefix application) in
+    let atom = parse_atom table self in
+    let application = parse_expr_application atom in
+    let infix = parse_expr_infix table (parse_expr_prefix table atom application) in
     attempt (parse_expr_fun self)
     <|> (attempt (parse_expr_let self)
          <|> (attempt (parse_expr_function self)
@@ -262,12 +286,17 @@ let parse_structure_item self =
   attempt (self >>| fun e -> SEval e) <|> parse_structure_value self
 ;;
 
-let p_structure =
+let p_structure parse_expression =
   let psemicolon = many (token ";;") in
   sep_by psemicolon (parse_structure_item parse_expression) <* psemicolon <* ws
 ;;
 
 (* ==================== entry points ==================== *)
 
-let parse_structure input = parse_string ~consume:All p_structure input
-let parse_expr input = parse_string ~consume:All (parse_expression <* ws) input
+let parse_structure ?(table = Syntax.default_table) input =
+  parse_string ~consume:All (p_structure (make_expression table)) input
+;;
+
+let parse_expr ?(table = Syntax.default_table) input =
+  parse_string ~consume:All (make_expression table <* ws) input
+;;

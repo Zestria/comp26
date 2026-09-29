@@ -12,11 +12,36 @@ type associativity =
   | Left
   | Right
 
-val infix_operators : (associativity * string list) list
-val prefix_operators : (int * string list) list
-val lookup_infix : string -> (int * associativity) option
-val lookup_prefix : string -> (int * int) option
-val infix_names : string list
-val prefix_names : string list
-val operator_names : string list
-val is_operator : string -> bool
+type infix_override =
+  { operator : string
+  ; precedence : int
+  ; associativity : associativity
+  }
+
+type prefix_override =
+  { operator : string
+  ; arity : int
+  }
+
+type infix_entry =
+  { precedence : int
+  ; associativity : associativity
+  ; operators : string list
+  }
+
+type prefix_entry =
+  { arity : int
+  ; operators : string list
+  }
+
+type table
+
+val default_table : table
+val apply_infix_overrides : infix_override list -> table -> table
+val apply_prefix_overrides : prefix_override list -> table -> table
+val infix_entries : table -> infix_entry list
+val prefix_entries : table -> prefix_entry list
+val operator_names : table -> string list
+val lookup_infix : table -> string -> (int * associativity) option
+val lookup_prefix : table -> string -> (int * int) option
+val is_operator : table -> string -> bool
