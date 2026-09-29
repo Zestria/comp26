@@ -67,8 +67,10 @@
     - shamashaehmitov
     - garry2311
 
-# $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
-# demo
+- unnamed:
+    - nmigunova04
+    - b08lsoai
+    - akagambit2
 
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo
