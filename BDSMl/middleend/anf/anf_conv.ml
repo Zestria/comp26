@@ -5,3 +5,7 @@
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
 [@@@ocaml.text "/*"]
+
+open BDSMl_frontend
+
+let anf _ = failwith "pipeline: not implemented"

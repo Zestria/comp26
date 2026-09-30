@@ -5,3 +5,7 @@
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
 [@@@ocaml.text "/*"]
+
+open BDSMl_frontend
+
+val anf : Ast.program -> Anf_ast.program
