@@ -1,10 +1,13 @@
 (library
+ (public_name MMML.parser_benchmark_workload)
  (name parser_benchmark_workload)
  (modules workload)
  (wrapped false)
  (libraries MMML.frontend))
 
 (executable
+ (package MMML)
+ (public_name mmml_parser_benchmark)
  (name parser_benchmark)
  (modules parser_benchmark)
  (libraries
