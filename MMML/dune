@@ -1,4 +1,5 @@
 (cram
+ (package MMML)
  (applies_to NewGVNtricky)
  (deps NewGVNtricky.ll))
 
