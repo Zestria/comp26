@@ -5,3 +5,9 @@
  (libraries qcheck angstrom)
  (preprocess
   (pps ppx_deriving_qcheck ppx_deriving.show)))
+
+(library
+ (name ast_gen)
+ (public_name unnamed.ast_gen)
+ (modules ast_gen)
+ (libraries qcheck unnamed_frontend))

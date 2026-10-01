@@ -159,6 +159,11 @@
  (homepage "https://sourcecraft.dev/nmigunova04/comp26")
  (depends
   ocaml
-  dune))
+  dune
+  base
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  ppx_deriving))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

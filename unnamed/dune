@@ -1,5 +1,15 @@
+(library
+ (name unnamed_frontend)
+ (public_name unnamed.frontend)
+ (wrapped false)
+ (modules ast syntax op_settings pprint rd_parser)
+ (libraries base angstrom)
+ (preprocess
+  (pps ppx_deriving.show)))
+
 (executable
  (public_name compiler)
  (package unnamed)
  (name compiler)
- (modules compiler))
+ (modules compiler)
+ (libraries unnamed_frontend))
