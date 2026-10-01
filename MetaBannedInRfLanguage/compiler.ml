@@ -23,9 +23,23 @@ let build_table = function
   | Some settings -> Op_settings.table_of_string settings
 ;;
 
+let strip_leading_colon message =
+  if String.length message >= 2 && String.equal (String.sub message 0 2) ": "
+  then String.sub message 2 (String.length message - 2)
+  else message
+;;
+
 let parse_structure (cli : Cli.t) table source =
   match cli.parsing with
-  | Topdown -> Rd_parser.parse_structure ~table source
+  | Topdown ->
+    (match Rd_parser.parse_structure ~table source with
+     | Ok _ as ok -> ok
+     | Error message ->
+       Error
+         (Printf.sprintf
+            "%s: not a valid source file (syntax error: %s)"
+            cli.input_file
+            (strip_leading_colon message)))
   | Menhir -> Error "the menhir (bottom-up) parser is not implemented yet"
 ;;
 

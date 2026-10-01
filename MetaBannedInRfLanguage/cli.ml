@@ -29,7 +29,7 @@ let help_text =
 A compiler for a subset of OCaml.
 
 positional arguments:
-  <input.ml>              path to the source file to compile
+  <input.ml>              name or path of the source file to compile
 
 options:
   -parsing <topdown|menhir>
@@ -69,7 +69,7 @@ let stop_after_of_string = function
   | "parsing" -> Ok Stop_after_parsing
   | "anf" -> Ok Stop_after_anf
   | value ->
-    Error (Printf.sprintf "unknown --stop-after value %S (expected parsing or anf)" value)
+    Error (Printf.sprintf "unknown --stop-after value %S (expected \"parsing\" or \"anf\")" value)
 ;;
 
 type partial =
