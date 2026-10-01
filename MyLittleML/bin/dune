@@ -11,4 +11,5 @@
   (backend bisect_ppx_ng)))
 
 (cram
+ (package MyLittleML)
  (deps ../compiler.exe))

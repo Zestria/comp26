@@ -1,4 +1,5 @@
 (cram
+ (package MyLittleML)
  (applies_to NewGVNtricky)
  (deps NewGVNtricky.ll)
  (enabled_if false)) ; TODO: codegeneration in next tasks

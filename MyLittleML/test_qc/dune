@@ -1,13 +1,7 @@
-(executable
+(test
  (name test_qc)
+ (package MyLittleML)
  (modules test_qc)
  (libraries qcheck parsing)
  (preprocess
   (pps ppx_deriving_qcheck ppx_deriving.show)))
-
-(rule
- (alias runtest)
- (deps
-  (:< test_qc.exe))
- (action
-  (run %{<})))
