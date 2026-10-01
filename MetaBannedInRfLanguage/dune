@@ -11,5 +11,5 @@
  (public_name compiler)
  (package MetaBannedInRfLanguage)
  (name compiler)
- (modules compiler)
+ (modules compiler cli)
  (libraries metabannedinrflanguage_frontend))

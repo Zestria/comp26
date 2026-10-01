@@ -1,3 +1,7 @@
 /_build
 /_coverage
 
+/fact.ml
+/fib.ml
+/out.txt
+
