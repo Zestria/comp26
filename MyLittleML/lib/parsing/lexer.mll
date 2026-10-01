@@ -1,4 +1,14 @@
 {
+(* The header is inside the ocamllex header section: only the { ... } block is
+   copied into the generated lexer.ml. *)
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Dmitrii Kuznetsov and other contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Parser
 
 exception SyntaxError of string

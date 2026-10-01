@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Dmitrii Kuznetsov and other contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Top-down parser for the MyLittleML OCaml subset, built with Angstrom.
 
     Produces the same {!Ast.prog} as the menhir-based bottom-up parser

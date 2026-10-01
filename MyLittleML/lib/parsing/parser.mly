@@ -40,6 +40,17 @@
       applications (application is tighter) and keyword-starting items
       become sibling items of the same phrase, which is equivalent. *)
 %{
+(* The header is inside the Menhir header section: only the %{ ... %} block is
+   copied into the generated parser.ml, a comment at the top of the .mly file
+   would be dropped. *)
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Dmitrii Kuznetsov and other contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Ast
 %}
 

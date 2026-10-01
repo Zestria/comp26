@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Dmitrii Kuznetsov and other contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Abstract syntax tree of the MyLittleML front-end (Task 1).
 
     The language is a subset of OCaml large enough to express CPS-style

@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Dmitrii Kuznetsov and other contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** QCheck round-trip tests for BOTH MyLittleML parsers (Task 1).
 
     Two generated properties check that printing a program with {!Parsing.Pp}
