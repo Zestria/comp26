@@ -11,3 +11,9 @@
  (public_name unnamed.ast_gen)
  (modules ast_gen)
  (libraries qcheck unnamed_frontend))
+
+(test
+ (name test_round_trip)
+ (package unnamed)
+ (modules test_round_trip)
+ (libraries qcheck unnamed_frontend ast_gen))
