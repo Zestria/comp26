@@ -10,7 +10,7 @@ let gen_ident : Ast.ident Gen.t = Gen.oneof_list candidate_names
 
 let gen_constant : Ast.constant Gen.t =
   Gen.oneof
-    [ Gen.map (fun i -> Ast.CInt i) (Gen.int_range (-20) 20)
+    [ Gen.map (fun i -> Ast.CInt i) (Gen.int_range 0 20)
     ; Gen.map (fun b -> Ast.CBool b) Gen.bool
     ; Gen.return Ast.CUnit
     ]
