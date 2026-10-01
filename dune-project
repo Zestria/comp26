@@ -147,7 +147,7 @@
   ppx_expect))
 
 (package
- (name unnamed)
+ (name MetaBannedInRfLanguage)
  (synopsis "A compiler for a subset of OCaml, targeting RISC-V")
  (description
   "An educational compiler for a subset of OCaml: top-down and bottom-up (menhir) parsers, type inference, and code generation targeting RISC-V.")

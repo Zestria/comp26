@@ -1,6 +1,6 @@
 (library
- (name unnamed_frontend)
- (public_name unnamed.frontend)
+ (name metabannedinrflanguage_frontend)
+ (public_name MetaBannedInRfLanguage.frontend)
  (wrapped false)
  (modules ast syntax op_settings pprint rd_parser)
  (libraries base angstrom)
@@ -9,7 +9,7 @@
 
 (executable
  (public_name compiler)
- (package unnamed)
+ (package MetaBannedInRfLanguage)
  (name compiler)
  (modules compiler)
- (libraries unnamed_frontend))
+ (libraries metabannedinrflanguage_frontend))
