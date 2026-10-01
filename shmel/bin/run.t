@@ -5,7 +5,7 @@
   
   Options:
     -parsing topdown|menhir   Parser to use: top-down (default) or bottom-up
-    --stop-after parsing|anf  Stop after the stage and print its result (default: anf)
+    --stop-after parsing|anf|closure  Stop after the stage and print its result (default: anf)
     -o <file>                 Write the result to <file>; '-o -' writes to stdout (default)
     --extended                Allow reserved words as identifiers (e.g. `let in = 1 in in`); top-down parser only
     --ast                     With '--stop-after parsing', also print the AST
