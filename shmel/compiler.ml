@@ -16,6 +16,7 @@ type parser_kind =
 type stage =
   | Parsing
   | Anf_stage
+  | Closure_stage
 
 type output =
   | Stdout
@@ -50,7 +51,7 @@ let usage =
    Compiles an ML program from <file> (or stdin).\n\n\
    Options:\n\
   \  -parsing topdown|menhir   Parser to use: top-down (default) or bottom-up\n\
-  \  --stop-after parsing|anf  Stop after the stage and print its result (default: anf)\n\
+  \  --stop-after parsing|anf|closure  Stop after the stage and print its result (default: anf)\n\
   \  -o <file>                 Write the result to <file>; '-o -' writes to stdout (default)\n\
   \  --extended                Allow reserved words as identifiers (e.g. `let in = 1 in in`); top-down parser only\n\
   \  --ast                     With '--stop-after parsing', also print the AST\n\
@@ -74,7 +75,9 @@ let parse_args args =
       loop llvm_demo { opts with stop_after = Parsing } rest
     | "--stop-after" :: "anf" :: rest ->
       loop llvm_demo { opts with stop_after = Anf_stage } rest
-    | "--stop-after" :: _ -> Error "--stop-after expects 'parsing' or 'anf'"
+    | "--stop-after" :: "closure" :: rest ->
+      loop llvm_demo { opts with stop_after = Closure_stage } rest
+    | "--stop-after" :: _ -> Error "--stop-after expects 'parsing', 'anf' or 'closure'"
     | "-o" :: "-" :: rest -> loop llvm_demo { opts with output = Stdout } rest
     | "-o" :: file :: rest -> loop llvm_demo { opts with output = File file } rest
     | [ "-o" ] -> Error "-o expects a file name or '-'"
@@ -156,6 +159,12 @@ let emit opts program ppf =
     if opts.show_ast then Format.fprintf ppf "%a@." Ast.pp_program program;
     Format.fprintf ppf "%s@." (Printast.show_program program)
   | Anf_stage -> Format.fprintf ppf "%a@." Anf.pp_program (Anf.of_program program)
+  | Closure_stage ->
+    Format.fprintf
+      ppf
+      "%a@."
+      Closure_ir.pp_program
+      (Closure_conversion.of_program (Anf.of_program program))
 ;;
 
 let write output f =
