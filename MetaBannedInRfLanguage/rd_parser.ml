@@ -46,14 +46,14 @@ let chain_left p_op p_expr =
 ;;
 
 let chain_right p_op p_expr =
-  let rec chain =
+  let rec go () =
     p_expr
     >>= fun e ->
     p_op
-    >>= (fun op -> chain >>= fun r -> return (EApply (EApply (EIdent op, e), r)))
+    >>= (fun op -> go () >>= fun r -> return (EApply (EApply (EIdent op, e), r)))
     <|> return e
   in
-  chain
+  go ()
 ;;
 
 (* ==================== constants ==================== *)
@@ -101,13 +101,13 @@ let parse_pattern =
     let p_paren_inner =
       self
       >>= fun first ->
-      many (attempt (token "," *> self))
+      many (token "," *> self)
       >>= function
       | [] -> return first
       | second :: tail -> return (PTuple (first, second, tail))
     in
-    let p_paren = attempt (token "(" *> p_paren_inner <* token ")") in
-    choice [ attempt p_const; attempt p_any; p_var; p_paren ])
+    let p_paren = token "(" *> p_paren_inner <* token ")" in
+    choice [ p_const; p_any; p_var; p_paren ])
 ;;
 
 (* ==================== expressions ==================== *)
@@ -117,7 +117,7 @@ let parse_rec_flag = keyword "rec" *> return Rec <|> return NonRec
 let parse_value_binding self =
   parse_pattern
   >>= fun pattern ->
-  many (attempt parse_pattern)
+  many parse_pattern
   >>= fun patterns ->
   token "=" *> self
   >>| fun expression ->
@@ -134,7 +134,7 @@ let parse_case self =
 
 let parse_cases self =
   parse_case self
-  >>= fun first -> many (attempt (ws1 *> parse_case self)) >>| fun rest -> first, rest
+  >>= fun first -> many (ws1 *> parse_case self) >>| fun rest -> first, rest
 ;;
 
 (* Parses [()], [(e)], [(a, b)], and [( + )]. *)
@@ -142,18 +142,18 @@ let parse_expr_paren table self =
   let operator_value =
     choice
       (List.map (Syntax.operator_names table) ~f:(fun name ->
-         attempt (p_operator_token name) >>| fun _ -> EIdent name))
+         p_operator_token name >>| fun _ -> EIdent name))
   in
   let inner =
-    attempt operator_value
+    operator_value
     <|> (self
          >>= fun first ->
-         many (attempt (token "," *> self))
+         many (token "," *> self)
          >>= function
          | [] -> return first
          | second :: tail -> return (ETuple (first, second, tail)))
   in
-  attempt (token "(" *> inner <* token ")")
+  token "(" *> inner <* token ")"
 ;;
 
 let parse_atom table self =
@@ -174,8 +174,8 @@ let parse_expr_application atom =
 let parse_expr_prefix table atom application =
   let operators =
     List.concat_map
-      (fun (entry : Syntax.prefix_entry) ->
-         List.map (fun name -> name, entry.arity) entry.operators)
+      ~f:(fun (entry : Syntax.prefix_entry) ->
+        List.map ~f:(fun name -> name, entry.arity) entry.operators)
       (Syntax.prefix_entries table)
   in
   let p_op =
@@ -192,11 +192,11 @@ let parse_expr_prefix table atom application =
     in
     go arity []
     >>| fun operands ->
-    List.fold_left (fun acc operand -> EApply (acc, operand)) (EIdent name) operands
+    List.fold_left operands ~init:(EIdent name) ~f:(fun acc operand ->
+      EApply (acc, operand))
   in
-  attempt
-    (p_op
-     >>= fun (name, arity) -> if arity = 1 then p_applied name else p_arity name arity)
+  p_op
+  >>= (fun (name, arity) -> if arity = 1 then p_applied name else p_arity name arity)
   <|> application
 ;;
 
@@ -241,7 +241,7 @@ let parse_expr_function self =
 let parse_expr_fun self =
   keyword "fun" *> parse_pattern
   >>= fun parameter ->
-  many (attempt parse_pattern)
+  many parse_pattern
   >>= fun parameters ->
   token "->" *> self
   >>| fun body ->
@@ -254,7 +254,7 @@ let parse_expr_let self =
   >>= fun rec_flag ->
   parse_value_binding self
   >>= fun first ->
-  many (attempt (ws1 *> keyword "and" *> parse_value_binding self))
+  many (ws1 *> keyword "and" *> parse_value_binding self)
   >>= fun rest ->
   ws1 *> keyword "in" *> self >>| fun body -> ELet (rec_flag, first, rest, body)
 ;;
@@ -264,11 +264,10 @@ let make_expression table =
     let atom = parse_atom table self in
     let application = parse_expr_application atom in
     let infix = parse_expr_infix table (parse_expr_prefix table atom application) in
-    attempt (parse_expr_fun self)
-    <|> (attempt (parse_expr_let self)
-         <|> (attempt (parse_expr_function self)
-              <|> (attempt (parse_expr_match self)
-                   <|> (attempt (parse_expr_if self) <|> infix)))))
+    parse_expr_fun self
+    <|> (parse_expr_let self
+         <|> (parse_expr_function self
+              <|> (parse_expr_match self <|> (parse_expr_if self <|> infix)))))
 ;;
 
 (* ==================== structure ==================== *)
@@ -278,13 +277,11 @@ let parse_structure_value self =
   >>= fun rec_flag ->
   parse_value_binding self
   >>= fun first ->
-  many (attempt (ws1 *> keyword "and" *> parse_value_binding self))
+  many (ws1 *> keyword "and" *> parse_value_binding self)
   >>| fun rest -> SValue (rec_flag, first, rest)
 ;;
 
-let parse_structure_item self =
-  attempt (self >>| fun e -> SEval e) <|> parse_structure_value self
-;;
+let parse_structure_item self = self >>| (fun e -> SEval e) <|> parse_structure_value self
 
 let p_structure parse_expression =
   let psemicolon = many (token ";;") in
