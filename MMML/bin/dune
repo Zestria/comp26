@@ -13,4 +13,5 @@
   (backend bisect_ppx_ng)))
 
 (cram
+ (package MMML)
  (deps ../compiler.exe runtime.c))
