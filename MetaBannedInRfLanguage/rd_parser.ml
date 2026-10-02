@@ -294,7 +294,3 @@ let p_structure parse_expression =
 let parse_structure ?(table = Syntax.default_table) input =
   parse_string ~consume:All (p_structure (make_expression table)) input
 ;;
-
-let parse_expr ?(table = Syntax.default_table) input =
-  parse_string ~consume:All (make_expression table <* ws) input
-;;

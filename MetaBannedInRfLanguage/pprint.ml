@@ -135,5 +135,4 @@ let pp_structure ppf items =
     items
 ;;
 
-let string_of_expression expression = asprintf "%a" pp_expression expression
 let string_of_structure structure = asprintf "%a" pp_structure structure
