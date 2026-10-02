@@ -37,7 +37,7 @@ let parse_structure (cli : Cli.t) table source =
      | Error message ->
        Error
          (Printf.sprintf
-            "%s: not a valid source file (syntax error: %s)"
+            "%s: parsing error: %s"
             cli.input_file
             (strip_leading_colon message)))
   | Menhir -> Error "the menhir (bottom-up) parser is not implemented yet"
