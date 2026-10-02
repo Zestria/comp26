@@ -45,9 +45,9 @@ let rec pp_expression ppf = function
   | EIdent name -> pp_ident ppf name
   | EFun (parameter, body) ->
     fprintf ppf "fun %a -> %a" pp_pattern parameter pp_expression body
-  | EFunction (first, rest) -> fprintf ppf "function %a" (pp_cases (first, rest))
+  | EFunction (first, rest) -> fprintf ppf "function %a" pp_cases (first, rest)
   | EMatch (subject, first, rest) ->
-    fprintf ppf "match %a with %a" pp_atom subject (pp_cases (first, rest))
+    fprintf ppf "match %a with %a" pp_atom subject pp_cases (first, rest)
   | EIf (condition, then_branch, None) ->
     fprintf ppf "if %a then %a" pp_atom condition pp_atom then_branch
   | EIf (condition, then_branch, Some else_branch) ->
@@ -66,7 +66,8 @@ let rec pp_expression ppf = function
       "let%a %a in %a"
       pp_rec_flag
       rec_flag
-      (pp_value_bindings (first, rest))
+      pp_value_bindings
+      (first, rest)
       pp_expression
       body
   | ETuple (first, second, rest) ->
@@ -93,31 +94,37 @@ and pp_atom ppf = function
 
 and pp_value_bindings ppf (first, rest) =
   List.iteri
-    (fun index (vb_pat, vb_expr) ->
+    (fun index { vb_pat; vb_expr } ->
        if index > 0 then fprintf ppf " and ";
        fprintf ppf "%a = %a" pp_pattern vb_pat pp_atom vb_expr)
     (first :: rest)
 
-and pp_case_body ppf = function
-  | (EFun _ | EMatch _ | EFunction _) as expression ->
-    fprintf ppf "(%a)" pp_expression expression
-  | expression -> fprintf ppf "%a" pp_expression expression
+and pp_case_body ppf case_expr =
+  let rec ends_with_case = function
+    | EFun _ | EMatch _ | EFunction _ -> true
+    | ELet (_, _, _, body) -> ends_with_case body
+    | EIf (_, _, Some branch) -> ends_with_case branch
+    | _ -> false
+  in
+  if ends_with_case case_expr
+  then fprintf ppf "(%a)" pp_expression case_expr
+  else fprintf ppf "%a" pp_expression case_expr
 
-and pp_case ppf (case_pat, case_expr) =
+and pp_case ppf { case_pat; case_expr } =
   fprintf ppf "| %a -> %a" pp_pattern case_pat pp_case_body case_expr
 
 and pp_cases ppf (first, rest) =
   List.iteri
-    (fun index (case_pat, case_expr) ->
+    (fun index case ->
        if index > 0 then fprintf ppf "\n";
-       fprintf ppf "%a" pp_case (case_pat, case_expr))
+       fprintf ppf "%a" pp_case case)
     (first :: rest)
 ;;
 
 let pp_structure_item ppf = function
   | SEval expression -> fprintf ppf "%a;;" pp_expression expression
   | SValue (rec_flag, first, rest) ->
-    fprintf ppf "let%a %a;;" pp_rec_flag rec_flag (pp_value_bindings (first, rest))
+    fprintf ppf "let%a %a;;" pp_rec_flag rec_flag pp_value_bindings (first, rest)
 ;;
 
 let pp_structure ppf items =
