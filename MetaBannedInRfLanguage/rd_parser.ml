@@ -174,8 +174,10 @@ let parse_expr_application atom =
 let parse_expr_prefix table atom application =
   let operators =
     List.concat_map
-      ~f:(fun (entry : Syntax.prefix_entry) ->
-        List.map ~f:(fun name -> name, entry.arity) entry.operators)
+      ~f:(fun entry ->
+        match entry.fixity with
+        | Syntax.Prefix arity -> List.map ~f:(fun name -> name, arity) entry.operators
+        | Syntax.Infix _ -> [])
       (Syntax.prefix_entries table)
   in
   let p_op =
@@ -201,18 +203,17 @@ let parse_expr_prefix table atom application =
 ;;
 
 let parse_expr_infix table lower =
-  List.fold_right
-    (Syntax.infix_entries table)
-    ~init:lower
-    ~f:(fun (entry : Syntax.infix_entry) inner ->
-      let p_op =
-        choice
-          (List.map entry.operators ~f:(fun name ->
-             p_operator_token name >>| fun _ -> name))
-      in
-      match entry.associativity with
-      | Left -> chain_left p_op inner
-      | Right -> chain_right p_op inner)
+  List.fold_right (Syntax.infix_entries table) ~init:lower ~f:(fun entry inner ->
+    let p_op =
+      choice
+        (List.map entry.operators ~f:(fun name -> p_operator_token name >>| fun _ -> name))
+    in
+    match entry.fixity with
+    | Syntax.Infix (_, associativity) ->
+      (match associativity with
+       | Syntax.Left -> chain_left p_op inner
+       | Syntax.Right -> chain_right p_op inner)
+    | Syntax.Prefix _ -> inner)
 ;;
 
 let parse_expr_if self =
