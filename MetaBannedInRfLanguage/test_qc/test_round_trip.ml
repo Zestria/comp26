@@ -13,6 +13,7 @@ let rec shrink_pattern p =
     of_list (p1 :: p2 :: rest)
     <+> (shrink_pattern p1 >|= fun p1 -> Ast.PTuple (p1, p2, rest))
     <+> (shrink_pattern p2 >|= fun p2 -> Ast.PTuple (p1, p2, rest))
+    <+> (QCheck.Shrink.list ~shrink:shrink_pattern rest >|= fun rest -> Ast.PTuple (p1, p2, rest))
 ;;
 
 let rec shrink_expr e =
@@ -20,7 +21,9 @@ let rec shrink_expr e =
   match e with
   | Ast.EConst _ | Ast.EIdent _ -> empty
   | Ast.EFun (p, body) ->
-    of_list [ body ] <+> (shrink_expr body >|= fun body -> Ast.EFun (p, body))
+    of_list [ body ]
+    <+> (shrink_pattern p >|= fun p -> Ast.EFun (p, body))
+    <+> (shrink_expr body >|= fun body -> Ast.EFun (p, body))
   | Ast.EApply (f, arg) ->
     of_list [ f; arg ]
     <+> (shrink_expr f >|= fun f -> Ast.EApply (f, arg))
@@ -29,6 +32,7 @@ let rec shrink_expr e =
     of_list (e1 :: e2 :: rest)
     <+> (shrink_expr e1 >|= fun e1 -> Ast.ETuple (e1, e2, rest))
     <+> (shrink_expr e2 >|= fun e2 -> Ast.ETuple (e1, e2, rest))
+    <+> (QCheck.Shrink.list ~shrink:shrink_expr rest >|= fun rest -> Ast.ETuple (e1, e2, rest))
   | Ast.EIf (c, t, None) ->
     of_list [ c; t ]
     <+> (shrink_expr c >|= fun c -> Ast.EIf (c, t, None))
@@ -40,16 +44,22 @@ let rec shrink_expr e =
     <+> (shrink_expr f >|= fun f -> Ast.EIf (c, t, Some f))
   | Ast.ELet (rf, vb, extra, body) ->
     of_list [ vb.vb_expr; body ]
+    <+> (shrink_pattern vb.vb_pat
+         >|= fun vb_pat -> Ast.ELet (rf, { vb with vb_pat }, extra, body))
     <+> (shrink_expr vb.vb_expr
          >|= fun vb_expr -> Ast.ELet (rf, { vb with vb_expr }, extra, body))
     <+> (shrink_expr body >|= fun body -> Ast.ELet (rf, vb, extra, body))
   | Ast.EFunction (c, cs) ->
     of_list (c.case_expr :: List.map (fun (c : Ast.case) -> c.case_expr) cs)
+    <+> (shrink_pattern c.case_pat
+         >|= fun case_pat -> Ast.EFunction ({ c with case_pat }, cs))
     <+> (shrink_expr c.case_expr
          >|= fun case_expr -> Ast.EFunction ({ c with case_expr }, cs))
   | Ast.EMatch (scrutinee, c, cs) ->
     of_list (scrutinee :: c.case_expr :: List.map (fun (c : Ast.case) -> c.case_expr) cs)
     <+> (shrink_expr scrutinee >|= fun scrutinee -> Ast.EMatch (scrutinee, c, cs))
+    <+> (shrink_pattern c.case_pat
+         >|= fun case_pat -> Ast.EMatch (scrutinee, { c with case_pat }, cs))
     <+> (shrink_expr c.case_expr
          >|= fun case_expr -> Ast.EMatch (scrutinee, { c with case_expr }, cs))
 ;;
@@ -59,8 +69,9 @@ let shrink_structure_item =
   function
   | Ast.SEval e -> shrink_expr e >|= fun e -> Ast.SEval e
   | Ast.SValue (rf, vb, extra) ->
-    shrink_expr vb.vb_expr
-    >|= fun vb_expr -> Ast.SValue (rf, { vb with vb_expr }, extra)
+    (shrink_pattern vb.vb_pat >|= fun vb_pat -> Ast.SValue (rf, { vb with vb_pat }, extra))
+    <+> (shrink_expr vb.vb_expr
+         >|= fun vb_expr -> Ast.SValue (rf, { vb with vb_expr }, extra))
 ;;
 
 let shrink_structure structure = QCheck.Shrink.list ~shrink:shrink_structure_item structure
