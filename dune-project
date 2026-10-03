@@ -146,4 +146,22 @@
   qcheck
   ppx_expect))
 
+(package
+ (name MyLittleML)
+ (synopsis "A small compiler")
+ (authors "Dmitrii Kuznetsov <dmitrvlkuznetsov@gmail.com>")
+ (maintainers "Dmitrii Kuznetsov <dmitrvlkuznetsov@gmail.com>")
+ (license LGPL-3.0-or-later)
+ (depends
+  ocaml
+  dune
+  menhir
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  (llvm
+   (= "18-shared"))
+  ppx_deriving_qcheck))
+
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

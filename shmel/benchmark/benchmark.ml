@@ -63,7 +63,7 @@ let sizes = [ 100; 1_000; 10_000 ]
 let cases =
   List.concat_map
     (fun (family, make_source) ->
-      List.map (fun size -> { family; size; source = make_source size }) sizes)
+       List.map (fun size -> { family; size; source = make_source size }) sizes)
     [ "arithmetic", arithmetic; "application", application; "nested-let", nested_lets ]
 ;;
 
@@ -123,10 +123,7 @@ let verify case =
 ;;
 
 let milliseconds seconds = seconds *. 1_000.
-
-let megabytes_per_second ~bytes ~seconds =
-  float_of_int bytes /. seconds /. 1_000_000.
-;;
+let megabytes_per_second ~bytes ~seconds = float_of_int bytes /. seconds /. 1_000_000.
 
 let print_header () =
   Printf.printf "OCaml: %s\n" Sys.ocaml_version;
@@ -176,15 +173,15 @@ let run_case index case =
       in
       List.iter
         (fun parser ->
-          try print_measurement case parser (measure parser case.source) with
-          | exn ->
-            Printf.printf
-              "%-12s %8d %9d %-11s ERROR: %s\n%!"
-              case.family
-              case.size
-              (String.length case.source)
-              parser.name
-              (Printexc.to_string exn))
+           try print_measurement case parser (measure parser case.source) with
+           | exn ->
+             Printf.printf
+               "%-12s %8d %9d %-11s ERROR: %s\n%!"
+               case.family
+               case.size
+               (String.length case.source)
+               parser.name
+               (Printexc.to_string exn))
         parsers
   with
   | exn -> report_verification_error (Printexc.to_string exn)
@@ -193,3 +190,4 @@ let run_case index case =
 let () =
   print_header ();
   List.iteri run_case cases
+;;

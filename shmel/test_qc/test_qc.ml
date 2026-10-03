@@ -26,6 +26,7 @@ end
 
 module Ast_gen = struct
   open QCheck
+
   let names =
     [ "x"
     ; "y"
@@ -68,12 +69,7 @@ module Ast_gen = struct
         ; 2, Gen.map (fun expr -> Ast.Neg expr) sub
         ; 2, Gen.map2 (fun name body -> Ast.Abs (name, body)) name sub
         ; 3, Gen.map2 (fun fn arg -> Ast.App (fn, arg)) sub sub
-        ; ( 5
-          , Gen.map3
-              (fun op left right -> Ast.BinOp (op, left, right))
-              binop
-              sub
-              sub )
+        ; 5, Gen.map3 (fun op left right -> Ast.BinOp (op, left, right)) binop sub sub
         ; 2, Gen.map3 (fun cond yes no -> Ast.If (cond, yes, no)) sub3 sub3 sub3
         ; 2, Gen.map3 (fun name value body -> Ast.Let (name, value, body)) name sub sub
         ; ( 2
@@ -115,8 +111,7 @@ module Ast_gen = struct
       of_list [ fn_body; body ]
       <+> (shrink_expr fn_body
            >>= fun fn_body -> return (Ast.LetRec (fn, param, fn_body, body)))
-      <+> (shrink_expr body
-           >>= fun body -> return (Ast.LetRec (fn, param, fn_body, body)))
+      <+> (shrink_expr body >>= fun body -> return (Ast.LetRec (fn, param, fn_body, body)))
   ;;
 
   let print expr =
@@ -133,7 +128,8 @@ module Ast_gen = struct
         ]
     in
     Gen.map2
-      (fun first decls -> Option.to_list (Option.map (fun e -> Ast.DExpr e) first) @ decls)
+      (fun first decls ->
+         Option.to_list (Option.map (fun e -> Ast.DExpr e) first) @ decls)
       (Gen.option expr)
       (Gen.list_size (Gen.int_range 0 5) decl)
   ;;
@@ -153,8 +149,7 @@ let expect_parse ~parser_name parser source expected =
       expected
       Ast.pp_expr
       actual
-  | Error error ->
-    QCheck.Test.fail_reportf "%s rejected %S: %s" parser_name source error
+  | Error error -> QCheck.Test.fail_reportf "%s rejected %S: %s" parser_name source error
 ;;
 
 let expect_both source expected =
@@ -198,14 +193,8 @@ let syntax_cases =
       "1 - 2 - 3"
       (BinOp (Sub, BinOp (Sub, Const 1, Const 2), Const 3))
   ; fixed_case "single argument function" "fun x -> x" (Abs ("x", Var "x"))
-  ; fixed_case
-      "multiple argument function"
-      "fun x y -> x"
-      (Abs ("x", Abs ("y", Var "x")))
-  ; fixed_case
-      "function application"
-      "f x y"
-      (App (App (Var "f", Var "x"), Var "y"))
+  ; fixed_case "multiple argument function" "fun x y -> x" (Abs ("x", Abs ("y", Var "x")))
+  ; fixed_case "function application" "f x y" (App (App (Var "f", Var "x"), Var "y"))
   ; fixed_case
       "nested function application"
       "f (g x)"
@@ -220,7 +209,10 @@ let syntax_cases =
       "subtraction without spaces"
       "f (n-1)"
       (App (Var "f", BinOp (Sub, Var "n", Const 1)))
-  ; fixed_case "minus after a function is subtraction" "f -1" (BinOp (Sub, Var "f", Const 1))
+  ; fixed_case
+      "minus after a function is subtraction"
+      "f -1"
+      (BinOp (Sub, Var "f", Const 1))
   ; fixed_case "nested functions" "fun x -> fun y -> x" (Abs ("x", Abs ("y", Var "x")))
   ; fixed_case "equals without spaces" "let x =1 in x" (Let ("x", Const 1, Var "x"))
   ]

@@ -74,7 +74,8 @@ let make_parser ~extended =
   let reserved s = List.mem s keywords in
   (* [_] can be bound, but it is not a variable. *)
   let identifier =
-    name >>= fun s -> if reserved s || String.equal s "_" then fail "keyword" else return s
+    name
+    >>= fun s -> if reserved s || String.equal s "_" then fail "keyword" else return s
   in
   let binder_name =
     name >>= fun s -> if (not extended) && reserved s then fail "keyword" else return s
@@ -178,8 +179,7 @@ let make_parser ~extended =
       let add = chainl1 mult add_op in
       let cmp = chainl1 add cmp_op in
       choice
-        [ (keyword "fun"
-           *> many1 (spaces *> binder_name <* spaces)
+        [ (keyword "fun" *> many1 (spaces *> binder_name <* spaces)
            >>= fun vars ->
            string "->" *> expr
            >>| fun body -> List.fold_right (fun v b -> Ast.Abs (v, b)) vars body)
@@ -190,7 +190,8 @@ let make_parser ~extended =
      A [let] followed by [in] is an expression. *)
   let first_item =
     binding expr
-    >>= (fun b -> option (declaration b) (keyword "in" *> expr >>| fun e -> Ast.DExpr (let_in b e)))
+    >>= (fun b ->
+    option (declaration b) (keyword "in" *> expr >>| fun e -> Ast.DExpr (let_in b e)))
     <|> (expr >>| fun e -> Ast.DExpr e)
   in
   let program =
@@ -205,7 +206,8 @@ let make_parser ~extended =
 let syntax_error text offset =
   let line, column =
     String.fold_left
-      (fun (line, column) c -> if Char.equal c '\n' then line + 1, 1 else line, column + 1)
+      (fun (line, column) c ->
+         if Char.equal c '\n' then line + 1, 1 else line, column + 1)
       (1, 1)
       (String.sub text 0 offset)
   in

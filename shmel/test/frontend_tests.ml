@@ -104,7 +104,8 @@ let cps_fibonacci_ast =
                     ( "x"
                     , App
                         ( App (Var "fib", BinOp (Sub, Var "n", Const 2))
-                        , Abs ("y", App (Var "k", BinOp (Add, Var "x", Var "y"))) ) ) ) ) )
+                        , Abs ("y", App (Var "k", BinOp (Add, Var "x", Var "y"))) ) ) ) )
+        )
     , App (App (Var "fib", Const 10), Abs ("x", Var "x")) )
 ;;
 
@@ -159,13 +160,13 @@ let () =
   List.iter (check_ast "combinator" combinator) cases;
   List.iter
     (fun (parse_name, parse) ->
-      check_ast parse_name parse ("CPS factorial", cps_factorial, cps_factorial_ast);
-      check_ast parse_name parse ("CPS fibonacci", cps_fibonacci, cps_fibonacci_ast))
+       check_ast parse_name parse ("CPS factorial", cps_factorial, cps_factorial_ast);
+       check_ast parse_name parse ("CPS fibonacci", cps_fibonacci, cps_fibonacci_ast))
     [ "menhir", menhir; "combinator", combinator ];
   List.iter
     (fun source ->
-      check_rejected "menhir" menhir source;
-      check_rejected "combinator" combinator source)
+       check_rejected "menhir" menhir source;
+       check_rejected "combinator" combinator source)
     [ "(1 + 2"; "1 +" ];
   check_rejected "combinator" combinator "1 + @";
   let extended source =
@@ -175,5 +176,8 @@ let () =
   in
   let source = "let in = 1 in in" in
   check_rejected "combinator without --extended" combinator source;
-  check_ast "combinator with --extended" extended ("keyword as name", source, Let ("in", Const 1, Var "in"))
+  check_ast
+    "combinator with --extended"
+    extended
+    ("keyword as name", source, Let ("in", Const 1, Var "in"))
 ;;
