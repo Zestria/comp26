@@ -7,7 +7,7 @@
 (subdir tests
  (library
   (name anf_tests)
-  (modules and_test)
+  (modules anf_test)
   (libraries middleend frontend)
   (inline_tests)
   (preprocess
