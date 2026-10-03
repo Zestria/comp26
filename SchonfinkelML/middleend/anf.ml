@@ -67,9 +67,9 @@ let create_anf expr =
         | [] -> ACExpr (CApp (h1, h2, List.rev acc))
         | x :: xs -> aux x (fun imm -> fold_aux h1 h2 (imm :: acc) xs)
       in
-      aux left (fun limm -> aux left (fun rimm -> fold_aux limm rimm [] tail))
+      aux left (fun limm -> aux right (fun rimm -> fold_aux limm rimm [] tail))
     | Let (flag, v, left, right) ->
-      aux left (fun limm -> aux right (fun rimm -> ALet (flag, v, CImmExpr limm, k rimm)))
+      aux left (fun limm -> ALet (flag, v, CImmExpr limm, aux right k))
     | Abstr (v, e) -> aux e (fun imm -> ACExpr (CAbstr (v, CImmExpr imm)))
     | If (p, t, e) ->
       aux p (fun imm ->
@@ -77,3 +77,45 @@ let create_anf expr =
   in
   aux expr aexpr_of_immexpr
 ;;
+
+let pp_immexpr ppf = function
+  | ImmNum n -> Format.fprintf ppf "%d" n
+  | ImmId s -> Format.fprintf ppf "%s" s
+  | ImmBool b -> Format.fprintf ppf "%b" b
+  | ImmUnit -> Format.fprintf ppf "()"
+;;
+
+let rec pp_cexpr ppf = function
+  | CBinop (op, a, b) -> Format.fprintf ppf "@[%a %s %a@]" pp_immexpr a op pp_immexpr b
+  | CImmExpr i -> pp_immexpr ppf i
+  | CIfExpr (p, t, e) ->
+    Format.fprintf
+      ppf
+      "@[<2>if %a then@ %a@ else@ %a@]"
+      pp_immexpr
+      p
+      pp_aexpr
+      t
+      pp_aexpr
+      e
+  | CApp (f, arg, args) ->
+    Format.fprintf
+      ppf
+      "@[(%a %a%a)@]"
+      pp_immexpr
+      f
+      pp_immexpr
+      arg
+      (fun ppf -> List.iter (fun a -> Format.fprintf ppf " %a" pp_immexpr a))
+      args
+  | CAbstr (v, body) -> Format.fprintf ppf "@[<2>fun %s -> %a@]" v pp_cexpr body
+
+and pp_aexpr ppf = function
+  | ALet (Recursive, x, c, rest) ->
+    Format.fprintf ppf "@[<2>let rec %s =@ %a@ in@ %a@]" x pp_cexpr c pp_aexpr rest
+  | ALet (NotRecursive, x, c, rest) ->
+    Format.fprintf ppf "@[<2>let %s =@ %a@ in@ %a@]" x pp_cexpr c pp_aexpr rest
+  | ACExpr c -> pp_cexpr ppf c
+;;
+
+let string_of_aexpr a = Format.asprintf "%a" pp_aexpr a
