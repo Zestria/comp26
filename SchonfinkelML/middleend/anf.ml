@@ -8,37 +8,21 @@
 
 open Frontend.Common
 
-type binop =
-  | Plus
-  | Minus
-  | Mul
-  | Divide
-  | Equal
-  | GreaterThan
-  | LessThan
-  | GreaterThanEqual
-  | LessThanEqual
-
-let binop_of_string = function
-  | "+" -> Plus
-  | "-" -> Minus
-  | "*" -> Mul
-  | "/" -> Divide
-  | "=" -> Equal
-  | "<" -> GreaterThan
-  | ">" -> LessThan
-  | "<=" -> GreaterThanEqual
-  | ">=" -> LessThanEqual
-  | _ -> failwith "Not a binary operation"
-;;
-
 type immexpr =
   | ImmNum of int
   | ImmId of string
+  | ImmBool of bool
+  | ImmUnit
 
 and cexpr =
-  | CBinop of binop * immexpr * immexpr
+  | CBinop of
+      string
+      * immexpr
+      * immexpr (* string for now in case of user-defined binary operators *)
   | CImmExpr of immexpr
+  | CIfExpr of immexpr * aexpr * aexpr
+  | CApp of immexpr * immexpr * immexpr list
+  | CAbstr of string * cexpr
 
 and aexpr =
   | ALet of let_flag * string * cexpr * aexpr
@@ -66,17 +50,30 @@ let create_anf expr =
     match e with
     | Ident x -> k (ImmId x)
     | Const (LitInt n) -> k (ImmNum n)
+    | Const LitUnit -> k ImmUnit
     | App (App (Ident s, left), right) when is_binop s ->
       let id = gensym_id () in
-      let binop = binop_of_string s in
       aux left (fun limm ->
         aux right (fun rimm ->
-          ALet (NotRecursive, id, CBinop (binop, limm, rimm), k (ImmId id))))
-    | App _ -> assert false
-    | Let _ -> assert false
-    | If _ -> assert false
-    | Abstr _ -> assert false
-    | _ -> assert false
+          ALet (NotRecursive, id, CBinop (s, limm, rimm), k (ImmId id))))
+    | App (left, right) ->
+      let rec unwrap expr acc aux_expr =
+        match expr with
+        | App (new_left, new_right) -> unwrap new_left (aux_expr :: acc) new_right
+        | expr -> expr, aux_expr, acc
+      in
+      let left, right, tail = unwrap left [] right in
+      let rec fold_aux h1 h2 acc = function
+        | [] -> ACExpr (CApp (h1, h2, List.rev acc))
+        | x :: xs -> aux x (fun imm -> fold_aux h1 h2 (imm :: acc) xs)
+      in
+      aux left (fun limm -> aux left (fun rimm -> fold_aux limm rimm [] tail))
+    | Let (flag, v, left, right) ->
+      aux left (fun limm -> aux right (fun rimm -> ALet (flag, v, CImmExpr limm, k rimm)))
+    | Abstr (v, e) -> aux e (fun imm -> ACExpr (CAbstr (v, CImmExpr imm)))
+    | If (p, t, e) ->
+      aux p (fun imm ->
+        ACExpr (CIfExpr (imm, aux t aexpr_of_immexpr, aux e aexpr_of_immexpr)))
   in
   aux expr aexpr_of_immexpr
 ;;
