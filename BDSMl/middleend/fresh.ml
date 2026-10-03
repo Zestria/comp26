@@ -6,5 +6,11 @@
 
 [@@@ocaml.text "/*"]
 
-let fresh_ident _base = failwith "Fresh.fresh_ident: not implemented"
-let reset () = failwith "Fresh.reset: not implemented"
+let counter = ref 0
+
+let fresh_ident base =
+  incr counter;
+  Printf.sprintf "%s_%d" base !counter
+;;
+
+let reset () = counter := 0
