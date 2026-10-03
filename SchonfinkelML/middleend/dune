@@ -3,3 +3,17 @@
  (modules anf)
  (libraries frontend)
  (package SchonfinkelML))
+
+(subdir tests
+ (library
+  (name anf_tests)
+  (modules and_test)
+  (libraries middleend frontend)
+  (inline_tests)
+  (preprocess
+   (pps ppx_expect_nobase))
+  (package SchonfinkelML))
+
+ (env
+  (release
+   (inline_tests enabled))))
