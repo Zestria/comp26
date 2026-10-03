@@ -36,8 +36,7 @@ and aexpr =
 (** A top-level declaration. *)
 type decl =
   | DLet of string * string list * aexpr (** [let f p1 ... pn = body], [n >= 0] *)
-  | DLetRec of string * string list * aexpr
-  (** [let rec f p1 ... pn = body], [n >= 1] *)
+  | DLetRec of string * string list * aexpr (** [let rec f p1 ... pn = body], [n >= 1] *)
   | DExpr of aexpr (** an expression at the beginning of the program *)
 
 type program = decl list

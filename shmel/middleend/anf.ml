@@ -150,9 +150,9 @@ let eta_target params = function
          && List.compare_lengths params args = 0
          && List.for_all2
               (fun p a ->
-                match a with
-                | ImmVar x -> String.equal p x
-                | ImmInt _ -> false)
+                 match a with
+                 | ImmVar x -> String.equal p x
+                 | ImmInt _ -> false)
               params
               args -> Some f
   | _ -> None
@@ -422,12 +422,15 @@ let pp_imm ppf = function
 ;;
 
 let pp_list pp ppf xs = Format.pp_print_list ~pp_sep:Format.pp_print_space pp ppf xs
-let pp_params ppf params = Format.fprintf ppf "@[<h>%a@]" (pp_list Format.pp_print_string) params
+
+let pp_params ppf params =
+  Format.fprintf ppf "@[<h>%a@]" (pp_list Format.pp_print_string) params
+;;
 
 (* Expressions that are printed on one line. *)
 let is_flat = function
-  | CImm _ | CNeg _ | CBinOp _ | CApp _ | CFun (_, AExpr (CImm _ | CNeg _ | CBinOp _ | CApp _))
-    -> true
+  | CImm _ | CNeg _ | CBinOp _ | CApp _
+  | CFun (_, AExpr (CImm _ | CNeg _ | CBinOp _ | CApp _)) -> true
   | CIf _ | CFun _ -> false
 ;;
 
@@ -446,10 +449,19 @@ let rec pp_cexpr ppf = function
   | CBinOp (op, a, b) -> pp_binop ppf (op, a, b)
   | CApp (f, args) -> Format.fprintf ppf "@[<h>%a %a@]" pp_imm f (pp_list pp_imm) args
   | CIf (c, t, e) ->
-    Format.fprintf ppf "@[<v>if %a@,%a@,%a@]" pp_cond c (pp_branch "then") t (pp_branch "else") e
+    Format.fprintf
+      ppf
+      "@[<v>if %a@,%a@,%a@]"
+      pp_cond
+      c
+      (pp_branch "then")
+      t
+      (pp_branch "else")
+      e
   | CFun (params, (AExpr c as body)) when is_flat c ->
     Format.fprintf ppf "fun %a -> %a" pp_params params pp_aexpr body
-  | CFun (params, body) -> Format.fprintf ppf "@[<v 2>fun %a ->@,%a@]" pp_params params pp_aexpr body
+  | CFun (params, body) ->
+    Format.fprintf ppf "@[<v 2>fun %a ->@,%a@]" pp_params params pp_aexpr body
 
 and pp_branch keyword ppf = function
   | AExpr c as a when is_flat c -> Format.fprintf ppf "%s %a" keyword pp_aexpr a

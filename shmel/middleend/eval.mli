@@ -34,7 +34,7 @@ type error =
 type outcome =
   { output : string (** what the program printed *)
   ; result : (value, error) result
-  (** the value of the last declaration, [()] for an empty program *)
+    (** the value of the last declaration, [()] for an empty program *)
   }
 
 (** Runs a program; [print_int] is predefined. *)
@@ -42,5 +42,6 @@ val run : Shmel_lib.Ast.program -> outcome
 
 (** Evaluates an expression; its output is discarded. *)
 val eval : Shmel_lib.Ast.expr -> (value, error) result
+
 val pp_value : Format.formatter -> value -> unit
 val pp_error : Format.formatter -> error -> unit
