@@ -28,27 +28,27 @@ let%expect_test "identifier" =
 
 let%expect_test "binary op becomes a let-bound temporary" =
   print_anf (eadd (econsti 1) (econsti 2));
-  [%expect {| let v1 = 1 + 2 in v1 |}]
+  [%expect {| 1 + 2 |}]
 ;;
 
 let%expect_test "if" =
   print_anf (eif (econsti 1) (econsti 2) (econsti 3));
-  [%expect {| let v2 = if 1 then 2 else 3 in v2 |}]
+  [%expect {| if 1 then 2 else 3 |}]
 ;;
 
 let%expect_test "abstraction" =
   print_anf (elambda "x" (Ident "x"));
-  [%expect {| let v3 = fun x -> x in v3 |}]
+  [%expect {| fun x -> x |}]
 ;;
 
 let%expect_test "application" =
   print_anf (eapp (Ident "f") (Ident "x"));
-  [%expect {| let v4 = (f x) in v4 |}]
+  [%expect {| (f x) |}]
 ;;
 
 let%expect_test "curried application" =
   print_anf (eapp (eapp (Ident "f") (Ident "x")) (Ident "y"));
-  [%expect {| let v5 = (f x y) in v5 |}]
+  [%expect {| (f x y) |}]
 ;;
 
 let%expect_test "let with trivial body" =
@@ -58,22 +58,22 @@ let%expect_test "let with trivial body" =
 
 let%expect_test "let with non-trivial body keeps evaluation order" =
   print_anf (elet "x" (econsti 1) (eadd (Ident "x") (econsti 2)));
-  [%expect {| let x = 1 in let v6 = x + 2 in v6 |}]
+  [%expect {| let x = 1 in x + 2 |}]
 ;;
 
 let%expect_test "add" =
   print_anf (eadd (eadd (econsti 2) (econsti 2)) (econsti 2));
-  [%expect {| let v8 = 2 + 2 in let v7 = v8 + 2 in v7 |}]
+  [%expect {| let v8 = 2 + 2 in v8 + 2 |}]
 ;;
 
 let%expect_test "add funcs" =
   print_anf (eadd (eapp (Ident "f") (Ident "x")) (eapp (Ident "g") (Ident "x")));
-  [%expect {| let v10 = (f x) in let v11 = (g x) in let v9 = v10 + v11 in v9 |}]
+  [%expect {| let v10 = (f x) in let v11 = (g x) in v10 + v11 |}]
 ;;
 
 let%expect_test "let" =
   print_anf (elet "foo" (eapp (Ident "f") (Ident "x")) (eadd (Ident "foo") (econsti 3)));
-  [%expect {| let v12 = (f x) in let foo = v12 in let v13 = foo + 3 in v13 |}]
+  [%expect {| let v12 = (f x) in let foo = v12 in foo + 3 |}]
 ;;
 
 let%expect_test "lambda" =
@@ -83,10 +83,7 @@ let%expect_test "lambda" =
        (elambda "x" (eadd (Ident "x") (econsti 4)))
        (eapp (Ident "foo") (econsti 3)));
   [%expect
-    {|
-    let v14 = fun x -> let v16 = x + 4 in v16 in
-      let foo = v14 in let v15 = (foo 3) in v15
-    |}]
+    {| let v14 = fun x -> x + 4 in let foo = v14 in (foo 3) |}]
 ;;
 
 let%expect_test "if expression" =

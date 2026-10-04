@@ -46,6 +46,13 @@ let gensym_s =
 let gensym_id ?(prefix = "v") () = gensym_s ~prefix ()
 
 let create_anf expr =
+  let create_let id k cexpr =
+    let immid = ImmId id in
+    let filled = k immid in
+    if filled = aexpr_of_immexpr immid
+    then ACExpr cexpr
+    else ALet (NotRecursive, id, cexpr, filled)
+  in
   let rec aux e (k : immexpr -> aexpr) =
     match e with
     | Ident x -> k (ImmId x)
@@ -54,8 +61,7 @@ let create_anf expr =
     | App (App (Ident s, left), right) when is_binop s ->
       let id = gensym_id () in
       aux left (fun limm ->
-        aux right (fun rimm ->
-          ALet (NotRecursive, id, CBinop (s, limm, rimm), k (ImmId id))))
+        aux right (fun rimm -> create_let id k (CBinop (s, limm, rimm))))
     | App (left, right) ->
       let rec unwrap expr acc aux_expr =
         match expr with
@@ -64,21 +70,21 @@ let create_anf expr =
       in
       let left, right, tail = unwrap left [] right in
       let id = gensym_id () in
-      let rec fold_aux id h1 h2 acc = function
-        | [] -> ALet (NotRecursive, id, CApp (h1, h2, List.rev acc), k (ImmId id))
-        | x :: xs -> aux x (fun imm -> fold_aux id h1 h2 (imm :: acc) xs)
+      let rec fold_aux h1 h2 acc = function
+        | [] -> create_let id k (CApp (h1, h2, List.rev acc))
+        | x :: xs -> aux x (fun imm -> fold_aux h1 h2 (imm :: acc) xs)
       in
-      aux left (fun limm -> aux right (fun rimm -> fold_aux id limm rimm [] tail))
+      aux left (fun limm -> aux right (fun rimm -> fold_aux limm rimm [] tail))
     | Let (flag, v, left, right) ->
       aux left (fun limm -> ALet (flag, v, CImmExpr limm, aux right k))
     | Abstr (v, e) ->
       let id = gensym_id () in
-      ALet (NotRecursive, id, CAbstr (v, aux e aexpr_of_immexpr), k (ImmId id))
+      create_let id k (CAbstr (v, aux e aexpr_of_immexpr))
     | If (p, t, e) ->
       let id = gensym_id () in
       aux p (fun imm ->
         let cexpr = CIfExpr (imm, aux t aexpr_of_immexpr, aux e aexpr_of_immexpr) in
-        ALet (NotRecursive, id, cexpr, k (ImmId id)))
+        create_let id k cexpr)
   in
   aux expr aexpr_of_immexpr
 ;;
