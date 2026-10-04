@@ -101,11 +101,9 @@ let check anf =
       (show_outcome after)
       A.pp_program
       converted;
-  if (not (equivalent after (Eval.run reparsed)))
-     || Option.fold
-          ~none:false
-          ~some:(fun p -> not (equivalent after (Eval.run p)))
-          menhir
+  if
+    (not (equivalent after (Eval.run reparsed)))
+    || Option.fold ~none:false ~some:(fun p -> not (equivalent after (Eval.run p))) menhir
   then fail "Printing changed execution:\n%s" printed;
   after
 ;;
