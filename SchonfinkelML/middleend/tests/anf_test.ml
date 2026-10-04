@@ -82,8 +82,7 @@ let%expect_test "lambda" =
        "foo"
        (elambda "x" (eadd (Ident "x") (econsti 4)))
        (eapp (Ident "foo") (econsti 3)));
-  [%expect
-    {| let v14 = fun x -> x + 4 in let foo = v14 in (foo 3) |}]
+  [%expect {| let v14 = fun x -> x + 4 in let foo = v14 in (foo 3) |}]
 ;;
 
 let%expect_test "if expression" =
