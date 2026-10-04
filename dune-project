@@ -161,6 +161,7 @@
   ocaml
   dune
   base
+  menhir
   (angstrom
    (= "0.16.0"))
   qcheck

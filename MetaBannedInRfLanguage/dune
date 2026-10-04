@@ -2,10 +2,24 @@
  (name metabannedinrflanguage_frontend)
  (public_name MetaBannedInRfLanguage.frontend)
  (wrapped false)
- (modules ast syntax op_settings pprint rd_parser)
+ (modules
+  ast
+  syntax
+  op_settings
+  pprint
+  rd_parser
+  menhir_lexer
+  menhir_grammar
+  menhir_parser)
  (libraries base angstrom)
  (preprocess
   (pps ppx_deriving.show)))
+
+(ocamllex menhir_lexer)
+
+(menhir
+ (modules menhir_grammar)
+ (flags --strict))
 
 (executable
  (public_name compiler)

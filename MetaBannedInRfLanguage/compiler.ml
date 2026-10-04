@@ -29,25 +29,30 @@ let strip_leading_colon message =
   else message
 ;;
 
-let parse_structure (cli : Cli.t) table source =
+let parse_structure (cli : Cli.t) source =
+  let ( let* ) = Result.bind in
+  let parsing_error message =
+    Error (Printf.sprintf "%s: parsing error: %s" cli.input_file message)
+  in
   match cli.parsing with
   | Topdown ->
+    let* table = build_table cli.operator_settings in
     (match Rd_parser.parse_structure ~table source with
      | Ok _ as ok -> ok
-     | Error message ->
-       Error
-         (Printf.sprintf
-            "%s: parsing error: %s"
-            cli.input_file
-            (strip_leading_colon message)))
-  | Menhir -> Error "the menhir (bottom-up) parser is not implemented yet"
+     | Error message -> parsing_error (strip_leading_colon message))
+  | Menhir ->
+    (match cli.operator_settings with
+     | Some _ -> Error "-ops is supported only with -parsing topdown"
+     | None ->
+       (match Menhir_parser.parse_structure source with
+        | Ok _ as ok -> ok
+        | Error message -> parsing_error message))
 ;;
 
 let run (cli : Cli.t) =
   let ( let* ) = Result.bind in
   let* source = read_file cli.input_file in
-  let* table = build_table cli.operator_settings in
-  let* structure = parse_structure cli table source in
+  let* structure = parse_structure cli source in
   match cli.stop_after with
   | Stop_after_parsing -> write_output cli.output (Ast.show_structure structure ^ "\n")
   | Stop_after_anf -> Error "--stop-after anf is not implemented yet (ANF pass is not written)"

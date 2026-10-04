@@ -4,6 +4,7 @@ type parser =
   }
 
 let top_down : parser = { name = "top-down"; parse = Rd_parser.parse_structure }
+let bottom_up : parser = { name = "menhir"; parse = Menhir_parser.parse_structure }
 
 let rec shrink_pattern p =
   let open QCheck.Iter in
@@ -92,6 +93,6 @@ let test_roundtrip (p : parser) =
 ;;
 
 let () =
-  let tests = [ test_roundtrip top_down ] in
+  let tests = [ test_roundtrip top_down; test_roundtrip bottom_up ] in
   exit (QCheck_runner.run_tests ~verbose:true tests)
 ;;

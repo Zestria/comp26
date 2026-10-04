@@ -48,6 +48,7 @@ options:
 
   -ops <settings>         override operator precedence/associativity/arity;
                           by default the built-in operator table is used.
+                          Only for -parsing topdown.
                           <settings> is a ';'-separated list of groups
                           "left|right|prefix <priority> <operators...>",
                           e.g. -ops "left 5 $ ; prefix 1 ~"
