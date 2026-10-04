@@ -22,7 +22,7 @@ and cexpr =
   | CImmExpr of immexpr
   | CIfExpr of immexpr * aexpr * aexpr
   | CApp of immexpr * immexpr * immexpr list
-  | CAbstr of string * cexpr
+  | CAbstr of string * aexpr
 
 and aexpr =
   | ALet of let_flag * string * cexpr * aexpr
@@ -63,17 +63,22 @@ let create_anf expr =
         | expr -> expr, aux_expr, acc
       in
       let left, right, tail = unwrap left [] right in
-      let rec fold_aux h1 h2 acc = function
-        | [] -> ACExpr (CApp (h1, h2, List.rev acc))
-        | x :: xs -> aux x (fun imm -> fold_aux h1 h2 (imm :: acc) xs)
+      let id = gensym_id () in
+      let rec fold_aux id h1 h2 acc = function
+        | [] -> ALet (NotRecursive, id, CApp (h1, h2, List.rev acc), k (ImmId id))
+        | x :: xs -> aux x (fun imm -> fold_aux id h1 h2 (imm :: acc) xs)
       in
-      aux left (fun limm -> aux right (fun rimm -> fold_aux limm rimm [] tail))
+      aux left (fun limm -> aux right (fun rimm -> fold_aux id limm rimm [] tail))
     | Let (flag, v, left, right) ->
       aux left (fun limm -> ALet (flag, v, CImmExpr limm, aux right k))
-    | Abstr (v, e) -> aux e (fun imm -> ACExpr (CAbstr (v, CImmExpr imm)))
+    | Abstr (v, e) ->
+      let id = gensym_id () in
+      ALet (NotRecursive, id, CAbstr (v, aux e aexpr_of_immexpr), k (ImmId id))
     | If (p, t, e) ->
+      let id = gensym_id () in
       aux p (fun imm ->
-        ACExpr (CIfExpr (imm, aux t aexpr_of_immexpr, aux e aexpr_of_immexpr)))
+        let cexpr = CIfExpr (imm, aux t aexpr_of_immexpr, aux e aexpr_of_immexpr) in
+        ALet (NotRecursive, id, cexpr, k (ImmId id)))
   in
   aux expr aexpr_of_immexpr
 ;;
@@ -108,7 +113,7 @@ let rec pp_cexpr ppf = function
       arg
       (fun ppf -> List.iter (fun a -> Format.fprintf ppf " %a" pp_immexpr a))
       args
-  | CAbstr (v, body) -> Format.fprintf ppf "@[<2>fun %s -> %a@]" v pp_cexpr body
+  | CAbstr (v, body) -> Format.fprintf ppf "@[<2>fun %s -> %a@]" v pp_aexpr body
 
 and pp_aexpr ppf = function
   | ALet (Recursive, x, c, rest) ->

@@ -33,22 +33,22 @@ let%expect_test "binary op becomes a let-bound temporary" =
 
 let%expect_test "if" =
   print_anf (eif (econsti 1) (econsti 2) (econsti 3));
-  [%expect {| if 1 then 2 else 3 |}]
+  [%expect {| let v2 = if 1 then 2 else 3 in v2 |}]
 ;;
 
 let%expect_test "abstraction" =
   print_anf (elambda "x" (Ident "x"));
-  [%expect {| fun x -> x |}]
+  [%expect {| let v3 = fun x -> x in v3 |}]
 ;;
 
 let%expect_test "application" =
   print_anf (eapp (Ident "f") (Ident "x"));
-  [%expect {| (f x) |}]
+  [%expect {| let v4 = (f x) in v4 |}]
 ;;
 
 let%expect_test "curried application" =
   print_anf (eapp (eapp (Ident "f") (Ident "x")) (Ident "y"));
-  [%expect {| (f x y) |}]
+  [%expect {| let v5 = (f x y) in v5 |}]
 ;;
 
 let%expect_test "let with trivial body" =
@@ -58,10 +58,39 @@ let%expect_test "let with trivial body" =
 
 let%expect_test "let with non-trivial body keeps evaluation order" =
   print_anf (elet "x" (econsti 1) (eadd (Ident "x") (econsti 2)));
-  [%expect {| let x = 1 in let v2 = x + 2 in v2 |}]
+  [%expect {| let x = 1 in let v6 = x + 2 in v6 |}]
 ;;
 
-let%expect_test "complex add" =
+let%expect_test "add" =
   print_anf (eadd (eadd (econsti 2) (econsti 2)) (econsti 2));
-  [%expect {| let v4 = 2 + 2 in let v3 = v4 + 2 in v3 |}]
+  [%expect {| let v8 = 2 + 2 in let v7 = v8 + 2 in v7 |}]
+;;
+
+let%expect_test "add funcs" =
+  print_anf (eadd (eapp (Ident "f") (Ident "x")) (eapp (Ident "g") (Ident "x")));
+  [%expect {| let v10 = (f x) in let v11 = (g x) in let v9 = v10 + v11 in v9 |}]
+;;
+
+let%expect_test "let" =
+  print_anf (elet "foo" (eapp (Ident "f") (Ident "x")) (eadd (Ident "foo") (econsti 3)));
+  [%expect {| let v12 = (f x) in let foo = v12 in let v13 = foo + 3 in v13 |}]
+;;
+
+let%expect_test "lambda" =
+  print_anf
+    (elet
+       "foo"
+       (elambda "x" (eadd (Ident "x") (econsti 4)))
+       (eapp (Ident "foo") (econsti 3)));
+  [%expect
+    {|
+    let v14 = fun x -> let v16 = x + 4 in v16 in
+      let foo = v14 in let v15 = (foo 3) in v15
+    |}]
+;;
+
+let%expect_test "if expression" =
+  print_anf
+    (elet "foo" (eif (eeq (Ident "x") (Ident "y")) (Ident "x") (Ident "y")) (econsti 3));
+  [%expect {| let v18 = x = y in let v17 = if v18 then x else y in let foo = v17 in 3 |}]
 ;;
