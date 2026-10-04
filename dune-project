@@ -162,6 +162,7 @@
   dune
   base
   menhir
+  benchmark
   (angstrom
    (= "0.16.0"))
   qcheck
