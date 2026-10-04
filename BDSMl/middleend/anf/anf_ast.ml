@@ -34,4 +34,4 @@ type decl =
   (** [let [rec] name p1 ... pn = body]; для значения список параметров пуст. *)
   | AEval of aexpr
 
-type program = decl list
+type aprogram = decl list

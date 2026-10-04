@@ -8,4 +8,4 @@
 
 open BDSMl_frontend
 
-val anf : Ast.program -> Anf_ast.program
+val anf : Ast.program -> Anf_ast.aprogram

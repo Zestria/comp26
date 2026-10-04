@@ -6,6 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
+val print_binop : Ast.binop -> string
+val print_unop : Ast.unop -> string
 val print_pattern_ast : Ast.pattern -> string
 val print_pattern : Ast.pattern -> string
 val print_ast : Ast.program -> string

@@ -6,4 +6,4 @@
 
 [@@@ocaml.text "/*"]
 
-val anf_pp : Anf_ast.program -> string
+val anf_pp : Anf_ast.aprogram -> string
