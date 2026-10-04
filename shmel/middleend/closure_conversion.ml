@@ -7,7 +7,6 @@
 [@@@ocaml.text "/*"]
 
 module A = Anf
-module C = Closure_ir
 module Names = Set.Make (String)
 
 let fv_imm = function
@@ -51,6 +50,8 @@ and names_complex = function
   | c -> fv_c c
 ;;
 
+module Env = Map.Make (String)
+
 let of_program program =
   let names_decl = function
     | A.DExpr e -> names_expr e
@@ -71,53 +72,89 @@ let of_program program =
     in
     find 0
   in
-  let rec expr = function
-    | A.AExpr c -> C.AExpr (complex c)
+  let immediate env = function
+    | A.ImmInt _ as i -> i
+    | A.ImmVar x -> A.ImmVar (Option.value (Env.find_opt x env) ~default:x)
+  in
+  let application f = function
+    | [] -> A.CImm (A.ImmVar f)
+    | args -> A.CApp (A.ImmVar f, args)
+  in
+  let hide env names = List.fold_left (fun env x -> Env.remove x env) env names in
+  let condition env = function
+    | A.CondImm i -> A.CondImm (immediate env i)
+    | A.CondCmp (op, a, b) -> A.CondCmp (op, immediate env a, immediate env b)
+  in
+  let rec expr env = function
+    | A.AExpr c -> complex env c (fun c -> A.AExpr c)
     | A.ALet (x, c, rest) ->
-      let c = complex c in
-      C.ALet (x, c, expr rest)
-    | A.ALetRec (f, ps, body, rest) ->
-      let c = closure (Some f) ps body in
-      C.ALet (f, c, expr rest)
-  and complex = function
-    | A.CImm i -> C.CImm i
-    | A.CNeg i -> C.CNeg i
-    | A.CBinOp (op, a, b) -> C.CBinOp (op, a, b)
-    | A.CApp (f, args) -> C.ApplyClosure (f, args)
+      complex env c (fun c -> A.ALet (x, c, expr (hide env [ x ]) rest))
+    | A.ALetRec (f, params, body, rest) ->
+      function_value env (Some f) params body (fun c ->
+        A.ALet (f, c, expr (hide env [ f ]) rest))
+  and complex env c k =
+    match c with
+    | A.CImm i -> k (A.CImm (immediate env i))
+    | A.CNeg i -> k (A.CNeg (immediate env i))
+    | A.CBinOp (op, a, b) -> k (A.CBinOp (op, immediate env a, immediate env b))
+    | A.CApp (f, args) -> k (A.CApp (immediate env f, List.map (immediate env) args))
     | A.CIf (c, t, e) ->
-      let t = expr t in
-      C.CIf (c, t, expr e)
-    | A.CFun (ps, body) -> closure None ps body
-  and closure recursive params body =
-    let label = fresh "cc_code" in
-    let self = fresh "cc_self" in
+      let t = expr env t in
+      let e = expr env e in
+      k (A.CIf (condition env c, t, e))
+    | A.CFun (params, body) -> function_value env None params body k
+  and function_value env recursive params body k =
+    let helper = fresh "cc_fun" in
     let bound =
       match recursive with
       | None -> params
       | Some f -> f :: params
     in
     let captures = Names.elements (without bound (fv body)) in
-    let converted = expr body in
-    let converted =
+    let capture_params = List.map (fun _ -> fresh "cc_capture") captures in
+    let body_env =
+      List.fold_left2
+        (fun env x p -> Env.add x p env)
+        (hide env bound)
+        captures
+        capture_params
+    in
+    let recursive_alias =
       match recursive with
       | Some f when (not (List.mem f params)) && Names.mem f (fv body) ->
-        C.ALet (f, C.CImm (C.ImmVar self), converted)
-      | _ -> converted
+        Some (f, fresh "cc_rec")
+      | _ -> None
     in
-    let body =
-      List.fold_right
-        (fun (i, x) rest -> C.ALet (x, C.GetEnv (self, i), rest))
-        (List.mapi (fun i x -> i, x) captures)
-        converted
+    let body_env =
+      match recursive_alias with
+      | None -> body_env
+      | Some (f, alias) -> Env.add f alias body_env
     in
-    C.MakeClosure
-      ({ label; self; params; captures; body }, List.map (fun x -> C.ImmVar x) captures)
+    let converted = expr body_env body in
+    let converted =
+      match recursive_alias with
+      | None -> converted
+      | Some (_, alias) ->
+        A.ALet
+          ( alias
+          , application helper (List.map (fun p -> A.ImmVar p) capture_params)
+          , converted )
+    in
+    let rest =
+      k (application helper (List.map (fun x -> immediate env (A.ImmVar x)) captures))
+    in
+    let all_params = capture_params @ params in
+    match recursive with
+    | None -> A.ALet (helper, A.CFun (all_params, converted), rest)
+    | Some _ -> A.ALetRec (helper, all_params, converted, rest)
   in
   List.map
     (function
-      | A.DExpr e -> C.DExpr (expr e)
-      | A.DLet (x, [], e) -> C.DLet (x, expr e)
-      | A.DLet (x, ps, e) -> C.DLet (x, C.AExpr (closure None ps e))
-      | A.DLetRec (x, ps, e) -> C.DLet (x, C.AExpr (closure (Some x) ps e)))
+      | A.DExpr e -> A.DExpr (expr Env.empty e)
+      | A.DLet (x, [], e) -> A.DLet (x, [], expr Env.empty e)
+      | A.DLet (x, params, body) ->
+        A.DLet (x, [], function_value Env.empty None params body (fun c -> A.AExpr c))
+      | A.DLetRec (f, params, body) ->
+        A.DLet (f, [], function_value Env.empty (Some f) params body (fun c -> A.AExpr c)))
     program
 ;;

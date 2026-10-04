@@ -163,7 +163,7 @@ let emit opts program ppf =
     Format.fprintf
       ppf
       "%a@."
-      Closure_ir.pp_program
+      Anf.pp_program
       (Closure_conversion.of_program (Anf.of_program program))
 ;;
 

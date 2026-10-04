@@ -9,7 +9,6 @@
 open Shmel_lib
 open Shmel_middleend
 module A = Anf
-module C = Closure_ir
 module G = QCheck.Gen
 
 let test name f = QCheck.Test.make ~count:1 ~name QCheck.unit f
@@ -23,13 +22,13 @@ let parse source =
 
 let same_value a b =
   match a, b with
-  | Eval.VInt a, Closure_eval.VInt b -> a = b
-  | Eval.VBool a, Closure_eval.VBool b -> Bool.equal a b
-  | Eval.VUnit, Closure_eval.VUnit -> true
+  | Eval.VInt a, Eval.VInt b -> a = b
+  | Eval.VBool a, Eval.VBool b -> Bool.equal a b
+  | Eval.VUnit, Eval.VUnit -> true
   | _ -> false
 ;;
 
-let equivalent (before : Eval.outcome) (after : Closure_eval.outcome) =
+let equivalent (before : Eval.outcome) (after : Eval.outcome) =
   String.equal before.output after.output
   &&
   match before.result, after.result with
@@ -38,7 +37,7 @@ let equivalent (before : Eval.outcome) (after : Closure_eval.outcome) =
   | _ -> false
 ;;
 
-let show_before (o : Eval.outcome) =
+let show_outcome (o : Eval.outcome) =
   let result =
     match o.result with
     | Ok v -> Format.asprintf "%a" Eval.pp_value v
@@ -47,27 +46,67 @@ let show_before (o : Eval.outcome) =
   Printf.sprintf "output=%S result=%s" o.output result
 ;;
 
-let show_after (o : Closure_eval.outcome) =
-  let result =
-    match o.result with
-    | Ok v -> Format.asprintf "%a" Closure_eval.pp_value v
-    | Error e -> Format.asprintf "error: %a" Eval.pp_error e
-  in
-  Printf.sprintf "output=%S result=%s" o.output result
+let rec closed_expression = function
+  | A.AExpr c -> closed_complex c
+  | A.ALet (_, c, rest) -> closed_complex c && closed_expression rest
+  | A.ALetRec (f, params, body, rest) ->
+    List.for_all
+      (fun x -> String.equal x f || List.mem x params)
+      (Closure_conversion.free_variables body)
+    && closed_expression body
+    && closed_expression rest
+
+and closed_complex = function
+  | A.CFun (params, body) ->
+    List.for_all (fun x -> List.mem x params) (Closure_conversion.free_variables body)
+    && closed_expression body
+  | A.CIf (_, t, e) -> closed_expression t && closed_expression e
+  | A.CImm _ | A.CNeg _ | A.CBinOp _ | A.CApp _ -> true
+;;
+
+let closed_program =
+  List.for_all (function
+    | A.DExpr e | A.DLet (_, [], e) -> closed_expression e
+    | A.DLet (_, params, body) ->
+      List.for_all (fun x -> List.mem x params) (Closure_conversion.free_variables body)
+      && closed_expression body
+    | A.DLetRec (f, params, body) ->
+      List.for_all
+        (fun x -> String.equal x f || List.mem x params)
+        (Closure_conversion.free_variables body)
+      && closed_expression body)
 ;;
 
 let check anf =
   let converted = Closure_conversion.of_program anf in
+  if not (closed_program converted)
+  then fail "Code still has implicit captures:\n%a" A.pp_program converted;
+  let printed = Format.asprintf "%a" A.pp_program converted in
+  let reparsed = parse printed in
+  let menhir =
+    match converted with
+    | [ A.DExpr _ ] ->
+      (match Main.parse_program_with_menhir printed with
+       | Ok p -> Some p
+       | Error (`Parsing_error message) -> fail "Menhir: %s\n%s" message printed)
+    | _ -> None
+  in
   let before = Eval.run (A.to_program anf) in
-  let after = Closure_eval.run converted in
+  let after = Eval.run (A.to_program converted) in
   if not (equivalent before after)
   then
     fail
       "Before: %s\nAfter: %s\n%a"
-      (show_before before)
-      (show_after after)
-      C.pp_program
+      (show_outcome before)
+      (show_outcome after)
+      A.pp_program
       converted;
+  if (not (equivalent after (Eval.run reparsed)))
+     || Option.fold
+          ~none:false
+          ~some:(fun p -> not (equivalent after (Eval.run p)))
+          menhir
+  then fail "Printing changed execution:\n%s" printed;
   after
 ;;
 
@@ -115,6 +154,28 @@ let examples =
     , "let x = 10\nlet f y = x + y\nlet x = 100\nlet main = f 1"
     , ""
     , 11 )
+  ; ( "generated name collisions"
+    , "let cc_fun0 x = x + 1 in let cc_capture0 = cc_fun0 2 in let cc_rec0 = cc_fun0 3 \
+       in let f y = cc_capture0 + cc_rec0 + y in f 5"
+    , ""
+    , 12 )
+  ; ( "previous top-level function with same name"
+    , "let f x = x + 1\nlet f y = f y + 10\nlet main = f 2"
+    , ""
+    , 13 )
+  ; ( "shadowed builtin captured before redefinition"
+    , "let print_int x = x + 1\n\
+       let f y = print_int y\n\
+       let print_int x = x + 100\n\
+       let main = f 2"
+    , ""
+    , 3 )
+  ; "recursive name shadowed by parameter", "let rec f f = f + 1 in f 2", "", 3
+  ; ( "function returned by conditional"
+    , "let make x = if x < 5 then (fun y -> x + y) else (fun y -> x * y) in let f = make \
+       3 in let g = make 10 in f 2 + g 2"
+    , ""
+    , 25 )
   ; ( "CPS factorial"
     , "let rec fac n k = if n <= 1 then k 1 else fac (n - 1) (fun x -> k (n * x)) in fac \
        6 (fun x -> x)"
@@ -134,8 +195,8 @@ let example (name, source, output, result) =
     let actual = check (A.of_program original) in
     let before = Eval.run original in
     if not (equivalent before actual)
-    then fail "Source: %s\nClosure: %s" (show_before before) (show_after actual);
-    String.equal actual.output output && actual.result = Ok (Closure_eval.VInt result))
+    then fail "Source: %s\nClosure: %s" (show_outcome before) (show_outcome actual);
+    String.equal actual.output output && actual.result = Ok (Eval.VInt result))
 ;;
 
 let v x = A.ImmVar x
@@ -146,7 +207,7 @@ let structural =
   [ test "let binds only its body" (fun () ->
       Closure_conversion.free_variables (A.ALet ("x", A.CImm (v "x"), ret (v "x")))
       = [ "x" ])
-  ; test "environment contains each needed value once" (fun () ->
+  ; test "captures become leading parameters exactly once" (fun () ->
       let body =
         A.ALet
           ( "t"
@@ -161,8 +222,14 @@ let structural =
         ]
       in
       match List.rev (Closure_conversion.of_program p) with
-      | C.DLet (_, C.AExpr (C.MakeClosure (code, fields))) :: _ ->
-        code.captures = [ "a"; "z" ] && fields = [ v "a"; v "z" ]
+      | A.DLet (_, [], A.ALet (_, A.CFun (params, body), A.AExpr (A.CApp (_, fields))))
+        :: _ ->
+        List.length params = 3
+        && fields = [ v "a"; v "z" ]
+        && List.filter
+             (fun x -> not (List.mem x params))
+             (Closure_conversion.free_variables body)
+           = []
       | _ -> false)
   ; test "error preserves preceding output" (fun () ->
       let p = parse "let f x = let _ = print_int x in x / 0 in f 4" in
