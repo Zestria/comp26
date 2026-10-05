@@ -1,9 +1,11 @@
 (library
  (name ast_gen)
  (modules ast_gen)
- (libraries qcheck frontend))
+ (libraries qcheck SchonfinkelML_frontend)
+ (package SchonfinkelML))
 
 (test
  (name test_parsers)
  (modules test_parsers)
- (libraries frontend top_down bottom_up qcheck ast_gen))
+ (libraries SchonfinkelML_frontend top_down bottom_up qcheck ast_gen)
+ (package SchonfinkelML))
