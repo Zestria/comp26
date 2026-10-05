@@ -7,30 +7,49 @@
 [@@@ocaml.text "/*"]
 
 open BDSMl_frontend
+open BDSMl_frontend.Ast
 open Anf_ast
 
-(** Распрямляет цепочку применений:
-    [App (App (App (f, a), b), c)] ~> [(f, [a; b; c])]. *)
 let flatten_app (e : Ast.expr) : Ast.expr * Ast.expr list =
-  failwith "Anf_conv.flatten_app: not implemented"
+  let rec go e acc =
+    match e with
+    | Ast.App (e1, e2) -> go e1 (e2 :: acc)
+    | _ -> e, acc
+  in
+  go e []
 ;;
 
 (** Отделяет параметры функции от тела:
     [Abs (p1, Abs (p2, body))] ~> [([p1; p2], body)].
     Для не-функции возвращает [([], e)]. *)
 let split_params (e : Ast.expr) : Ast.pattern list * Ast.expr =
-  failwith "Anf_conv.split_params: not implemented"
+  let rec go acc e =
+    match e with
+    | Ast.Abs (p, e) -> go (p :: acc) e
+    | _ -> List.rev acc, e
+  in
+  go [] e
 ;;
 
 (** Переводит [e] и передаёт в [k] атом с его результатом.
     Если [e] не атом, заводит для него новое имя через [Fresh]. *)
 let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
-  failwith "Anf_conv.to_imm: not implemented"
+  match e with
+  | Ast.Int n -> k (ImmInt n)
+  | Ast.Bool b -> k (ImmBool b)
+  | Ast.Unit -> k ImmUnit
+  | Ast.Var x -> k (ImmId x)
+  | _ ->
+    to_cexpr e (fun ce ->
+      let name = Fresh.fresh_ident "a" in
+      ALet (Ast.PVar name, ce, k (ImmId name)))
 
 (** [to_imm] для списка: переводит выражения слева направо и передаёт
     в [k] список атомов. *)
 and to_imm_list (es : Ast.expr list) (k : immexpr list -> aexpr) : aexpr =
-  failwith "Anf_conv.to_imm_list: not implemented"
+  match es with
+  | [] -> k []
+  | e :: tl -> to_imm e (fun imm -> to_imm_list tl (fun imms -> k (imm :: imms)))
 
 (** Переводит [e] и передаёт в [k] последнее действие, не заводя для него имя. *)
 and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =

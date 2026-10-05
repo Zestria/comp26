@@ -59,7 +59,6 @@ let rec pp_pattern_list = function
   | p :: tl -> print_pattern p ^ " " ^ pp_pattern_list tl
 ;;
 
-(** [let rec f p1 p2 = <aexpr>;;] или [<aexpr>;;]. *)
 let pp_decl = function
   | AEval aexpr -> pp_aexpr 0 aexpr
   | ADecl (rec_flag, p, pl, ae) ->
