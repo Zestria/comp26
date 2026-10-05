@@ -1,0 +1,5 @@
+(cram
+ (package MyLittleML)
+ (deps 1.cpp)
+ (applies_to *)
+ (enabled_if false)) ; TODO: codegeneration in next tasks
