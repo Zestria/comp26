@@ -1,15 +1,15 @@
 (library
  (name middleend)
- (modules anf)
+ (modules anf closure_conversion)
  (libraries frontend)
  (package SchonfinkelML))
 
 (subdir
  tests
  (library
-  (name anf_tests)
-  (modules anf_test)
-  (libraries middleend frontend)
+  (name middleend_tests)
+  (modules anf_test closure_conversion_test)
+  (libraries middleend frontend top_down)
   (inline_tests)
   (preprocess
    (pps ppx_expect_nobase))
