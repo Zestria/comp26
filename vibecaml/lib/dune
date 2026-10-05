@@ -3,6 +3,8 @@
  (modules
   ast
   anf
+  anf_conv
+  anf_simplify
   config
   parser_intf
   pprint
