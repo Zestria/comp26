@@ -77,6 +77,52 @@ let closed_program =
       && closed_expression body)
 ;;
 
+let rec lifted_expression = function
+  | A.AExpr c -> lifted_complex c
+  | A.ALet (_, c, rest) -> lifted_complex c && lifted_expression rest
+  | A.ALetRec _ -> false
+
+and lifted_complex = function
+  | A.CFun _ -> false
+  | A.CIf (_, t, e) -> lifted_expression t && lifted_expression e
+  | A.CImm _ | A.CNeg _ | A.CBinOp _ | A.CApp _ -> true
+;;
+
+let check_lifting converted expected =
+  let lifted = Lambda_lifting.of_program converted in
+  let rec valid globals = function
+    | [] -> true
+    | A.DExpr body :: rest -> lifted_expression body && valid globals rest
+    | A.DLet (name, params, body) :: rest ->
+      lifted_expression body
+      && (params = []
+          || List.for_all
+               (fun x -> List.mem x params || List.mem x globals)
+               (Closure_conversion.free_variables body))
+      && valid (name :: globals) rest
+    | A.DLetRec (name, params, body) :: rest ->
+      lifted_expression body
+      && List.for_all
+           (fun x -> List.mem x (name :: params) || List.mem x globals)
+           (Closure_conversion.free_variables body)
+      && valid (name :: globals) rest
+  in
+  if not (valid [ "print_int" ] lifted)
+  then fail "Invalid lifted program:\n%a" A.pp_program lifted;
+  let actual = Eval.run (A.to_program lifted) in
+  if not (equivalent expected actual)
+  then
+    fail
+      "Lifting changed execution:\nBefore: %s\nAfter: %s\n%a"
+      (show_outcome expected)
+      (show_outcome actual)
+      A.pp_program
+      lifted;
+  let printed = Format.asprintf "%a" A.pp_program lifted in
+  if not (equivalent actual (Eval.run (parse printed)))
+  then fail "Printing lifted code changed execution:\n%s" printed
+;;
+
 let check anf =
   let converted = Closure_conversion.of_program anf in
   if not (closed_program converted)
@@ -105,6 +151,7 @@ let check anf =
     (not (equivalent after (Eval.run reparsed)))
     || Option.fold ~none:false ~some:(fun p -> not (equivalent after (Eval.run p))) menhir
   then fail "Printing changed execution:\n%s" printed;
+  check_lifting converted after;
   after
 ;;
 
@@ -169,6 +216,20 @@ let examples =
     , ""
     , 3 )
   ; "recursive name shadowed by parameter", "let rec f f = f + 1 in f 2", "", 3
+  ; ( "lifting name collisions"
+    , "let lifted_fun0 = 10\n\
+       let lifted_fun1 x = x + lifted_fun0\n\
+       let main = lifted_fun1 3"
+    , ""
+    , 13 )
+  ; ( "lifting preserves top-level effects"
+    , "let a = print_int 1\n\
+       let make x = let _ = print_int x in fun y -> x + y\n\
+       let f = make 2\n\
+       let b = print_int 3\n\
+       let main = f 4"
+    , "123"
+    , 6 )
   ; ( "function returned by conditional"
     , "let make x = if x < 5 then (fun y -> x + y) else (fun y -> x * y) in let f = make \
        3 in let g = make 10 in f 2 + g 2"

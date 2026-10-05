@@ -294,7 +294,7 @@ Command line errors:
   Try '--help' for usage.
   [2]
   $ ../compiler.exe --stop-after codegen fac.ml
-  Error: --stop-after expects 'parsing', 'anf' or 'closure'
+  Error: --stop-after expects 'parsing', 'anf', 'closure' or 'lifting'
   Try '--help' for usage.
   [2]
   $ ../compiler.exe --unknown fac.ml
