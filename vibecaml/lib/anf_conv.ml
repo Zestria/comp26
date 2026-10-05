@@ -115,16 +115,17 @@ let convert ~fresh program =
       let bindings = first :: rest in
       let patterns = List.map (fun binding -> binding.binding_pattern) bindings in
       let expressions = List.map (fun binding -> binding.binding_expression) bindings in
-      normalize_arguments environment expressions (fun values ->
+      normalize_bindings environment expressions (fun values ->
         let body = normalize (hide_patterns environment patterns) body continuation in
         List.fold_right
           (fun (pattern, value) body -> bind_pattern pattern value body)
           (List.combine patterns values)
           body)
     | Expr_tuple (first, second, rest) ->
-      normalize_arguments environment (first :: second :: rest) (function
-        | first :: second :: rest -> bind (CTuple (first, second, rest)) continuation
-        | _ -> assert false)
+      normalize_arguments environment rest (fun rest ->
+        normalize environment second (fun second ->
+          normalize environment first (fun first ->
+            bind (CTuple (first, second, rest)) continuation)))
     | Expr_if (condition, yes, no) ->
       normalize_condition environment condition (fun condition ->
         let yes = normalize environment yes aimm in
@@ -145,6 +146,14 @@ let convert ~fresh program =
            in
            bind (CIf (CondImm left, yes, no)) continuation)
        | _ -> normalize_application environment function_ arguments continuation)
+  and normalize_bindings environment expressions continuation =
+    (* let ... and ... у нашего OCaml вычисляет правые части слева направо,
+       в отличие от аргументов. Все RHS используют прежнее окружение. *)
+    match expressions with
+    | [] -> continuation []
+    | expression :: rest ->
+      normalize environment expression (fun value ->
+        normalize_bindings environment rest (fun values -> continuation (value :: values)))
   and normalize_arguments environment expressions continuation =
     (* Сначала хвост, но атомы возвращаем в исходном порядке. У f (print 1)
        (print 2) эффекты идут 2, 1, а позиции аргументов не меняются. *)
@@ -174,9 +183,12 @@ let convert ~fresh program =
       | _ -> 1
     in
     let rec split count first rest =
-      match count, rest with
-      | 0, _ | _, [] -> List.rev first, rest
-      | _, argument :: rest -> split (count - 1) (argument :: first) rest
+      match count with
+      | 0 -> List.rev first, rest
+      | _ ->
+        (match rest with
+         | [] -> List.rev first, []
+         | argument :: remaining -> split (count - 1) (argument :: first) remaining)
     in
     let first, rest = split arity [] arguments in
     (* Лишние аргументы применяются к результату по одному. Внешний аргумент

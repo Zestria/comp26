@@ -14,16 +14,16 @@ type immexpr =
   | ImmUnit
   | ImmId of Ast.identifier
 
+type cond =
+  | CondImm of immexpr
+  | CondCmp of Ast.identifier * immexpr * immexpr
+
 type cexpr =
   | CImmExpr of immexpr
   | CApp of immexpr * immexpr list
   | CIf of cond * aexpr * aexpr
   | CTuple of immexpr * immexpr * immexpr list
   | CField of immexpr * int (** Индекс элемента кортежа, начиная с нуля. *)
-
-and cond =
-  | CondImm of immexpr
-  | CondCmp of Ast.identifier * immexpr * immexpr
 
 and aexpr =
   | ALet of Ast.identifier * cexpr * aexpr
