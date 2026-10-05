@@ -13,3 +13,9 @@
 (cram
  (package shmel)
  (deps ../compiler.exe))
+
+(test
+ (name closure_tests)
+ (modules closure_tests)
+ (package shmel)
+ (libraries qcheck shmel.Lib shmel.Middleend))
