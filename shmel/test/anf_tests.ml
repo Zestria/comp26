@@ -27,9 +27,9 @@ let extend x ty env = (x, ty) :: List.remove_assoc x env
 let vars ty env =
   List.filter_map
     (fun (x, t) ->
-      match t, ty with
-      | Int, Int | Bool, Bool | Fun1, Fun1 | Fun2, Fun2 -> Some x
-      | _ -> None)
+       match t, ty with
+       | Int, Int | Bool, Bool | Fun1, Fun1 | Fun2, Fun2 -> Some x
+       | _ -> None)
     env
 ;;
 
@@ -53,7 +53,9 @@ let leaf env =
 let rec gen_int env size =
   let open Gen in
   let smaller env = gen_int env (size / 2) in
-  let calls ty weight = if List.is_empty (vars ty env) then [] else [ weight, return ty ] in
+  let calls ty weight =
+    if List.is_empty (vars ty env) then [] else [ weight, return ty ]
+  in
   if size <= 0
   then leaf env
   else
@@ -120,7 +122,8 @@ let rec gen_int env size =
       let* body = smaller (extend p Int env) in
       let+ arg = smaller env in
       let twice =
-        Ast.Abs ("g", Ast.Abs ("x", Ast.App (Ast.Var "g", Ast.App (Ast.Var "g", Ast.Var "x"))))
+        Ast.Abs
+          ("g", Ast.Abs ("x", Ast.App (Ast.Var "g", Ast.App (Ast.Var "g", Ast.Var "x"))))
       in
       Ast.Let ("h", twice, Ast.App (Ast.App (Ast.Var "h", Ast.Abs (p, body)), arg))
     | `Let_rec ->
@@ -143,10 +146,7 @@ let rec gen_int env size =
       let+ e = smaller env in
       Ast.Let (c, cond, Ast.If (Ast.Var c, t, e))
     | `Call1 ->
-      map2
-        (fun f a -> Ast.App (Ast.Var f, a))
-        (oneof_list (vars Fun1 env))
-        (smaller env)
+      map2 (fun f a -> Ast.App (Ast.Var f, a)) (oneof_list (vars Fun1 env)) (smaller env)
     | `Call2 ->
       map3
         (fun f a b -> Ast.App (Ast.App (Ast.Var f, a), b))
@@ -181,7 +181,9 @@ and gen_cond env size =
   in
   match vars Bool env with
   | [] -> comparison
-  | cs -> Gen.oneof_weighted [ 2, comparison; 1, Gen.map (fun c -> Ast.Var c) (Gen.oneof_list cs) ]
+  | cs ->
+    Gen.oneof_weighted
+      [ 2, comparison; 1, Gen.map (fun c -> Ast.Var c) (Gen.oneof_list cs) ]
 ;;
 
 (* Top-level declarations; a declared name shadows the previous one. *)
@@ -286,15 +288,15 @@ let parsers_for = function
 let check_parsed ~name ~parsers source f =
   List.for_all
     (fun (parser_name, parse) ->
-      match parse source with
-      | Ok p -> f parser_name p
-      | Error (`Parsing_error msg) ->
-        QCheck.Test.fail_reportf
-          "%s: the %s parser rejects the ANF output:\n%s\n%s"
-          name
-          parser_name
-          source
-          msg)
+       match parse source with
+       | Ok p -> f parser_name p
+       | Error (`Parsing_error msg) ->
+         QCheck.Test.fail_reportf
+           "%s: the %s parser rejects the ANF output:\n%s\n%s"
+           name
+           parser_name
+           source
+           msg)
     parsers
 ;;
 
@@ -314,17 +316,21 @@ let preserves_semantics =
           pp_outcome
           direct
           text)
-    && check_parsed ~name:"semantics" ~parsers:(parsers_for p) text (fun parser_name anf ->
-      let actual = Eval.run anf in
-      same_outcome expected actual
-      || QCheck.Test.fail_reportf
-           "%s parser: expected %a,\ngot %a\nANF:\n%s"
-           parser_name
-           pp_outcome
-           expected
-           pp_outcome
-           actual
-           text))
+    && check_parsed
+         ~name:"semantics"
+         ~parsers:(parsers_for p)
+         text
+         (fun parser_name anf ->
+            let actual = Eval.run anf in
+            same_outcome expected actual
+            || QCheck.Test.fail_reportf
+                 "%s parser: expected %a,\ngot %a\nANF:\n%s"
+                 parser_name
+                 pp_outcome
+                 expected
+                 pp_outcome
+                 actual
+                 text))
 ;;
 
 let idempotent =
@@ -333,7 +339,11 @@ let idempotent =
     check_parsed ~name:"idempotence" ~parsers:(parsers_for p) text (fun parser_name anf ->
       let again = anf_text anf in
       String.equal text again
-      || QCheck.Test.fail_reportf "%s parser:\nfirst:\n%s\nsecond:\n%s" parser_name text again))
+      || QCheck.Test.fail_reportf
+           "%s parser:\nfirst:\n%s\nsecond:\n%s"
+           parser_name
+           text
+           again))
 ;;
 
 let bodies program =
@@ -348,7 +358,8 @@ let rec no_bound_immediates = function
   | Anf.AExpr c -> cexpr_ok c
   | Anf.ALet (_, Anf.CImm _, _) -> false
   | Anf.ALet (_, c, body) -> cexpr_ok c && no_bound_immediates body
-  | Anf.ALetRec (_, _, fbody, body) -> no_bound_immediates fbody && no_bound_immediates body
+  | Anf.ALetRec (_, _, fbody, body) ->
+    no_bound_immediates fbody && no_bound_immediates body
 
 and cexpr_ok = function
   | Anf.CIf (_, t, e) -> no_bound_immediates t && no_bound_immediates e
@@ -387,9 +398,11 @@ let rec no_bound_conditions = function
       | Anf.ALet (_, Anf.CIf (Anf.CondImm (Anf.ImmVar y), _, _), _) -> String.equal x y
       | _ -> false
     in
-    (not (tested_next && occurrences x (Anf.to_expr body) = 1)) && no_bound_conditions body
+    (not (tested_next && occurrences x (Anf.to_expr body) = 1))
+    && no_bound_conditions body
   | Anf.ALet (_, c, body) -> cond_ok c && no_bound_conditions body
-  | Anf.ALetRec (_, _, fbody, body) -> no_bound_conditions fbody && no_bound_conditions body
+  | Anf.ALetRec (_, _, fbody, body) ->
+    no_bound_conditions fbody && no_bound_conditions body
 
 and cond_ok = function
   | Anf.CIf (_, t, e) -> no_bound_conditions t && no_bound_conditions e
@@ -455,13 +468,13 @@ let main =
 ;;
 
 let fac_expression =
-  "print_int (let rec fac n k = if n <= 1 then k 1 else fac (n - 1) (fun x -> k (n * x)) in \
-   fac 5 (fun x -> x))"
+  "print_int (let rec fac n k = if n <= 1 then k 1 else fac (n - 1) (fun x -> k (n * x)) \
+   in fac 5 (fun x -> x))"
 ;;
 
 let fib_expression =
-  "print_int (let rec fib n k = if n <= 1 then k n else fib (n - 1) (fun a -> fib (n - 2) \
-   (fun b -> k (a + b))) in fib 10 (fun x -> x))"
+  "print_int (let rec fib n k = if n <= 1 then k n else fib (n - 1) (fun a -> fib (n - \
+   2) (fun b -> k (a + b))) in fib 10 (fun x -> x))"
 ;;
 
 let prints name source expected =
