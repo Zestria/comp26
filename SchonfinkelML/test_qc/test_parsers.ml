@@ -14,7 +14,7 @@
     exclusive to the top-down parser: the operator table, its syntax, and
     position-based error reporting. *)
 
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 module TD = Top_down.Parser
 module BU = Bottom_up.Parser
 module Operators = Top_down.Operators

@@ -1,5 +1,5 @@
 (library
- (name frontend)
+ (name SchonfinkelML_frontend)
  (modules common lexer config)
  (libraries)
  (package SchonfinkelML))

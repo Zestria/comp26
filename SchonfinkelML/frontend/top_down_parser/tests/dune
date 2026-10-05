@@ -1,7 +1,7 @@
 (library
  (name test_unit)
  (modules top_down_unit_tests)
- (libraries top_down frontend)
+ (libraries top_down SchonfinkelML_frontend)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test))
