@@ -1,6 +1,7 @@
 (tests
  (names
   pprint_test
+  anf_test
   config_test
   parsers_test
   parsers_qcheck_test

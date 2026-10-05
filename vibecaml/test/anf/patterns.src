@@ -1,0 +1,4 @@
+let sum (a, (b, c), _) () = let (d, e) = (a, b) in d + e + c
+let ignore _ ignored_result = ignored_result
+let (x, y, z) = (1, 2, 3)
+let () = print_int (ignore 0 (sum (x, (y, z), 99) ()))
