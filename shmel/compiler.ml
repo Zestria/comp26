@@ -17,6 +17,7 @@ type stage =
   | Parsing
   | Anf_stage
   | Closure_stage
+  | Lifting_stage
 
 type output =
   | Stdout
@@ -51,7 +52,7 @@ let usage =
    Compiles an ML program from <file> (or stdin).\n\n\
    Options:\n\
   \  -parsing topdown|menhir   Parser to use: top-down (default) or bottom-up\n\
-  \  --stop-after parsing|anf|closure  Stop after the stage and print its result \
+  \  --stop-after parsing|anf|closure|lifting  Stop after the stage and print its result \
    (default: anf)\n\
   \  -o <file>                 Write the result to <file>; '-o -' writes to stdout \
    (default)\n\
@@ -83,7 +84,10 @@ let parse_args args =
       loop llvm_demo { opts with stop_after = Anf_stage } rest
     | "--stop-after" :: "closure" :: rest ->
       loop llvm_demo { opts with stop_after = Closure_stage } rest
-    | "--stop-after" :: _ -> Error "--stop-after expects 'parsing', 'anf' or 'closure'"
+    | "--stop-after" :: "lifting" :: rest ->
+      loop llvm_demo { opts with stop_after = Lifting_stage } rest
+    | "--stop-after" :: _ ->
+      Error "--stop-after expects 'parsing', 'anf', 'closure' or 'lifting'"
     | "-o" :: "-" :: rest -> loop llvm_demo { opts with output = Stdout } rest
     | "-o" :: file :: rest -> loop llvm_demo { opts with output = File file } rest
     | [ "-o" ] -> Error "-o expects a file name or '-'"
@@ -169,8 +173,14 @@ let emit opts program ppf =
     Format.fprintf
       ppf
       "%a@."
-      Closure_ir.pp_program
+      Anf.pp_program
       (Closure_conversion.of_program (Anf.of_program program))
+  | Lifting_stage ->
+    Format.fprintf
+      ppf
+      "%a@."
+      Anf.pp_program
+      (Lambda_lifting.of_program (Closure_conversion.of_program (Anf.of_program program)))
 ;;
 
 let write output f =
