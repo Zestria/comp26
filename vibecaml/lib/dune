@@ -2,6 +2,7 @@
  (name vibecaml)
  (modules
   ast
+  anf
   config
   parser_intf
   pprint
