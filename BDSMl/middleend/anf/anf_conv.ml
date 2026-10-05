@@ -40,9 +40,11 @@ let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
   | Ast.Unit -> k ImmUnit
   | Ast.Var x -> k (ImmId x)
   | _ ->
-    to_cexpr e (fun ce ->
-      let name = Fresh.fresh_ident "a" in
-      ALet (Ast.PVar name, ce, k (ImmId name)))
+    to_cexpr e (function
+      | CImm imm -> k imm
+      | ce ->
+        let name = Fresh.fresh_ident "a" in
+        ALet (Ast.PVar name, ce, k (ImmId name)))
 
 (** [to_imm] для списка: переводит выражения слева направо и передаёт
     в [k] список атомов. *)
@@ -51,17 +53,43 @@ and to_imm_list (es : Ast.expr list) (k : immexpr list -> aexpr) : aexpr =
   | [] -> k []
   | e :: tl -> to_imm e (fun imm -> to_imm_list tl (fun imms -> k (imm :: imms)))
 
-(** Переводит [e] и передаёт в [k] последнее действие, не заводя для него имя. *)
 and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
-  failwith "Anf_conv.to_cexpr: not implemented"
+  match e with
+  | Ast.Unit | Ast.Int _ | Ast.Bool _ | Ast.Var _ -> to_imm e (fun imm -> k (CImm imm))
+  | Ast.BinOp (And, a, b) -> to_cexpr (Ast.If (a, b, Ast.Bool false)) k
+  | Ast.BinOp (Or, a, b) -> to_cexpr (Ast.If (a, Ast.Bool true, b)) k
+  | Ast.BinOp (op, e1, e2) ->
+    to_imm e1 (fun a -> to_imm e2 (fun b -> k (CBinOp (op, a, b))))
+  | Ast.UnOp (op, e1) -> to_imm e1 (fun a -> k (CUnOp (op, a)))
+  | Ast.App _ ->
+    let f, args = flatten_app e in
+    to_imm f (fun f_imm -> to_imm_list args (fun args_imm -> k (CApp (f_imm, args_imm))))
+  | Ast.If (c, e1, e2) ->
+    to_imm c (fun c_imm -> k (CIf (c_imm, to_aexpr e1, to_aexpr e2)))
+  | Ast.Let (Rec, _, _, _) ->
+    failwith "to_cexpr: локальный let rec должен быть убран до ANF"
+  | Ast.Let (NonRec, p, e1, e2) -> to_cexpr e1 (fun ce -> ALet (p, ce, to_cexpr e2 k))
+  | Ast.Abs _ -> failwith "to_cexpr: лямбда должна быть убрана до ANF"
 
 (** Переводит [e] целиком: [to_cexpr e (fun c -> ACExpr c)]. *)
-and to_aexpr (e : Ast.expr) : aexpr = failwith "Anf_conv.to_aexpr: not implemented"
+and to_aexpr (e : Ast.expr) : aexpr = to_cexpr e (fun ce -> ACExpr ce)
 
 (** Переводит одно определение верхнего уровня. *)
 let anf_decl (item : Ast.structure_item) : decl =
-  failwith "Anf_conv.anf_decl: not implemented"
+  match item with
+  | StrEval e -> AEval (to_aexpr e)
+  | StrLet (r, p, e) ->
+    let params, body = split_params e in
+    ADecl (r, p, params, to_aexpr body)
 ;;
 
 (** Переводит всю программу. Не забыть [Fresh.reset ()] в начале. *)
-let anf (program : Ast.program) : aprogram = failwith "Anf_conv.anf: not implemented"
+let anf (program : Ast.program) : aprogram =
+  Fresh.reset ();
+  let rec go prog acc =
+    match prog with
+    | p :: tl -> go tl (anf_decl p :: acc)
+    | _ -> List.rev acc
+  in
+  go program []
+;;
