@@ -88,15 +88,18 @@ let convert ~fresh program =
     | Pat_constant (Const_int _ | Const_bool _) ->
       raise (Invalid_input "ANF: числовые и булевы паттерны пока не поддерживаются")
     | Pat_tuple (first, second, rest) ->
+      let patterns = first :: second :: rest in
+      let size = List.length patterns in
       List.fold_right
         (fun (index, pattern) body ->
            match pattern with
            | Pat_wildcard | Pat_constant Const_unit -> body
-           | Pat_var name -> ALet (name, CField (value, index), body)
+           | Pat_var name -> ALet (name, CField (value, index, size), body)
            | _ ->
              let name = fresh "field" in
-             ALet (name, CField (value, index), bind_pattern pattern (ImmId name) body))
-        (List.mapi (fun index pattern -> index, pattern) (first :: second :: rest))
+             ALet
+               (name, CField (value, index, size), bind_pattern pattern (ImmId name) body))
+        (List.mapi (fun index pattern -> index, pattern) patterns)
         body
   in
   (* Продолжение описывает место, куда надо подставить полученный атом.

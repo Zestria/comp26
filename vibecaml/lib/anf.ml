@@ -21,7 +21,7 @@ type cexpr =
   | CApp of immexpr * immexpr list
   | CIf of cond * aexpr * aexpr
   | CTuple of immexpr * immexpr * immexpr list
-  | CField of immexpr * int
+  | CField of immexpr * int * int
 
 and aexpr =
   | ALet of Ast.identifier * cexpr * aexpr
@@ -79,10 +79,17 @@ and pp_computation ppf = function
     Format.fprintf ppf "(%a, %a" pp_atom first pp_atom second;
     List.iter (fun value -> Format.fprintf ppf ", %a" pp_atom value) rest;
     Format.pp_print_string ppf ")"
-  | CField (tuple, index) ->
-    (* (x, _) требует ровно двух полей, а fst не подходит для тройки.
-       Obj.field работает для любого размера, который проверил исходный OCaml. *)
-    Format.fprintf ppf "Obj.obj (Obj.field (Obj.repr %a) %d)" pp_atom tuple index
+  | CField (tuple, index, size) ->
+    (* Размер берём из исходного паттерна: пара и тройка требуют разных
+       паттернов OCaml. Временное имя видно только внутри этих скобок,
+       поэтому оно не захватывает переменные в продолжении. *)
+    Format.pp_print_string ppf "(let (";
+    List.iteri
+      (fun field _ ->
+         if field > 0 then Format.pp_print_string ppf ", ";
+         Format.pp_print_string ppf (if field = index then "anf_field" else "_"))
+      (List.init size Fun.id);
+    Format.fprintf ppf ") = %a in anf_field)" pp_atom tuple
   | CIf (condition, yes, no) ->
     (* Скобки закрывают ветку даже при вложенном if или let. *)
     Format.fprintf

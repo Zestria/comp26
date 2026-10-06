@@ -40,7 +40,7 @@ and computation aliases = function
     CApp (atom aliases function_, List.map (atom aliases) arguments)
   | CTuple (first, second, rest) ->
     CTuple (atom aliases first, atom aliases second, List.map (atom aliases) rest)
-  | CField (value, index) -> CField (atom aliases value, index)
+  | CField (value, index, size) -> CField (atom aliases value, index, size)
   | CIf (value, yes, no) ->
     CIf (condition aliases value, expression aliases yes, expression aliases no)
 ;;

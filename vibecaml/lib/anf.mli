@@ -23,7 +23,8 @@ type cexpr =
   | CApp of immexpr * immexpr list
   | CIf of cond * aexpr * aexpr
   | CTuple of immexpr * immexpr * immexpr list
-  | CField of immexpr * int (** Индекс элемента кортежа, начиная с нуля. *)
+  | CField of immexpr * int * int
+  (** Кортеж, индекс элемента с нуля и размер кортежа из исходного паттерна. *)
 
 and aexpr =
   | ALet of Ast.identifier * cexpr * aexpr
@@ -40,9 +41,9 @@ val aimm : immexpr -> aexpr
 
 val avar : Ast.identifier -> aexpr
 
-(** Печать исполняемого OCaml. [CField] печатается через [Obj.field]: размер
-    кортежа неизвестен из типа ANF. Предусловие: поле обращается к кортежу,
-    индекс корректен. Это отладочная печать, не способ генерации машинного кода. *)
+(** Печать исполняемого OCaml. [CField] печатается обычным кортежным паттерном:
+    [(let (_, anf_field, _) = t in anf_field)]. Предусловие: размер не меньше
+    двух, индекс находится в пределах размера, атом содержит кортеж этого размера. *)
 val pp_expression : Format.formatter -> aexpr -> unit
 
 val pp_program : Format.formatter -> program -> unit

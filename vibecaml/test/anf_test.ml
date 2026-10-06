@@ -123,13 +123,19 @@ let () =
   let fields =
     computations (body "f" program)
     |> List.filter_map (function
-      | CField (_, index) -> Some index
+      | CField (_, index, size) -> Some (index, size)
       | _ -> None)
   in
   require (List.length fields = 6) "вложенные кортежные паттерны потеряли поля";
   require
-    (List.for_all (fun index -> index >= 0 && index <= 1) fields)
+    (List.for_all (fun (index, size) -> index >= 0 && index < size) fields)
     "неверные индексы кортежа";
+  require
+    (List.filter (fun (_, size) -> size = 3) fields = [ 0, 3; 1, 3 ])
+    "потерян размер тройки с последним wildcard";
+  require
+    (List.length (List.filter (fun (_, size) -> size = 2) fields) = 4)
+    "размер вложенной пары перепутан с внешним кортежем";
   let program = simplified "let f x = 1 + (if x then 2 else 3) + 4" in
   require
     (List.exists

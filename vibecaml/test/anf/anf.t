@@ -52,7 +52,7 @@
   > done
   fack: 120
   fibk: 55
-  patterns: 6
+  patterns: 615
   branches: 14
   arity: 305799
   effects: 215436728
