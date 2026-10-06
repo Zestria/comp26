@@ -1,0 +1,14 @@
+(library
+ (name parsing)
+ (public_name MyLittleML.parsing)
+ (modules ast pp parser lexer parser_topdown parse)
+ (libraries angstrom)
+ (preprocess
+  (pps ppx_deriving.show))
+ (instrumentation
+  (backend bisect_ppx_ng)))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))
