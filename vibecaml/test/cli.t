@@ -162,3 +162,9 @@
   $ vibecamlc -o missing/out.ml small.ml
   vibecaml: missing/out.ml: No such file or directory
   [1]
+
+Значение флага не может быть другим флагом.
+
+  $ vibecamlc -o --stop-after ll small.ml
+  vibecaml: после -o ожидается значение
+  [1]

@@ -103,3 +103,12 @@ lambda lifting страхует.
   $ vibecamlc --stop-after anf fack.ml
   vibecaml: стадия anf пока не подключена
   [1]
+
+В `let rec` верхнего уровня справа должна стоять функция: иначе после выноса
+в группе окажется не функция, а OCaml такое не принимает.
+
+  $ echo 'let rec f = fun x -> x and v = (fun y -> y) 1' > rec_value.ml
+
+  $ vibecamlc --stop-after ll rec_value.ml
+  vibecaml: в let rec справа должна стоять функция
+  [1]

@@ -26,20 +26,16 @@ let fail message =
   exit 1
 ;;
 
+let show structure = Format.asprintf "%a@." Pprint.pp_structure structure
+
 (* Без флагов дампа печатаем программу принтером: такой вывод легко читать и
    сравнивать между парсерами. *)
 let show_parsed config structure =
   let { Config.dump_ast; dump_pretty_printed; _ } = config in
   let tree = if dump_ast then Format.asprintf "%a@." Ast.pp_structure structure else "" in
-  let program =
-    if dump_pretty_printed || not dump_ast
-    then Format.asprintf "%a@." Pprint.pp_structure structure
-    else ""
-  in
+  let program = if dump_pretty_printed || not dump_ast then show structure else "" in
   tree ^ program
 ;;
-
-let show structure = Format.asprintf "%a@." Pprint.pp_structure structure
 
 (* Конвейер middleend по порядку из #9; на стадии из --stop-after печатаем
    результат и останавливаемся. *)

@@ -8,7 +8,8 @@
 
 open Ast
 
-exception Local_rec
+(* Ловится на границе модуля в [lift] и превращается в [Error]. *)
+exception Unsupported of string
 
 let named name expression =
   { binding_pattern = Pat_var name; binding_expression = expression }
@@ -24,11 +25,12 @@ let lift_item (Structure_value (rec_flag, binding, bindings)) =
   let rec lift_expression = function
     | (Expr_constant _ | Expr_ident _) as expression -> expression
     | Expr_fun (parameter, parameters, body) ->
-      let body = lift_expression body in
+      let func = lift_function parameter parameters body in
       let name = Fresh.name "lifted" in
-      emit name (Expr_fun (parameter, parameters, body));
+      emit name func;
       Expr_ident name
-    | Expr_let (Recursive, _, _, _) -> raise Local_rec
+    | Expr_let (Recursive, _, _, _) ->
+      raise (Unsupported "локальный let rec не поддерживается")
     | Expr_let (Non_recursive, binding, bindings, body) ->
       let kept = List.filter_map lift_local (binding :: bindings) in
       let body = lift_expression body in
@@ -49,21 +51,26 @@ let lift_item (Structure_value (rec_flag, binding, bindings)) =
       let second = lift_expression second in
       let rest = List.map lift_expression rest in
       Expr_tuple (first, second, rest)
-  (* Локальная именованная функция уходит наверх под своим именем. *)
+  and lift_function parameter parameters body =
+    Expr_fun (parameter, parameters, lift_expression body)
   and lift_local = function
-    | { binding_pattern = Pat_var name; binding_expression = Expr_fun (p, ps, body) } ->
-      let body = lift_expression body in
-      emit name (Expr_fun (p, ps, body));
+    | { binding_pattern = Pat_var name
+      ; binding_expression = Expr_fun (parameter, parameters, body)
+      } ->
+      emit name (lift_function parameter parameters body);
       None
     | { binding_pattern; binding_expression } ->
       Some { binding_pattern; binding_expression = lift_expression binding_expression }
   in
-  (* Именованная функция верхнего уровня остаётся на месте. *)
+  (* В let rec OCaml разрешает справа только функцию, а после выноса
+     значение превратилось бы в применение функции из той же группы. *)
   let lift_top = function
     | { binding_pattern = Pat_var _ as binding_pattern
-      ; binding_expression = Expr_fun (p, ps, body)
+      ; binding_expression = Expr_fun (parameter, parameters, body)
       } ->
-      { binding_pattern; binding_expression = Expr_fun (p, ps, lift_expression body) }
+      { binding_pattern; binding_expression = lift_function parameter parameters body }
+    | _ when rec_flag = Recursive ->
+      raise (Unsupported "в let rec справа должна стоять функция")
     | { binding_pattern; binding_expression } ->
       { binding_pattern; binding_expression = lift_expression binding_expression }
   in
@@ -80,5 +87,5 @@ let lift_item (Structure_value (rec_flag, binding, bindings)) =
 
 let lift program =
   try Ok (List.concat_map lift_item program) with
-  | Local_rec -> Error "локальный let rec не поддерживается"
+  | Unsupported message -> Error message
 ;;

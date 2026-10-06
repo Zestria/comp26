@@ -69,6 +69,7 @@ let () =
   assert ((expect_ok [ "-o"; "-"; "prog.ml" ]).output_file = Some "-");
   assert ((expect_ok [ "-o"; "-"; "prog.ml" ]).input_file = Some "prog.ml");
   expect_error [ "-o" ];
+  expect_error [ "-o"; "--dump-ast" ];
   expect_error [ "-o"; "" ];
   expect_error [ "-o"; "a.ml"; "-o"; "b.ml" ];
   expect_error [ "--unknown" ];

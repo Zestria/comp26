@@ -74,9 +74,10 @@ let is_option argument = String.length argument > 1 && argument.[0] = '-'
 let parse_arguments arguments =
   let length = Array.length arguments in
   let ( let* ) = Result.bind in
-  (* Значение флага --- следующий аргумент. *)
+  (* Следующий флаг не может быть значением: иначе [-o --stop-after ll]
+     молча записал бы вывод в файл [--stop-after]. *)
   let value_after flag index =
-    if index + 1 >= length
+    if index + 1 >= length || is_option arguments.(index + 1)
     then Error ("после " ^ flag ^ " ожидается значение")
     else Ok arguments.(index + 1)
   in
