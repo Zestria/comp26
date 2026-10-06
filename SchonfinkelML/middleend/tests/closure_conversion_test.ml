@@ -10,7 +10,6 @@ open Frontend.Common
 module Anf = Middleend.Anf
 module CC = Middleend.Closure_conversion
 
-
 let parse s =
   match Top_down.Parser.parse_expr s with
   | Ok e -> e
@@ -22,7 +21,7 @@ let print_converted s = print_endline (Anf.string_of_aexpr (converted_of_string 
 
 let rec closed_aexpr env = function
   | Anf.ACExpr (Anf.CAbstr (p, body)) ->
-    let fvs = CC.free_vars body in
+    let fvs = Anf.free_vars body in
     List.for_all (fun v -> String.equal v p || List.mem v env) fvs
     && closed_aexpr (p :: env) body
   | Anf.ACExpr (Anf.CIfExpr (_, t, e)) -> closed_aexpr env t && closed_aexpr env e
@@ -44,12 +43,14 @@ let check_invariant source =
     false)
 ;;
 
-
 let string_contains haystack needle =
-  let nh = String.length haystack and nn = String.length needle in
+  let nh = String.length haystack
+  and nn = String.length needle in
   let rec go i =
-    if i + nn > nh then false
-    else if String.sub haystack i nn = needle then true
+    if i + nn > nh
+    then false
+    else if String.sub haystack i nn = needle
+    then true
     else go (i + 1)
   in
   nn = 0 || go 0
@@ -65,21 +66,16 @@ let rec exists_name_substr substr = function
 and exists_name_substr_c substr = function
   | Anf.CAbstr (_, b) -> exists_name_substr substr b
   | Anf.CApp (f, a, args) ->
-    has_substr substr f
-    || has_substr substr a
-    || List.exists (has_substr substr) args
+    has_substr substr f || has_substr substr a || List.exists (has_substr substr) args
   | Anf.CBinop (_, a, b) -> has_substr substr a || has_substr substr b
   | Anf.CIfExpr (i, t, e) ->
-    has_substr substr i
-    || exists_name_substr substr t
-    || exists_name_substr substr e
+    has_substr substr i || exists_name_substr substr t || exists_name_substr substr e
   | Anf.CImmExpr i -> has_substr substr i
 
 and has_substr substr = function
   | Anf.ImmId s -> string_contains s substr
   | _ -> false
 ;;
-
 
 let%expect_test "closed lambda is left alone" =
   print_converted "let f = fun x -> x + 1 in f 5";
@@ -108,8 +104,7 @@ let%expect_test "multiple captures keep a deterministic order" =
 
 let%expect_test "bare lambda in expression position" =
   print_converted "let g = fun y -> y in g (fun x -> x + 1)";
-  [%expect
-    {| let g = fun y -> y in let v1 = fun x -> x + 1 in (g v1) |}]
+  [%expect {| let g = fun y -> y in let v1 = fun x -> x + 1 in (g v1) |}]
 ;;
 
 let%expect_test "recursive function with captured variable" =
@@ -209,7 +204,6 @@ let%expect_test "cps fibonacci" =
     |}]
 ;;
 
-
 let%test "closed lambda invariant holds on all basic examples" =
   List.for_all
     check_invariant
@@ -217,9 +211,7 @@ let%test "closed lambda invariant holds on all basic examples" =
     ; "let a = 1 in let f = fun x -> x + a in f 5"
     ; "let a = 1 in let b = 2 in let f = fun x -> x + a + b in f 3"
     ; "let g = fun y -> y in g (fun x -> x + 1)"
-    ; "let n = 10 in \
-       let rec loop i = if i > n then 0 else i + loop (i + 1) in \
-       loop 1"
+    ; "let n = 10 in let rec loop i = if i > n then 0 else i + loop (i + 1) in loop 1"
     ; cps_fact
     ; cps_fib
     ]
@@ -227,11 +219,8 @@ let%test "closed lambda invariant holds on all basic examples" =
 
 let%test "closed lambda invariant holds on nested functions" =
   check_invariant
-    "let a = 1 in \
-     let outer = fun x -> \
-       let inner = fun y -> x + y + a in \
-       inner 3 \
-     in outer 5"
+    "let a = 1 in let outer = fun x -> let inner = fun y -> x + y + a in inner 3 in \
+     outer 5"
 ;;
 
 let%test "closed lambda invariant holds on shadowed names" =
@@ -265,8 +254,7 @@ let%test "bare lambda without captures keeps no wrapper" =
 
 let%test "fresh names avoid user collisions" =
   let c =
-    converted_of_string
-      "let f_clo0 = 42 in let a = 1 in let f = fun x -> x + a in f 5"
+    converted_of_string "let f_clo0 = 42 in let a = 1 in let f = fun x -> x + a in f 5"
   in
   exists_name_substr "f_clo0" c && exists_name_substr "f_clo1" c
 ;;
@@ -274,7 +262,7 @@ let%test "fresh names avoid user collisions" =
 let%test "free variables of every lambda are its leading parameters" =
   let rec check env = function
     | Anf.ACExpr (Anf.CAbstr (p, body)) ->
-      let fvs = CC.free_vars body in
+      let fvs = Anf.free_vars body in
       List.for_all (fun v -> String.equal v p || List.mem v env) fvs
       && check (p :: env) body
     | Anf.ACExpr (Anf.CIfExpr (_, t, e)) -> check env t && check env e
@@ -287,9 +275,7 @@ let%test "free variables of every lambda are its leading parameters" =
     (fun source -> check [] (converted_of_string source))
     [ cps_fact
     ; cps_fib
-    ; "let n = 10 in \
-       let rec loop i = if i > n then 0 else i + loop (i + 1) in \
-       loop 1"
+    ; "let n = 10 in let rec loop i = if i > n then 0 else i + loop (i + 1) in loop 1"
     ]
 ;;
 
@@ -305,7 +291,6 @@ let%test "closed lambda has no wrapper" =
   not (exists_name_substr "_clo" (converted_of_string "let f = fun x -> x + 1 in f 5"))
 ;;
 
-
 let cases =
   [ "let a = 1 in let f = fun x -> x + a in f 5"
   ; "let a = 1 in let b = 2 in let f = fun x -> x + a + b in f 3"
@@ -315,14 +300,9 @@ let cases =
   ; "let x = 1 in let f = fun x -> x + 1 in f 5"
   ; "let f = fun x -> x + 1 in let f = fun y -> y + 2 in f 5"
   ; "let a = 1 in let f = fun a -> a + 1 in f 5"
-  ; "let a = 1 in \
-     let outer = fun x -> \
-       let inner = fun y -> x + y + a in \
-       inner 3 \
-     in outer 5"
-  ; "let n = 10 in \
-     let rec loop i = if i > n then 0 else i + loop (i + 1) in \
-     loop 1"
+  ; "let a = 1 in let outer = fun x -> let inner = fun y -> x + y + a in inner 3 in \
+     outer 5"
+  ; "let n = 10 in let rec loop i = if i > n then 0 else i + loop (i + 1) in loop 1"
   ; cps_fact
   ; cps_fib
   ]
@@ -337,6 +317,4 @@ let%test "conversion is deterministic" =
     cases
 ;;
 
-let%test "invariant holds on all example cases" =
-  List.for_all check_invariant cases
-;;
+let%test "invariant holds on all example cases" = List.for_all check_invariant cases
