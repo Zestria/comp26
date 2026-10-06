@@ -54,13 +54,21 @@ type associativity =
   | Left
   | Right
 
+let integer_additive = [ "+"; "-" ]
+let integer_multiplicative = [ "*"; "/"; "mod"; "land"; "lor"; "lxor" ]
+let integer_shifts = [ "lsl"; "lsr"; "asr" ]
+
+let integer_operators =
+  integer_additive @ integer_multiplicative @ integer_shifts @ [ "~-" ]
+;;
+
 let binary_operators =
   [ [ "||" ], Right
   ; [ "&&" ], Right
   ; [ "="; "<>"; "<"; "<="; ">"; ">=" ], Left
-  ; [ "+"; "-"; "+."; "-." ], Left
-  ; [ "*"; "/"; "*."; "/."; "mod"; "land"; "lor"; "lxor" ], Left
-  ; [ "**"; "lsl"; "lsr"; "asr" ], Right
+  ; integer_additive @ [ "+."; "-." ], Left
+  ; integer_multiplicative @ [ "*."; "/." ], Left
+  ; "**" :: integer_shifts, Right
   ]
 ;;
 

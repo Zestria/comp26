@@ -58,21 +58,7 @@ let integer_expression environment = function
     (match function_ with
      | Expr_ident name when (info environment name).builtin ->
        (List.length arguments = if name = "~-" then 1 else 2)
-       && List.mem
-            name
-            [ "+"
-            ; "-"
-            ; "*"
-            ; "/"
-            ; "mod"
-            ; "land"
-            ; "lor"
-            ; "lxor"
-            ; "lsl"
-            ; "lsr"
-            ; "asr"
-            ; "~-"
-            ]
+       && List.mem name Lexicon.integer_operators
      | _ -> false)
 ;;
 

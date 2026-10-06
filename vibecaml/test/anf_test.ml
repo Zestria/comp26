@@ -19,10 +19,10 @@ let require condition message = if not condition then fail message
 let convert source =
   (* Счётчик принадлежит только этому тесту. В драйвере передадут Fresh.name,
      который продолжит нумерацию после предыдущих проходов. *)
-  let counter = Atomic.make 0 in
+  let counter = ref 0 in
   let fresh base =
-    let number = Atomic.fetch_and_add counter 1 + 1 in
-    Printf.sprintf "%s__%d" base number
+    incr counter;
+    Printf.sprintf "%s__%d" base !counter
   in
   match Rd_parser.parse_structure Config.default_extensions source with
   | Error message -> fail message

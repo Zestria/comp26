@@ -35,14 +35,15 @@ let avar name = aimm (ImmId name)
 
 (* Правила скобок для операторов и отрицательных констант уже есть в Pprint.
    Используем их и здесь, чтобы два принтера не расходились. *)
+let expression_of_atom = function
+  | ImmNum n -> Ast.Expr_constant (Ast.Const_int n)
+  | ImmBool b -> Ast.Expr_constant (Ast.Const_bool b)
+  | ImmUnit -> Ast.Expr_constant Ast.Const_unit
+  | ImmId name -> Ast.Expr_ident name
+;;
+
 let pp_atom ppf value =
-  let expression =
-    match value with
-    | ImmNum n -> Ast.Expr_constant (Ast.Const_int n)
-    | ImmBool b -> Ast.Expr_constant (Ast.Const_bool b)
-    | ImmUnit -> Ast.Expr_constant Ast.Const_unit
-    | ImmId name -> Ast.Expr_ident name
-  in
+  let expression = expression_of_atom value in
   match value with
   | ImmNum n when n < 0 -> Format.fprintf ppf "(%a)" Pprint.pp_expression expression
   | _ -> Pprint.pp_expression ppf expression
@@ -74,7 +75,15 @@ let rec pp_expression ppf = function
 and pp_computation ppf = function
   | CImmExpr value -> pp_atom ppf value
   | CApp (function_, arguments) ->
-    Format.fprintf ppf "%a%a" pp_atom function_ pp_atoms arguments
+    (* Pprint уже умеет инфиксные операторы, их приоритеты и скобки.
+       Передаём только атомы: побочные эффекты были вынесены в ALet. *)
+    let expression =
+      List.fold_left
+        (fun function_ argument -> Ast.Expr_app (function_, expression_of_atom argument))
+        (expression_of_atom function_)
+        arguments
+    in
+    Pprint.pp_expression ppf expression
   | CTuple (first, second, rest) ->
     Format.fprintf ppf "(%a, %a" pp_atom first pp_atom second;
     List.iter (fun value -> Format.fprintf ppf ", %a" pp_atom value) rest;
@@ -106,7 +115,7 @@ and pp_computation ppf = function
 let pp_binding ppf (name, parameters, body) =
   Format.fprintf
     ppf
-    "%a%a = %a"
+    "%a%a =@;<1 2>%a"
     pp_atom
     (ImmId name)
     pp_atoms
