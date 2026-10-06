@@ -27,17 +27,11 @@ let () =
       ~finally:(fun () -> close_in channel)
       (fun () -> really_input_string channel (in_channel_length channel))
   in
-  (* Общий Fresh ещё не смержен. У тестового callback свой счётчик;
-     каждый запрос имени продвигает его один раз. *)
-  let counter = ref 0 in
-  let fresh base =
-    incr counter;
-    Printf.sprintf "%s__%d" base !counter
-  in
+  Fresh.reset ();
   match Rd_parser.parse_structure Config.default_extensions source with
   | Error message -> fail message
   | Ok source ->
-    (match Anf_conv.convert ~fresh source with
+    (match Anf_conv.convert source with
      | Error message -> fail message
      | Ok program ->
        let smaller = Anf_simplify.simplify program in

@@ -62,7 +62,8 @@ let integer_expression environment = function
      | _ -> false)
 ;;
 
-let convert ~fresh program =
+let convert program =
+  let fresh = Fresh.name in
   let bind computation continuation =
     let name = fresh "t" in
     ALet (name, computation, continuation (ImmId name))

@@ -17,16 +17,10 @@ let fail message =
 let require condition message = if not condition then fail message
 
 let convert source =
-  (* Счётчик принадлежит только этому тесту. В драйвере передадут Fresh.name,
-     который продолжит нумерацию после предыдущих проходов. *)
-  let counter = ref 0 in
-  let fresh base =
-    incr counter;
-    Printf.sprintf "%s__%d" base !counter
-  in
+  Fresh.reset ();
   match Rd_parser.parse_structure Config.default_extensions source with
   | Error message -> fail message
-  | Ok program -> Anf_conv.convert ~fresh program
+  | Ok program -> Anf_conv.convert program
 ;;
 
 let normalized source =
