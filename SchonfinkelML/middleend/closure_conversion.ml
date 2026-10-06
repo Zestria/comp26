@@ -7,80 +7,6 @@
 [@@@ocaml.text "/*"]
 
 open Anf
-module VarSet = Set.Make (String)
-
-let fv_imm : immexpr -> VarSet.t = function
-  | ImmId x -> VarSet.singleton x
-  | ImmNum _ | ImmBool _ | ImmUnit -> VarSet.empty
-;;
-
-let rec fv_cexpr : cexpr -> VarSet.t = function
-  | CBinop (_, a, b) -> VarSet.union (fv_imm a) (fv_imm b)
-  | CImmExpr i -> fv_imm i
-  | CIfExpr (i, t, e) -> VarSet.union (fv_imm i) (VarSet.union (fv_aexpr t) (fv_aexpr e))
-  | CApp (f, a, args) ->
-    List.fold_left
-      (fun acc x -> VarSet.union acc (fv_imm x))
-      (VarSet.union (fv_imm f) (fv_imm a))
-      args
-  | CAbstr (p, body) -> VarSet.remove p (fv_aexpr body)
-
-and fv_aexpr : aexpr -> VarSet.t = function
-  | ALet (flag, name, rhs, rest) ->
-    let fv_rhs = fv_aexpr rhs in
-    let fv_rhs = if flag = Recursive then VarSet.remove name fv_rhs else fv_rhs in
-    VarSet.union fv_rhs (VarSet.remove name (fv_aexpr rest))
-  | ACExpr c -> fv_cexpr c
-;;
-
-let free_vars a = VarSet.elements (fv_aexpr a)
-
-let rec idents_cexpr acc : cexpr -> VarSet.t = function
-  | CBinop (_, a, b) -> idents_imm (idents_imm acc a) b
-  | CImmExpr i -> idents_imm acc i
-  | CIfExpr (i, t, e) -> idents_aexpr (idents_aexpr (idents_imm acc i) t) e
-  | CApp (f, a, args) -> List.fold_left idents_imm (idents_imm (idents_imm acc f) a) args
-  | CAbstr (p, body) -> idents_aexpr (VarSet.add p acc) body
-
-and idents_imm acc : immexpr -> VarSet.t = function
-  | ImmId x -> VarSet.add x acc
-  | ImmNum _ | ImmBool _ | ImmUnit -> acc
-
-and idents_aexpr acc : aexpr -> VarSet.t = function
-  | ALet (_, name, rhs, rest) ->
-    idents_aexpr (idents_aexpr (VarSet.add name acc) rhs) rest
-  | ACExpr c -> idents_cexpr acc c
-;;
-
-type naming =
-  { reserved : VarSet.t
-  ; counter : int
-  }
-
-let naming_of a = { reserved = idents_aexpr VarSet.empty a; counter = 0 }
-
-let gensym (naming : naming) ~prefix () =
-  let rec pick counter =
-    let name = Printf.sprintf "%s_clo%d" prefix counter in
-    if VarSet.mem name naming.reserved then pick (counter + 1) else name, counter
-  in
-  let name, counter = pick (naming.counter + 1) in
-  name, { reserved = VarSet.add name naming.reserved; counter }
-;;
-
-let rec collect_params = function
-  | ACExpr (CAbstr (p, body)) ->
-    let ps, inner = collect_params body in
-    p :: ps, inner
-  | other -> [], other
-;;
-
-let rec build_abstr params body =
-  match params with
-  | [] -> body
-  | [ p ] -> ACExpr (CAbstr (p, body))
-  | p :: rest -> ACExpr (CAbstr (p, build_abstr rest body))
-;;
 
 type rename_ctx = (string * string) list
 type self_ctx = (string * string list) list
@@ -119,12 +45,12 @@ let rec convert_aexpr
     let params, inner_body = collect_params a in
     let rename_ctx_inner = hide_rename rename_ctx params in
     let naming, inner_body' = convert_aexpr naming self_ctx rename_ctx_inner inner_body in
-    let bound = VarSet.of_list params in
-    let fv_list = VarSet.elements (VarSet.diff (fv_aexpr inner_body') bound) in
+    let bound = StringSet.of_list params in
+    let fv_list = StringSet.elements (StringSet.diff (fv_aexpr inner_body') bound) in
     (match fv_list with
      | [] -> naming, build_abstr params inner_body'
      | _ :: _ as fv_list ->
-       let raw_name, naming = gensym naming ~prefix:"lam" () in
+       let raw_name, naming = gensym naming ~prefix:"lam_clo" () in
        let rhs' = build_abstr (fv_list @ params) inner_body' in
        let closure_app =
          match List.map (fun v -> ImmId v) fv_list with
@@ -147,12 +73,14 @@ let rec convert_aexpr
        naming, ALet (flag, name, rhs', rest')
      | params, inner_body ->
        let bound =
-         let b = List.fold_left (fun acc p -> VarSet.add p acc) VarSet.empty params in
-         if flag = Recursive then VarSet.add name b else b
+         let b =
+           List.fold_left (fun acc p -> StringSet.add p acc) StringSet.empty params
+         in
+         if flag = Recursive then StringSet.add name b else b
        in
-       let fv_orig = VarSet.elements (VarSet.diff (fv_aexpr inner_body) bound) in
+       let fv_orig = StringSet.elements (StringSet.diff (fv_aexpr inner_body) bound) in
        let fv_list = List.map (apply_rename rename_ctx) fv_orig in
-       let rename_ctx_inner = hide_rename rename_ctx (VarSet.elements bound) in
+       let rename_ctx_inner = hide_rename rename_ctx (StringSet.elements bound) in
        (match fv_orig with
         | [] ->
           let self_ctx' = if flag = Recursive then (name, []) :: self_ctx else self_ctx in
@@ -169,7 +97,7 @@ let rec convert_aexpr
             convert_aexpr naming self_ctx' rename_ctx_inner inner_body
           in
           let rhs' = build_abstr (fv_list @ params) inner_body' in
-          let closed_name, naming = gensym naming ~prefix:name () in
+          let closed_name, naming = gensym naming ~prefix:(name ^ "_clo") () in
           let closure_app =
             match List.map (fun v -> ImmId v) fv_list with
             | first :: more -> ACExpr (CApp (ImmId name, first, more))
@@ -210,6 +138,6 @@ and convert_cexpr
 ;;
 
 let closure_convert (a : aexpr) : aexpr =
-  let naming = naming_of a in
+  let naming = naming_of_aexpr a in
   snd (convert_aexpr naming [] [] a)
 ;;

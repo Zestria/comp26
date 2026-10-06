@@ -6,7 +6,4 @@
 
 [@@@ocaml.text "/*"]
 
-open Anf
-
-val closure_convert : aexpr -> aexpr
-val free_vars : aexpr -> string list
+val closure_convert : Anf.aexpr -> Anf.aexpr
