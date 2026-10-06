@@ -1,0 +1,18 @@
+(library
+ (name BDSMl)
+ (public_name BDSMl)
+ (wrapped false)
+ (libraries
+  llvm
+  llvm.analysis
+  llvm.executionengine
+  ;
+  )
+ (instrumentation
+  (backend bisect_ppx_ng)))
+
+(cram
+ (package BDSMl)
+ (deps
+  runtime.c
+  %{exe:../compiler.exe}))

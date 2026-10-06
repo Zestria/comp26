@@ -1,0 +1,15 @@
+(library
+ (name LL)
+ (public_name MyLittleML.LL)
+ (modules LL)
+ (wrapped false)
+ ; Temporary: LLVM bindings are not available in the Task 1 environment
+ ; (no system llvm-18-dev headers) and the backend is out of scope.
+ ; Restore `llvm`, `llvm.analysis`, `llvm.executionengine` once the
+ ; backend (Tasks 2/3) is implemented.
+ (instrumentation
+  (backend bisect_ppx_ng)))
+
+(cram
+ (package MyLittleML)
+ (deps ../compiler.exe))
