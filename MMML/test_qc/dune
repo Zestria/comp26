@@ -1,16 +1,7 @@
-(executable
- (package MMML)
- (public_name mmml_test_qc)
+(test
  (name test_qc)
+ (package MMML)
  (modules test_qc)
  (libraries MMML.frontend qcheck)
  (preprocess
   (pps ppx_deriving.show)))
-
-(rule
- (package MMML)
- (alias runtest)
- (deps
-  (:< test_qc.exe))
- (action
-  (run %{<})))
