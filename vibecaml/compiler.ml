@@ -39,6 +39,30 @@ let show_parsed config structure =
   tree ^ program
 ;;
 
+let show structure = Format.asprintf "%a@." Pprint.pp_structure structure
+
+(* Конвейер middleend по порядку из #9; на стадии из --stop-after печатаем
+   результат и останавливаемся. *)
+let compile config parsed =
+  let ( let* ) = Result.bind in
+  let stop_after stage = config.Config.stop_after = Some stage in
+  if stop_after Config.Parsing
+  then Ok (show_parsed config parsed)
+  else (
+    (* TODO(#10): rename и closure conversion, пока тождество. *)
+    let converted = parsed in
+    if stop_after Config.Closure_conversion
+    then Ok (show converted)
+    else
+      let* lifted = Lambda_lift.lift converted in
+      if stop_after Config.Lambda_lifting
+      then Ok (show lifted)
+      else if stop_after Config.Anf
+      then (* TODO(#12): ANF после мержа PR 9. *)
+        Error "стадия anf пока не подключена"
+      else Ok (show lifted))
+;;
+
 let write_output config text =
   match config.Config.output_file with
   | None | Some "-" -> Ok (print_string text)
@@ -53,12 +77,8 @@ let run config =
   let ( let* ) = Result.bind in
   let* source = read_source config.Config.input_file in
   let* structure = parse_structure config source in
-  let* text =
-    match config.Config.stop_after with
-    | None | Some Config.Parsing -> Ok (show_parsed config structure)
-    | Some (Config.Closure_conversion | Config.Lambda_lifting | Config.Anf) ->
-      Error "эта стадия пока не подключена"
-  in
+  Fresh.reset ();
+  let* text = compile config structure in
   write_output config text
 ;;
 
