@@ -1,0 +1,163 @@
+Operator overrides with -ops (top-down parser only)
+
+Associativity: by default '-' is left-associative
+
+  $ cat > assoc.ml <<EOF
+  > let x = 1 - 2 - 3
+  > EOF
+
+  $ ../compiler.exe assoc.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply (
+           (EApply ((EIdent "-"),
+              (EApply ((EApply ((EIdent "-"), (EConst (CInt 1)))),
+                 (EConst (CInt 2))))
+              )),
+           (EConst (CInt 3))))
+        },
+      []))
+    ]
+
+  $ ../compiler.exe -ops "right 3 -" assoc.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply ((EApply ((EIdent "-"), (EConst (CInt 1)))),
+           (EApply ((EApply ((EIdent "-"), (EConst (CInt 2)))),
+              (EConst (CInt 3))))
+           ))
+        },
+      []))
+    ]
+
+Precedence: by default '*' binds tighter than '+'
+
+  $ cat > prec.ml <<EOF
+  > let x = 1 + 2 * 3
+  > EOF
+
+  $ ../compiler.exe prec.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply ((EApply ((EIdent "+"), (EConst (CInt 1)))),
+           (EApply ((EApply ((EIdent "*"), (EConst (CInt 2)))),
+              (EConst (CInt 3))))
+           ))
+        },
+      []))
+    ]
+
+  $ ../compiler.exe -ops "left 5 +" prec.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply (
+           (EApply ((EIdent "*"),
+              (EApply ((EApply ((EIdent "+"), (EConst (CInt 1)))),
+                 (EConst (CInt 2))))
+              )),
+           (EConst (CInt 3))))
+        },
+      []))
+    ]
+
+A new infix operator is unknown without -ops
+
+  $ cat > dollar.ml <<EOF
+  > let x = 1 + 2 $ 3
+  > EOF
+
+  $ ../compiler.exe dollar.ml
+  compiler: dollar.ml: parsing error: end_of_input
+  [1]
+
+  $ ../compiler.exe -ops "left 5 \$" dollar.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply ((EApply ((EIdent "+"), (EConst (CInt 1)))),
+           (EApply ((EApply ((EIdent "$"), (EConst (CInt 2)))),
+              (EConst (CInt 3))))
+           ))
+        },
+      []))
+    ]
+
+Prefix operator arity
+
+  $ cat > prefix.ml <<EOF
+  > let x = ~ f y
+  > EOF
+
+  $ ../compiler.exe prefix.ml
+  compiler: prefix.ml: parsing error: end_of_input
+  [1]
+
+  $ ../compiler.exe -ops "prefix 1 ~" prefix.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply ((EIdent "~"), (EApply ((EIdent "f"), (EIdent "y"))))) },
+      []))
+    ]
+
+  $ ../compiler.exe -ops "prefix 2 ~" prefix.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply ((EApply ((EIdent "~"), (EIdent "f"))), (EIdent "y"))) },
+      []))
+    ]
+
+Several groups at once
+
+  $ cat > mixed.ml <<EOF
+  > let x = 1 - 2 - 3 * 4 + 5
+  > EOF
+
+  $ ../compiler.exe -ops "right 3 - ; left 5 +" mixed.ml
+  [(SValue (NonRec,
+      { vb_pat = (PVar "x");
+        vb_expr =
+        (EApply ((EApply ((EIdent "-"), (EConst (CInt 1)))),
+           (EApply ((EApply ((EIdent "-"), (EConst (CInt 2)))),
+              (EApply ((EApply ((EIdent "*"), (EConst (CInt 3)))),
+                 (EApply ((EApply ((EIdent "+"), (EConst (CInt 4)))),
+                    (EConst (CInt 5))))
+                 ))
+              ))
+           ))
+        },
+      []))
+    ]
+
+The menhir parser has a fixed grammar, so -ops is rejected
+
+  $ ../compiler.exe -parsing menhir -ops "left 5 +" prec.ml
+  compiler: -ops is supported only with -parsing topdown
+  [1]
+
+Malformed settings
+
+  $ ../compiler.exe -ops "left" prec.ml
+  compiler: settings group "left" lacks a number
+  [1]
+
+  $ ../compiler.exe -ops "left 5" prec.ml
+  compiler: settings group "left" "5" has no operators
+  [1]
+
+  $ ../compiler.exe -ops "middle 5 +" prec.ml
+  compiler: expected left, right or prefix, got "middle"
+  [1]
+
+  $ ../compiler.exe -ops "left x +" prec.ml
+  compiler: expected a number after "left", got "x"
+  [1]
+
+  $ ../compiler.exe -ops "left 5 + ; right 3 +" prec.ml
+  compiler: operator "+" is overridden twice (in infix settings)
+  [1]
