@@ -6,6 +6,8 @@
   anf_conv
   anf_simplify
   config
+  fresh
+  lambda_lift
   parser_intf
   pprint
   menhir_parser

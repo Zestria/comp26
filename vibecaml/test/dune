@@ -3,6 +3,7 @@
   pprint_test
   anf_test
   config_test
+  fresh_test
   parsers_test
   parsers_qcheck_test
   rd_parser_test
