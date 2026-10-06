@@ -3,6 +3,7 @@
  (modules
   ast
   config
+  fresh
   parser_intf
   pprint
   menhir_parser
