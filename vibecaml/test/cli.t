@@ -12,7 +12,7 @@
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
-  $ vibecamlc --parser menhir prog.ml
+  $ vibecamlc -parsing menhir prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
@@ -53,7 +53,7 @@
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
-  $ vibecamlc --parser menhir - < prog.ml
+  $ vibecamlc -parsing menhir - < prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
@@ -63,7 +63,7 @@
   vibecaml: 1:5: ожидался паттерн
   [1]
 
-  $ echo 'let = 1' | vibecamlc --parser menhir
+  $ echo 'let = 1' | vibecamlc -parsing menhir
   vibecaml: 1:5: синтаксическая ошибка у "="
   [1]
 
@@ -97,11 +97,11 @@
 
 Восходящий парсер не поддерживает любые из расширений
 
-  $ vibecamlc --parser menhir --ext-glued-keywords ext.ml
+  $ vibecamlc -parsing menhir --ext-glued-keywords ext.ml
   vibecaml: расширение --ext-glued-keywords не поддерживается в menhir-парсере
   [1]
 
-  $ vibecamlc --parser menhir --ext-operator-declarations ext.ml
+  $ vibecamlc -parsing menhir --ext-operator-declarations ext.ml
   vibecaml: расширение --ext-operator-declarations не поддерживается в menhir-парсере
   [1]
 
@@ -112,6 +112,53 @@
   vibecaml: расширение --ext-operator-declarations пока не реализовано
   [1]
 
-  $ vibecamlc --parser menhir --ext-operator-declarations --ext-glued-keywords ext.ml
+  $ vibecamlc -parsing menhir --ext-operator-declarations --ext-glued-keywords ext.ml
   vibecaml: расширение --ext-glued-keywords не поддерживается в menhir-парсере
+  [1]
+
+Флаги из ТЗ. `-parsing topdown` --- нисходящий парсер, он же по умолчанию.
+
+  $ vibecamlc -parsing topdown small.ml
+  let x = f 1
+
+  $ vibecamlc -parsing lalr small.ml
+  vibecaml: неизвестный парсер: lalr (ожидается topdown или menhir)
+  [1]
+
+  $ vibecamlc --parser menhir small.ml
+  vibecaml: неизвестный аргумент: --parser
+  [1]
+
+`--stop-after parsing` печатает программу после разбора.
+
+  $ vibecamlc --stop-after parsing small.ml
+  let x = f 1
+
+  $ vibecamlc --stop-after typing small.ml
+  vibecaml: неизвестная стадия: typing (ожидается parsing, cc, ll или anf)
+  [1]
+
+  $ vibecamlc --stop-after
+  vibecaml: после --stop-after ожидается значение
+  [1]
+
+  $ vibecamlc --dump-ast --stop-after ll small.ml
+  vibecaml: --dump-ast и --dump-pp работают только с --stop-after parsing
+  [1]
+
+`-o` пишет результат в файл, `-o -` --- в stdout.
+
+  $ vibecamlc -o out.ml small.ml
+  $ cat out.ml
+  let x = f 1
+
+  $ vibecamlc -o - small.ml
+  let x = f 1
+
+  $ vibecamlc small.ml -o
+  vibecaml: после -o ожидается значение
+  [1]
+
+  $ vibecamlc -o missing/out.ml small.ml
+  vibecaml: missing/out.ml: No such file or directory
   [1]
