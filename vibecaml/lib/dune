@@ -3,6 +3,8 @@
  (modules
   ast
   config
+  fresh
+  lambda_lift
   parser_intf
   pprint
   menhir_parser
