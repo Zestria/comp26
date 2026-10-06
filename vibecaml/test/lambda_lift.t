@@ -29,11 +29,14 @@ CPS-факториал после closure conversion: анонимная фун�
   $ vibecamlc --stop-after ll fibk.ml
   let rec lifted__1 k2 a2 b = k2 (a2 + b) and lifted__2 k1 n1 a = fibk (n1 - 2) (lifted__1 k1 a) and fibk n k = if n < 2 then k n else fibk (n - 1) (lifted__2 k n)
 
-Без --stop-after работает весь подключённый конвейер, сейчас это lambda
-lifting.
+Без --stop-after работает весь подключённый конвейер до упрощённого ANF.
 
-  $ vibecamlc fack.ml
-  let rec lifted__1 k1 n1 m = k1 (m * n1) and fack n k = if n <= 1 then k 1 else fack (n - 1) (lifted__1 k n)
+  $ vibecamlc fack.ml > default.ml
+  $ vibecamlc --stop-after anf fack.ml > anf.ml
+  $ diff default.ml anf.ml
+  $ echo 'let () = print_int (fack 5 (fun x -> x))' >> default.ml
+  $ ocaml default.ml
+  120
 
 Проверка смысла: результат запускается настоящим ocaml и печатает то же, что
 исходник.
@@ -95,13 +98,11 @@ lambda lifting страхует.
   vibecaml: локальный let rec не поддерживается
   [1]
 
-`--stop-after cc` пока печатает программу без изменений, ANF ещё не подключён.
+Closure conversion — отдельная задача участника команды. Нельзя выдавать
+неизменённый исходник за результат этого прохода.
 
   $ vibecamlc --stop-after cc fack.ml
-  let rec fack n k = if n <= 1 then k 1 else fack (n - 1) ((fun k1 n1 m -> k1 (m * n1)) k n)
-
-  $ vibecamlc --stop-after anf fack.ml
-  vibecaml: стадия anf пока не подключена
+  vibecaml: стадия cc пока не подключена: ожидаются rename и closure conversion
   [1]
 
 В `let rec` верхнего уровня справа должна стоять функция: иначе после выноса
