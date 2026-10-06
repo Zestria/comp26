@@ -1,0 +1,4 @@
+(cram
+ (package MMML)
+ (deps 1.cpp)
+ (applies_to *))

@@ -42,9 +42,7 @@
    (= "18-shared"))
   (ppx_deriving_qcheck
    (= "0.9"))
-  menhir
-  )
- )
+  menhir))
 
 (package
  (name SchonfinkelML)
@@ -63,6 +61,26 @@
    (= "0.9"))))
 
 (package
+ (name BDSMl)
+ (synopsis "A small compiler")
+ (depends
+  ocaml
+  dune
+  (menhir :build)
+  benchmark
+  base
+  (ppx_expect :with-test)
+  (alcotest :with-test)
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (= "0.9"))))
+
+(package
  (name demo2)
  (allow_empty)
  (synopsis "A short synopsis")
@@ -70,6 +88,23 @@
  (depends ocaml)
  (tags
   ("add topics" "to describe" your project)))
+
+(package
+ (name MMML)
+ (synopsis "A short LLVM project")
+ (depends
+  ocaml
+  dune
+  menhir
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  ppx_deriving
+  (llvm
+   (= "18-shared"))
+  (ppx_deriving_qcheck
+   (>= "0.9"))))
 
 (package
  (name vibecaml)
@@ -101,7 +136,7 @@
   (uri "git+ssh://ssh.sourcecraft.dev/shrexer06/comp26.git"))
  (homepage "https://sourcecraft.dev/shrexer06/comp26")
  (documentation
-  "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
+    "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
  (depends
   ocaml
   dune
@@ -110,5 +145,23 @@
   menhir
   qcheck
   ppx_expect))
+
+(package
+ (name MyLittleML)
+ (synopsis "A small compiler")
+ (authors "Dmitrii Kuznetsov <dmitrvlkuznetsov@gmail.com>")
+ (maintainers "Dmitrii Kuznetsov <dmitrvlkuznetsov@gmail.com>")
+ (license LGPL-3.0-or-later)
+ (depends
+  ocaml
+  dune
+  menhir
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  (llvm
+   (= "18-shared"))
+  ppx_deriving_qcheck))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
