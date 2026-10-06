@@ -1,0 +1,5 @@
+(ocamllex menhir_lexer)
+
+(menhir
+ (modules menhir_grammar)
+ (flags --strict))
