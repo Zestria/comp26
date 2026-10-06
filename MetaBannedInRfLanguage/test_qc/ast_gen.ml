@@ -47,7 +47,11 @@ let rec gen_pattern n : Ast.pattern Gen.t =
       ]
 ;;
 
-let rec gen_expression n : Ast.expression Gen.t =
+(* Eta-expanded on purpose: sub-generators of all branches are then built only
+   for the branch [oneof] actually picks, not eagerly for the whole tree. *)
+let rec gen_expression n : Ast.expression Gen.t = fun st -> gen_expression_branches n st
+
+and gen_expression_branches n : Ast.expression Gen.t =
   if n <= 0
   then
     Gen.oneof
