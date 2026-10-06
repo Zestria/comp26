@@ -8,17 +8,17 @@
 Разбор файла нисходящим парсером (по умолчанию) и menhir печатает программу
 принтером.
 
-  $ vibecamlc prog.ml
+  $ vibecamlc --stop-after parsing prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
-  $ vibecamlc -parsing menhir prog.ml
+  $ vibecamlc -parsing menhir --stop-after parsing prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
 Без файла программа читается из stdin.
 
-  $ vibecamlc < prog.ml
+  $ vibecamlc --stop-after parsing < prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
@@ -49,11 +49,11 @@
 
 Одиночный `-` тоже означает stdin.
 
-  $ vibecamlc - < prog.ml
+  $ vibecamlc --stop-after parsing - < prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
-  $ vibecamlc -parsing menhir - < prog.ml
+  $ vibecamlc -parsing menhir --stop-after parsing - < prog.ml
   let x = 1 + 2 * 3
   let rec f a b = if a then b else f a (b, b)
 
@@ -78,13 +78,13 @@
 
   $ echo 'letx = 1 letrecf n = if n <= 1 then 1 else n * f (n - 1)' > glued.ml
 
-  $ vibecamlc --ext-glued-keywords glued.ml
+  $ vibecamlc --stop-after parsing --ext-glued-keywords glued.ml
   let x = 1
   let rec f n = if n <= 1 then 1 else n * f (n - 1)
 
   $ echo 'let y = letx' > ident.ml
 
-  $ vibecamlc ident.ml
+  $ vibecamlc --stop-after parsing ident.ml
   let y = letx
 
 Опция `--ext-operator-declarations` для восходящего парсера не реализована
@@ -118,7 +118,7 @@
 
 Флаги из ТЗ. `-parsing topdown` --- нисходящий парсер, он же по умолчанию.
 
-  $ vibecamlc -parsing topdown small.ml
+  $ vibecamlc -parsing topdown --stop-after parsing small.ml
   let x = f 1
 
   $ vibecamlc -parsing lalr small.ml
@@ -148,11 +148,11 @@
 
 `-o` пишет результат в файл, `-o -` --- в stdout.
 
-  $ vibecamlc -o out.ml small.ml
+  $ vibecamlc --stop-after parsing -o out.ml small.ml
   $ cat out.ml
   let x = f 1
 
-  $ vibecamlc -o - small.ml
+  $ vibecamlc --stop-after parsing -o - small.ml
   let x = f 1
 
   $ vibecamlc small.ml -o

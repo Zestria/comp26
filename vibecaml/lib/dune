@@ -2,6 +2,9 @@
  (name vibecaml)
  (modules
   ast
+  anf
+  anf_conv
+  anf_simplify
   config
   fresh
   lambda_lift
