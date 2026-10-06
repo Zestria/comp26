@@ -91,6 +91,12 @@ let () =
   require
     (List.mem ("f", 1) (call_sizes "partial" program))
     "частичное применение потеряно";
+  let discarded = normalized "let _ = fun ignored -> print_int ignored" in
+  require
+    (match discarded with
+     | [ (Ast.Non_recursive, [ (_, [ "ignored" ], _) ]) ] -> true
+     | _ -> false)
+    "let _ = fun должен сохранить функцию под свежим именем";
   let program =
     normalized
       "let rec even n = if n = 0 then true else odd (n - 1) and odd m = if m = 0 then \
@@ -172,6 +178,7 @@ let () =
     ; "let f x = let rec g y = y in g x"
     ; "let f 1 = 2"
     ; "let rec x = 1"
+    ; "let rec _ = fun recursive_arg -> recursive_arg"
     ];
   require (normalized "" = []) "пустая программа не поддерживается";
   print_endline "ANF: структура, арность, условия, паттерны и уменьшение — OK"

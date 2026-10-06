@@ -38,7 +38,7 @@
 Для каждого примера исполняем исходник, сырую ANF и уменьшенную ANF. Сверяем
 весь stdout: так ловятся и неверные числа, и изменение порядка print_int.
 
-  $ for sample in fack fibk patterns branches arity effects operators; do
+  $ for sample in fack fibk patterns branches arity effects operators discarded; do
   >   ocaml -w -a "$sample.src" > source.out || exit 1
   >   ./fixture.exe --raw "$sample.src" > raw.ml || exit 1
   >   ocaml -w -a raw.ml > raw.out || exit 1
@@ -57,3 +57,4 @@
   arity: 305799
   effects: 215436728
   operators: 1485-5
+  discarded: 5

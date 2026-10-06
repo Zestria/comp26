@@ -220,7 +220,14 @@ let convert ~fresh program =
   in
   let convert_binding environment binding =
     match binding.binding_pattern, binding.binding_expression with
-    | Pat_var name, Expr_fun (first, rest, body) ->
+    | pattern, Expr_fun (first, rest, body) ->
+      let name =
+        match pattern with
+        | Pat_var name -> name
+        | Pat_wildcard -> fresh "discarded_fun"
+        | _ ->
+          raise (Invalid_input "ANF: функция верхнего уровня требует имя или паттерн _")
+      in
       let patterns = first :: rest in
       let parameters =
         List.map
@@ -267,8 +274,8 @@ let convert ~fresh program =
       let signatures =
         List.concat_map
           (fun binding ->
-             match binding.binding_expression with
-             | Expr_fun _ -> [ signature binding ]
+             match binding.binding_pattern, binding.binding_expression with
+             | Pat_var _, Expr_fun _ -> [ signature binding ]
              | _ ->
                List.map
                  (fun name -> name, unknown)
