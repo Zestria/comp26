@@ -13,4 +13,24 @@ type stage =
   | Lambda_lift
   | Anf
 
-let run ~stop_after:_ _ = failwith "Pipeline.run: not implemented"
+let run ~stop_after program =
+  let open BDSMl_frontend in
+  match stop_after with
+  | Parsing -> Printer.print_program program
+  | Alpha ->
+    Ast_passes.Alpha.alpha program |> Printer.print_program
+  | Closure_conv ->
+    Ast_passes.Closure_conv.closure_conv program
+    |> Printer.print_program
+  | Lambda_lift ->
+    Ast_passes.Alpha.alpha program
+    |> Ast_passes.Closure_conv.closure_conv
+    |> Ast_passes.Lambda_lift.lambda_lift
+    |> Printer.print_program
+  | Anf ->
+    Ast_passes.Alpha.alpha program
+    |> Ast_passes.Closure_conv.closure_conv
+    |> Ast_passes.Lambda_lift.lambda_lift
+    |> Anf.Anf_conv.anf
+    |> Anf.Anf_pp.anf_pp
+;;

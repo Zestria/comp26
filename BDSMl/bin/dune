@@ -14,5 +14,7 @@
 (cram
  (package BDSMl)
  (deps
+  cli_input.ml
+  closure_input.ml
   runtime.c
   %{exe:../compiler.exe}))

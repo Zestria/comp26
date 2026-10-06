@@ -17,3 +17,8 @@
  (name qcheck_test)
  (modules qcheck_test)
  (libraries BDSMl.frontend qcheck))
+
+(test
+ (name middleend_tests)
+ (modules middleend_tests)
+ (libraries BDSMl.frontend BDSMl.middleend alcotest))

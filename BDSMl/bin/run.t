@@ -28,3 +28,14 @@
   BinOp ('||', Bool true, BinOp ('||', Bool false, Bool true))
   $ ../compiler.exe --parse 'true || false || true' --operator-assoc or:left
   BinOp ('||', BinOp ('||', Bool true, Bool false), Bool true)
+
+  $ ../compiler.exe -parsing menhir --stop-after parsing cli_input.ml -o -
+  let main = (print_int (1 + 2));;
+  $ ../compiler.exe -parsing topdown --stop-after parsing cli_input.ml -o parsed.ml
+  $ cat parsed.ml
+  let main = (print_int (1 + 2));;
+  $ ../compiler.exe -parsing topdown --stop-after cc cli_input.ml -o -
+  let main = (print_int (1 + 2));;
+  $ ../compiler.exe -parsing topdown --stop-after cc closure_input.ml -o closure_output.ml
+  $ ocaml closure_output.ml
+  7

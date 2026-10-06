@@ -7,6 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open BDSMl_frontend
+open BDSMl_middleend
 
 type parser_kind =
   | LL
@@ -99,35 +100,78 @@ let print_ll_error = function
   | `lexer_error message | `parse_error message -> message
 ;;
 
-let run_frontend parser overrides source =
-  let result =
-    match parser with
-    | LR ->
-      if overrides <> []
-      then Error "--operator-assoc is supported only by the LL parser"
-      else Parse.parse source
-    | LL ->
-      let config =
-        List.fold_left
-          (fun config (operator, associativity) ->
-             LL_parser.Parser.with_associativity config operator associativity)
-          LL_parser.Parser.default_config
-          (List.rev overrides)
-      in
-      (match LL_parser.Parser.parse_string_LL ~config source with
-       | Ok program -> Ok program
-       | Error error -> Error (print_ll_error error))
-  in
-  match result with
-  | Ok program -> print_endline (Printer.print_ast program)
+let parse_source parser overrides source =
+  match parser with
+  | LR ->
+    if overrides <> []
+    then Error "--operator-assoc is supported only by the topdown parser"
+    else Parse.parse source
+  | LL ->
+    let config =
+      List.fold_left
+        (fun config (operator, associativity) ->
+           LL_parser.Parser.with_associativity config operator associativity)
+        LL_parser.Parser.default_config
+        (List.rev overrides)
+    in
+    (match LL_parser.Parser.parse_string_LL ~config source with
+     | Ok program -> Ok program
+     | Error error -> Error (print_ll_error error))
+;;
+
+let parse_or_exit parser overrides source =
+  match parse_source parser overrides source with
+  | Ok program -> program
   | Error message ->
     prerr_endline message;
     exit 2
 ;;
 
+let read_file filename =
+  try
+    let channel = open_in_bin filename in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr channel)
+      (fun () -> really_input_string channel (in_channel_length channel))
+  with
+  | Sys_error message ->
+    prerr_endline message;
+    exit 2
+;;
+
+let write_output filename text =
+  match filename with
+  | "-" -> print_endline text
+  | filename ->
+    (try
+       let channel = open_out_bin filename in
+       Fun.protect
+         ~finally:(fun () -> close_out_noerr channel)
+         (fun () ->
+           output_string channel text;
+           output_char channel '\n')
+     with
+     | Sys_error message ->
+       prerr_endline message;
+       exit 2)
+;;
+
+let stage_of_name = function
+  | "parsing" -> Pipeline.Parsing
+  | "alpha" -> Pipeline.Alpha
+  | "cc" -> Pipeline.Closure_conv
+  | "ll" -> Pipeline.Lambda_lift
+  | "anf" -> Pipeline.Anf
+  | name -> raise (Arg.Bad ("unknown stage: " ^ name))
+;;
+
 let () =
   let parser = ref LL in
-  let source = ref None in
+  let inline_source = ref None in
+  let input_file = ref None in
+  let output_file = ref "-" in
+  let stop_after = ref Pipeline.Anf in
+  let pipeline_mode = ref false in
   let overrides = ref [] in
   let options =
     [ ( "--parser"
@@ -138,22 +182,64 @@ let () =
             | "lr" -> parser := LR
             | _ -> assert false )
       , " Select the parser (default: ll)" )
+    ; ( "-parsing"
+      , Arg.Symbol
+          ( [ "topdown"; "menhir" ]
+          , function
+            | "topdown" ->
+              pipeline_mode := true;
+              parser := LL
+            | "menhir" ->
+              pipeline_mode := true;
+              parser := LR
+            | _ -> assert false )
+      , " Select the parser (default: topdown)" )
+    ; ( "--stop-after"
+      , Arg.Symbol
+          ( [ "parsing"; "alpha"; "cc"; "ll"; "anf" ]
+          , fun stage ->
+              pipeline_mode := true;
+              stop_after := stage_of_name stage )
+      , " Stop after this compilation stage" )
+    ; ( "-o"
+      , Arg.String (fun filename ->
+          pipeline_mode := true;
+          output_file := filename)
+      , "FILE Write output to FILE; use - for stdout" )
     ; ( "--operator-assoc"
       , Arg.String
           (fun value -> overrides := parse_associativity_override value :: !overrides)
       , "OPERATOR:left|right Override an LL operator, e.g. minus:right" )
     ; ( "--parse"
-      , Arg.String (fun value -> source := Some value)
+      , Arg.String (fun value -> inline_source := Some value)
       , "SOURCE Parse SOURCE and print its AST" )
     ]
   in
-  Arg.parse options (fun _ -> raise (Arg.Bad "unexpected positional argument")) "BDSMl";
-  match !source with
-  | Some source -> run_frontend !parser !overrides source
-  | None ->
+  let set_input filename =
+    match !input_file with
+    | None -> input_file := Some filename
+    | Some _ -> raise (Arg.Bad "only one input file may be specified")
+  in
+  Arg.parse options set_input "Usage: BDSMl [OPTIONS] [FILE.ml]";
+  match !inline_source, !input_file with
+  | Some _, Some _ ->
+    prerr_endline "--parse and an input file cannot be used together";
+    exit 2
+  | Some source, None ->
+    let program = parse_or_exit !parser !overrides source in
+    write_output !output_file (Printer.print_ast program)
+  | None, Some filename ->
+    let source = read_file filename in
+    let program = parse_or_exit !parser !overrides source in
+    write_output !output_file (Pipeline.run ~stop_after:!stop_after program)
+  | None, None ->
     if !overrides <> []
     then (
-      prerr_endline "--operator-assoc requires --parse";
+      prerr_endline "--operator-assoc requires --parse or an input file";
+      exit 2)
+    else if !pipeline_mode
+    then (
+      prerr_endline "an input .ml file is required";
       exit 2)
     else emit_demo_llvm ()
 ;;
