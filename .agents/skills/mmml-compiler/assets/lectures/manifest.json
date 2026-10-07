@@ -1,0 +1,47 @@
+[
+  {
+    "file": "LN_RA.pdf",
+    "sha256": "fbe6f4e76c3ef1f42cd9b9d519757947bd20c0a2aec612f7bc626ade58fe53cc",
+    "bytes": 470074
+  },
+  {
+    "file": "LN_matching.pdf",
+    "sha256": "9ef790ac009ab4af5d92fc6186565b042ae1118c2b055647b57c1cde83c2dcbb",
+    "bytes": 134612
+  },
+  {
+    "file": "LN_CC.pdf",
+    "sha256": "abe0e52258f23d8ff852ee18a1db22b8d90fd228d22a5d0252b3c1f3cfaa6400",
+    "bytes": 138751
+  },
+  {
+    "file": "080matching.pdf",
+    "sha256": "ef4fd1d115891442d0960beabf7c73785d0ccf5acc764926aff09d1b75ab24c6",
+    "bytes": 158615
+  },
+  {
+    "file": "050registers (2).pdf",
+    "sha256": "e9aaeedd80341f66cd6ee8b42f1ab9450a750280ba2da8df772eb095f14fdb79",
+    "bytes": 904334
+  },
+  {
+    "file": "041asm.pdf",
+    "sha256": "0540cd7d105e619b85f6bfedd0854468101eaeb4b581316b32df2edbfdcbb0cf",
+    "bytes": 156386
+  },
+  {
+    "file": "025ANF (2).pdf",
+    "sha256": "8986af1cccdb377c56f50882d54414c1e0c64f3e211510e06b354f4f2ee9ee7d",
+    "bytes": 106306
+  },
+  {
+    "file": "020closures.pdf",
+    "sha256": "d3d0b21dae4b6d4da03a9a1f8155bf525b086d3fe6ea707dda3ad6890f611e12",
+    "bytes": 97578
+  },
+  {
+    "file": "010intro.pdf",
+    "sha256": "9e37303e8b4dd884798e90043a2d776323948e855feeb911edf74a49928629c6",
+    "bytes": 435316
+  }
+]
