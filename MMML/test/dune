@@ -27,3 +27,12 @@
  (package MMML)
  (modules parser_menhir_qcheck)
  (libraries MMML.frontend qcheck))
+
+(library
+ (name lambda_lifting_test)
+ (package MMML)
+ (modules lambda_lifting_test)
+ (libraries MMML.frontend MMML.middleend)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect_nobase)))

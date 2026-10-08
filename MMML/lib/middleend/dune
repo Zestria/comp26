@@ -1,0 +1,5 @@
+(library
+ (name middleend)
+ (public_name MMML.middleend)
+ (modules lambda_lifting)
+ (libraries MMML.frontend))
