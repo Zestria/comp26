@@ -103,6 +103,7 @@ type ctx =
   { all_names : SSet.t
   ; rebound : SSet.t
   ; mutable generated : SSet.t
+  ; mutable temps : SSet.t
   ; mutable counter : int
   ; mutable used : SSet.t
   }
@@ -133,7 +134,11 @@ let generate ctx name =
 let rec fresh_temp ctx =
   ctx.counter <- ctx.counter + 1;
   let name = "t" ^ Int.to_string ctx.counter in
-  if is_taken ctx name then fresh_temp ctx else generate ctx name
+  if is_taken ctx name
+  then fresh_temp ctx
+  else (
+    ctx.temps <- SSet.add name ctx.temps;
+    generate ctx name)
 ;;
 
 (* Renames a local binder only if its name is already taken in the item. *)
@@ -269,6 +274,7 @@ and apply ctx env fn args k =
   | _ -> to_imm ctx env fn (fun fn -> k (fold_app ctx fn args))
 
 and lambda ctx env expr =
+  let outer = ctx.used in
   let rec params env acc refutable = function
     | EFun (pat, body) ->
       (match pat with
@@ -292,7 +298,9 @@ and lambda ctx env expr =
       body
       refutable
   in
-  CFun (names, to_tail ctx env body)
+  let body = to_tail ctx env body in
+  ctx.used <- outer;
+  CFun (names, body)
 
 and bind_nonrec ctx env into bindings k =
   match bindings with
@@ -504,16 +512,84 @@ let all_names structure =
   union_map (fun item -> SSet.union (free_vars_item item) (binders_item item)) structure
 ;;
 
+(* ---------- renumbering of temporaries ---------- *)
+
+let renumber ctx program =
+  let taken = SSet.union ctx.all_names (SSet.diff ctx.generated ctx.temps) in
+  let names = Hashtbl.create 16 in
+  let counter = ref 0 in
+  let rec next () =
+    incr counter;
+    let name = "t" ^ Int.to_string !counter in
+    if SSet.mem name taken then next () else name
+  in
+  let bind name =
+    if SSet.mem name ctx.temps
+    then (
+      let renamed = next () in
+      Hashtbl.replace names name renamed;
+      renamed)
+    else name
+  in
+  let imm = function
+    | ImmVar name -> ImmVar (Option.value (Hashtbl.find_opt names name) ~default:name)
+    | other -> other
+  in
+  let rec cexpr = function
+    | CImm value -> CImm (imm value)
+    | CApp (fn, args) ->
+      let fn = imm fn in
+      CApp (fn, List.map imm args)
+    | CTuple (first, second, rest) ->
+      let first = imm first in
+      let second = imm second in
+      CTuple (first, second, List.map imm rest)
+    | CIte (cond, then_branch, else_branch) ->
+      let cond = imm cond in
+      let then_branch = aexpr then_branch in
+      CIte (cond, then_branch, aexpr else_branch)
+    | CFun (params, body) ->
+      let params = List.map bind params in
+      CFun (params, aexpr body)
+    | CMatchFailure -> CMatchFailure
+  and aexpr = function
+    | ALet (name, value, body) ->
+      let name = bind name in
+      let value = cexpr value in
+      ALet (name, value, aexpr body)
+    | ALetTuple (slots, subject, body) ->
+      let subject = imm subject in
+      let slots = List.map (Option.map bind) slots in
+      ALetTuple (slots, subject, aexpr body)
+    | ALetRec (bindings, body) ->
+      let bindings = rec_bindings bindings in
+      ALetRec (bindings, aexpr body)
+    | ACExpr value -> ACExpr (cexpr value)
+  and rec_bindings bindings =
+    let names = List.map (fun (name, _) -> bind name) bindings in
+    List.map2 (fun name (_, value) -> name, cexpr value) names bindings
+  in
+  let item = function
+    | AValue (name, body) ->
+      let name = bind name in
+      AValue (name, aexpr body)
+    | ARec bindings -> ARec (rec_bindings bindings)
+    | AEval body -> AEval (aexpr body)
+  in
+  List.map item program
+;;
+
 let convert structure =
   let ctx =
     { all_names = all_names structure
     ; rebound = union_map binders_item structure
     ; generated = SSet.empty
+    ; temps = SSet.empty
     ; counter = 0
     ; used = SSet.empty
     }
   in
   match List.concat_map (convert_item ctx) structure with
-  | program -> Ok (Anf_simplify.program ~is_prim:(is_prim ctx) program)
+  | program -> Ok (renumber ctx (Anf_simplify.program ~is_prim:(is_prim ctx) program))
   | exception Unsupported message -> Error message
 ;;

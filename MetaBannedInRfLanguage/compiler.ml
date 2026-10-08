@@ -63,7 +63,9 @@ let run (cli : Cli.t) =
   let* structure = parse_structure cli source in
   match cli.stop_after with
   | Stop_after_parsing -> write_output cli.output (Ast.show_structure structure ^ "\n")
-  | Stop_after_anf -> Error "--stop-after anf is not implemented yet (ANF pass is not written)"
+  | Stop_after_anf ->
+    let* program = Anf_conv.convert structure in
+    write_output cli.output (Anf_pprint.string_of_program program)
 ;;
 
 let () =
