@@ -11,6 +11,12 @@
   - kosarev-d-s
   - Kakadu2
   - Kakadu
+  
+  
+- MMML:
+  - mikhailsviriukov
+  - pugovkinvladim1
+  - ilyasobased
 
 - shmel:
   - kormyltsyn-roman-gmail-com
@@ -22,6 +28,24 @@
   - neepi
   - semyonrosin
 
+- vibecaml:
+  - lazarev26andrew
+  - lutik924
+  - alken1t
+
+- BogdanKharisovPolMuzhskoyGorodNizhnevartovskML:
+  - shrexer06
+
+- BDSMl:
+    - bogbanrvd-gmail-com
+    - shamashaehmitov
+    - garry2311
+
+- MyLittleML:
+  - f1i3g3
+# - <your_nickname_here>
+# - <your_nickname_here>
+# TODO: make friends
 
 # $ yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml
 # demo

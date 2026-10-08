@@ -1,0 +1,5 @@
+(menhir
+ (modules parser)
+ (flags --strict --external-tokens Tokens))
+
+(ocamllex lexer)

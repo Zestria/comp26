@@ -1,0 +1,7 @@
+(test
+ (name test_qc)
+ (package BDSMl)
+ (modules test_qc)
+ (libraries qcheck angstrom)
+ (preprocess
+  (pps ppx_deriving_qcheck ppx_deriving.show)))
