@@ -6,4 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-val closure_convert : Anf.aexpr -> Anf.aexpr
+open SchonfinkelML_frontend.Common
+
+val closure_convert : ?globals:string list -> expr -> expr
+val closure_convert_program : ?globals:string list -> program -> program
+val free_vars : ?globals:string list -> expr -> string list
