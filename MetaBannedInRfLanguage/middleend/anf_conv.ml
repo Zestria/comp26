@@ -514,6 +514,6 @@ let convert structure =
     }
   in
   match List.concat_map (convert_item ctx) structure with
-  | program -> Ok program
+  | program -> Ok (Anf_simplify.program ~is_prim:(is_prim ctx) program)
   | exception Unsupported message -> Error message
 ;;
