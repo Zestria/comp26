@@ -36,3 +36,27 @@
  (inline_tests)
  (preprocess
   (pps ppx_expect)))
+
+(test
+ (name closure_ir_test)
+ (package MMML)
+ (modules closure_ir_test)
+ (libraries MMML.middleend))
+
+(library
+ (name closure_test_support)
+ (wrapped false)
+ (modules closure_eval closure_generator)
+ (libraries MMML.frontend MMML.middleend qcheck))
+
+(test
+ (name closure_conversion_test)
+ (package MMML)
+ (modules closure_conversion_test)
+ (libraries MMML.frontend MMML.middleend closure_test_support))
+
+(test
+ (name closure_conversion_qcheck)
+ (package MMML)
+ (modules closure_conversion_qcheck)
+ (libraries MMML.frontend MMML.middleend closure_test_support qcheck))
