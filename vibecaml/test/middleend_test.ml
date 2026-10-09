@@ -22,7 +22,8 @@ let () =
     unwrap
       (Rd_parser.parse_structure
          Config.default_extensions
-         "let answer = ((fun first -> first + 1) 3, (fun second -> second * 2) 4)")
+         "let answer = ((fun first -> (fun inner -> first + inner) 1) 3, (fun second -> \
+          second * 2) 4)")
   in
   let renamed = unwrap (Rename.rename source) in
   let cc = unwrap (Closure_conv.convert renamed) in

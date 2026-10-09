@@ -1,6 +1,5 @@
-Lambda lifting. Пока rename и closure conversion (#10) не подключены, на вход
-подаются программы, замкнутые вручную: у вложенных функций нет свободных
-локальных переменных, имена различны.
+Lambda lifting через полный CLI-конвейер. В этих примерах замыкания уже
+подготовлены вручную, поэтому CC не добавляет им новых параметров.
 
 CPS-факториал после closure conversion: анонимная функция получает свободные
 переменные лишними аргументами.
@@ -87,14 +86,14 @@ CPS-факториал после closure conversion: анонимная фун�
   90
   90
 
-Локальный `let rec` не поддерживается.
+Локальный `let rec` не поддерживается closure conversion по договорённости #10.
 
   $ cat > local_rec.ml <<'ML'
   > let f n = let rec loop i = if i > n then 0 else loop (i + 1) in loop 0
   > ML
 
   $ vibecamlc --stop-after ll local_rec.ml
-  vibecaml: Rename: поддерживается только `let rec` верхнего уровня
+  vibecaml: Closure conversion: поддерживается только `let rec` верхнего уровня
   [1]
 
 В `let rec` верхнего уровня справа должна стоять функция: иначе после выноса

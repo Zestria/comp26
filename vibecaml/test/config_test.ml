@@ -54,6 +54,7 @@ let () =
   assert (Config.default.stop_after = None);
   let stop_after value = (expect_ok [ "--stop-after"; value ]).stop_after in
   assert (stop_after "parsing" = Some Config.Parsing);
+  assert (stop_after "rename" = Some Config.Rename);
   assert (stop_after "cc" = Some Config.Closure_conversion);
   assert (stop_after "ll" = Some Config.Lambda_lifting);
   assert (stop_after "anf" = Some Config.Anf);
