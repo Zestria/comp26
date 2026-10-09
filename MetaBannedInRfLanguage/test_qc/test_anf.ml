@@ -79,7 +79,32 @@ let test_alpha_preserves_semantics =
     alpha_preserves_semantics
 ;;
 
+let pipeline_preserves_semantics structure =
+  match Anf_conv.convert structure with
+  | Error _ -> true
+  | Ok program ->
+    let program = Closure_conversion.program program in
+    let program = Lambda_lifting.program program in
+    (match Ast_interp.eval_structure structure, Anf_interp.eval_program program with
+     | Ok ast_env, Ok anf_env ->
+       (match same_bound_values (structure_bound_names structure) ast_env anf_env with
+        | Ok result -> result
+        | Error _ -> false)
+     | Error _, Error _ -> true
+     | Ok _, Error _ | Error _, Ok _ -> false)
+;;
+
+let test_pipeline_preserves_semantics =
+  QCheck.Test.make
+    ~name:"full pipeline preserves semantics: eval(ast) = eval(lambda_lifting(closure_conversion(anf)))"
+    ~count:300
+    Typed_gen.arb_structure
+    pipeline_preserves_semantics
+;;
+
 let () =
-  let tests = [ test_anf_preserves_semantics; test_alpha_preserves_semantics ] in
+  let tests =
+    [ test_anf_preserves_semantics; test_alpha_preserves_semantics; test_pipeline_preserves_semantics ]
+  in
   exit (QCheck_runner.run_tests ~verbose:true tests)
 ;;
