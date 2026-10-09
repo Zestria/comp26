@@ -12,6 +12,7 @@ type parser =
 
 type stage =
   | Parsing
+  | Rename
   | Closure_conversion
   | Lambda_lifting
   | Anf
@@ -51,11 +52,12 @@ let parser_of_string = function
 
 let stage_of_string = function
   | "parsing" -> Ok Parsing
+  | "rename" -> Ok Rename
   | "cc" -> Ok Closure_conversion
   | "ll" -> Ok Lambda_lifting
   | "anf" -> Ok Anf
   | value ->
-    Error ("неизвестная стадия: " ^ value ^ " (ожидается parsing, cc, ll или anf)")
+    Error ("неизвестная стадия: " ^ value ^ " (ожидается parsing, rename, cc, ll или anf)")
 ;;
 
 (* Дамп печатает результат разбора, поэтому без --stop-after он сам
@@ -65,7 +67,7 @@ let check_dumps config =
   | _ when not (config.dump_ast || config.dump_pretty_printed) -> Ok config
   | None -> Ok { config with stop_after = Some Parsing }
   | Some Parsing -> Ok config
-  | Some (Closure_conversion | Lambda_lifting | Anf) ->
+  | Some (Rename | Closure_conversion | Lambda_lifting | Anf) ->
     Error "--dump-ast и --dump-pp работают только с --stop-after parsing"
 ;;
 

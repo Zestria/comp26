@@ -1,0 +1,6 @@
+(cram
+ (package vibecaml)
+ (deps
+  %{bin:vibecamlc}
+  %{bin:ocaml}
+  (glob_files *.src)))

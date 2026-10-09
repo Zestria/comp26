@@ -1,0 +1,4 @@
+let mark n = let () = print_int n in n
+let make x = fun y -> x + y
+let () = print_int (make (mark 1) (mark 2))
+let () = let (_, _) = (mark 3, mark 4) in ()

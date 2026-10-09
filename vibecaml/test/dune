@@ -5,6 +5,7 @@
   config_test
   fresh_test
   middleend_test
+  closure_conversion_test
   parsers_test
   parsers_qcheck_test
   rd_parser_test

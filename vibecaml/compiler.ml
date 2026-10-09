@@ -44,19 +44,22 @@ let compile config parsed =
   let stop_after stage = config.Config.stop_after = Some stage in
   if stop_after Config.Parsing
   then Ok (show_parsed config parsed)
-  else if stop_after Config.Closure_conversion
-  then Error "стадия cc пока не подключена: ожидаются rename и closure conversion"
   else
-    (* Rename и closure conversion делает участник #10. Пока на стадии ll
-         и anf подаём уже подготовленные программы: имена уникальны, функции
-         не захватывают локальные переменные. Здесь нет тождественного cc. *)
-    let* lifted = Lambda_lift.lift parsed in
-    if stop_after Config.Lambda_lifting
-    then Ok (show lifted)
+    let* renamed = Rename.rename parsed in
+    if stop_after Config.Rename
+    then Ok (show renamed)
     else
-      let* anf = Anf_conv.convert lifted in
-      let anf = Anf_simplify.simplify anf in
-      Ok (Format.asprintf "%a@." Anf.pp_program anf)
+      let* cc = Closure_conv.convert renamed in
+      if stop_after Config.Closure_conversion
+      then Ok (show cc)
+      else
+        let* lifted = Lambda_lift.lift cc in
+        if stop_after Config.Lambda_lifting
+        then Ok (show lifted)
+        else
+          let* anf = Anf_conv.convert lifted in
+          let anf = Anf_simplify.simplify anf in
+          Ok (Format.asprintf "%a@." Anf.pp_program anf)
 ;;
 
 let write_output config text =
