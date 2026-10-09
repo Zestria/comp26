@@ -28,6 +28,10 @@ let expect_program source expected =
 ;;
 
 let regression_tests () =
+  expect_program "" [];
+  expect_program " \t\n" [];
+  expect_program ";;;;" [];
+  expect_program "1;;;;2" [ StrEval (Int 1); StrEval (Int 2) ];
   List.iter
     (fun (source, expected) -> expect_program source [ StrEval expected ])
     [ "()", Unit
