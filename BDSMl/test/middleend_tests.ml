@@ -8,6 +8,23 @@ let check_free_vars name expected expression =
   Alcotest.(check (list string)) name expected actual
 ;;
 
+let fresh_names_are_distinct () =
+  BDSMl_middleend.Fresh.reset ();
+  let first = BDSMl_middleend.Fresh.fresh_ident "x" in
+  let second = BDSMl_middleend.Fresh.fresh_ident "x" in
+  let third = BDSMl_middleend.Fresh.fresh_ident "y" in
+  let names = [ first; second; third ] in
+  Alcotest.(check (list string)) "one counter across bases" [ "x_1"; "x_2"; "y_3" ] names
+;;
+
+let fresh_names_reset () =
+  BDSMl_middleend.Fresh.reset ();
+  let first = BDSMl_middleend.Fresh.fresh_ident "tmp" in
+  BDSMl_middleend.Fresh.reset ();
+  Alcotest.(check string) "reset gives reproducible names" first
+    (BDSMl_middleend.Fresh.fresh_ident "tmp")
+;;
+
 let free_variables () =
   check_free_vars
     "function"
@@ -263,6 +280,10 @@ let () =
   Alcotest.run
     "middleend"
     [ "free variables", [ Alcotest.test_case "examples" `Quick free_variables ]
+    ; ( "fresh names"
+      , [ Alcotest.test_case "distinct" `Quick fresh_names_are_distinct
+        ; Alcotest.test_case "reset" `Quick fresh_names_reset
+        ] )
     ; ( "alpha conversion"
       , [ Alcotest.test_case "scopes and collisions" `Quick alpha_scopes
         ; Alcotest.test_case "sequential definitions" `Quick alpha_nonrecursive_binding
