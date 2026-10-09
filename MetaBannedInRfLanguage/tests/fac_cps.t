@@ -7,7 +7,7 @@ CPS factorial
   > let main = fac_cps 5 (fun x -> x)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after parsing fac_cps.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after parsing fac_cps.ml
   [(SValue (Rec,
       { vb_pat = (PVar "fac_cps");
         vb_expr =
@@ -45,6 +45,6 @@ CPS factorial
 
 Both parsers produce the same AST
 
-  $ ../compiler.exe -parsing topdown fac_cps.ml > topdown.txt
-  $ ../compiler.exe -parsing menhir fac_cps.ml > menhir.txt
+  $ ../driver/compiler.exe -parsing topdown fac_cps.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir fac_cps.ml > menhir.txt
   $ diff topdown.txt menhir.txt

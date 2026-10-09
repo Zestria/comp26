@@ -7,7 +7,7 @@ After lambda lifting every closed function is a top-level item
   > let main = fac_cps 5 (fun x -> x)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after ll fac_cps.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll fac_cps.ml
   let t3__cc1 k n p =
     let t4 = p * n in
     k t4
@@ -34,7 +34,7 @@ After lambda lifting every closed function is a top-level item
   > let main = fib_cps 10 (fun x -> x)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after ll fib_cps.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll fib_cps.ml
   let t6__cc1 a k b =
     let t7 = a + b in
     k t7
@@ -67,7 +67,7 @@ Lambdas in both branches of an if: LL lifts each one separately
   > let main = if flag then (fun x -> x + 1) else (fun x -> x * 2)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after ll ifthen.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll ifthen.ml
   let flag = 1;;
   let f__ll1 x = x + 1;;
   let f__ll2 x = x * 2;;
@@ -87,7 +87,7 @@ the binder is used more than once, so can_reuse does not fire
   > let main = inc (add2 5)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after ll partial.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll partial.ml
   let add x y = x + y;;
   let inc = add 1;;
   let add2 = add 2;;
@@ -105,7 +105,7 @@ Mutual recursion: LL keeps even/odd in one let rec group
   > let main = even 10
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after ll mutual2.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll mutual2.ml
   let rec even n =
     let t1 = n = 0 in
     if t1
@@ -133,11 +133,11 @@ Nested lambdas: LL lifts the inner one first, then the outer
   >   10
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after ll nested_ll.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll nested_ll.ml
   let g y = 10 + y;;
   let main = g 1;;
 
 The output of lambda lifting parses back
 
-  $ ../compiler.exe -parsing topdown --stop-after ll fac_cps.ml > ll_fac.ml
-  $ ../compiler.exe -parsing topdown --stop-after parsing ll_fac.ml > /dev/null
+  $ ../driver/compiler.exe -parsing topdown --stop-after ll fac_cps.ml > ll_fac.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after parsing ll_fac.ml > /dev/null

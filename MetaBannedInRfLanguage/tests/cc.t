@@ -7,7 +7,7 @@ CPS factorial and fibonacci after closure conversion
   > let main = fac_cps 5 (fun x -> x)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after cc fac_cps.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after cc fac_cps.ml
   let rec fac_cps n k =
     let t1 = n <= 1 in
     if t1
@@ -36,7 +36,7 @@ CPS factorial and fibonacci after closure conversion
   > let main = fib_cps 10 (fun x -> x)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after cc fib_cps.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after cc fib_cps.ml
   let rec fib_cps n k =
     let t1 = n = 0 in
     if t1
@@ -73,7 +73,7 @@ Mutual recursion: CC leaves ARec alone, no closures are introduced
   > let main = even 10
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after cc mutual2.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after cc mutual2.ml
   let rec even n =
     let t1 = n = 0 in
     if t1
@@ -93,5 +93,5 @@ Mutual recursion: CC leaves ARec alone, no closures are introduced
 
 The output of closure conversion parses back
 
-  $ ../compiler.exe -parsing topdown --stop-after cc fac_cps.ml > cc_fac.ml
-  $ ../compiler.exe -parsing topdown --stop-after parsing cc_fac.ml > /dev/null
+  $ ../driver/compiler.exe -parsing topdown --stop-after cc fac_cps.ml > cc_fac.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after parsing cc_fac.ml > /dev/null
