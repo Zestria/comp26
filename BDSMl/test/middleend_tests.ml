@@ -97,10 +97,50 @@ let captures_a_shadowing_local () =
     source
 ;;
 
+let alpha_scopes () =
+  let source =
+    [ StrLet (NonRec, PVar "x", Int 1)
+    ; StrLet
+        ( Rec
+        , PVar "f"
+        , Abs
+            ( PVar "x"
+            , Let
+                ( NonRec
+                , PVar "x"
+                , BinOp (Plus, Var "x", Var "x_1")
+                , App (Var "f", Var "x") ) ) )
+    ; StrEval (Var "x")
+    ]
+  in
+  let result = Alpha.alpha source in
+  Alcotest.(check string)
+    "recursive and sequential scope; free names stay free"
+    "let x_2 = 1;;\nlet rec f_3 = (fun x_4 -> (let x_5 = (x_4 + x_1) in (f_3 x_5)));;\nx_2;;"
+    (Printer.print_program result)
+;;
+
+let alpha_nonrecursive_binding () =
+  let source =
+    [ StrLet (NonRec, PVar "x", Int 5)
+    ; StrLet (NonRec, PVar "x", BinOp (Plus, Var "x", Int 1))
+    ; StrEval (Var "x")
+    ]
+  in
+  Alcotest.(check string)
+    "nonrecursive initializer sees the previous binding"
+    "let x_1 = 5;;\nlet x_2 = (x_1 + 1);;\nx_2;;"
+    (Printer.print_program (Alpha.alpha source))
+;;
+
 let () =
   Alcotest.run
     "middleend"
     [ "free variables", [ Alcotest.test_case "examples" `Quick free_variables ]
+    ; ( "alpha conversion"
+      , [ Alcotest.test_case "scopes and collisions" `Quick alpha_scopes
+        ; Alcotest.test_case "sequential definitions" `Quick alpha_nonrecursive_binding
+        ] )
     ; ( "closure conversion"
       , [ Alcotest.test_case "anonymous closure" `Quick converts_anonymous_closure
         ; Alcotest.test_case "local recursion" `Quick converts_local_recursion
