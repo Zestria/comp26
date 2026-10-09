@@ -32,7 +32,7 @@ let rec subst x name = function
 (* Lifted definitions may call each other, so they are emitted in the order they
    are created: a definition is always created after the definitions nested in
    it, hence it never refers to a definition emitted later.  The list is kept in
-   reverse order of creation; a floated [let rec] keeps its recursive flag. *)
+   reverse order of creation. *)
 type state =
   { naming : Anf.naming
   ; defs : (let_flag * string * expr) list
@@ -62,8 +62,9 @@ let rec lift_expr st = function
      | Abstr _ ->
        (* The chain is closed (closure conversion guarantees it) and its name
           stays bound inside the binding, so the whole [let rec] can be floated
-          to the front of the expression: the function is created once instead
-          of on every evaluation of this binding. *)
+          to the front of the expression.  The name needs no freshening either:
+          closure conversion renames binders that would shadow each other, so
+          two floated recursive bindings never end up with the same name. *)
        { st with defs = (Recursive, f, rhs) :: st.defs }, rest
      | _ -> st, Let (Recursive, f, rhs, rest))
   | Let (NotRecursive, x, rhs0, rest) ->
