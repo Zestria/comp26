@@ -10,7 +10,7 @@ CPS fibonacci
   > let main = fib_cps 10 (fun x -> x)
   > EOF
 
-  $ ../compiler.exe -parsing topdown --stop-after parsing fib_cps.ml
+  $ ../driver/compiler.exe -parsing topdown --stop-after parsing fib_cps.ml
   [(SValue (Rec,
       { vb_pat = (PVar "fib_cps");
         vb_expr =
@@ -63,6 +63,6 @@ CPS fibonacci
 
 Both parsers produce the same AST
 
-  $ ../compiler.exe -parsing topdown fib_cps.ml > topdown.txt
-  $ ../compiler.exe -parsing menhir fib_cps.ml > menhir.txt
+  $ ../driver/compiler.exe -parsing topdown fib_cps.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir fib_cps.ml > menhir.txt
   $ diff topdown.txt menhir.txt
