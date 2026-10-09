@@ -192,11 +192,6 @@ let eval_item env = function
   | Ast.SValue (Rec, first, rest) -> bind_rec env (first :: rest)
 ;;
 
-let eval_expression env expr =
-  fuel := default_fuel;
-  eval_expr env expr
-;;
-
 let eval_structure structure =
   fuel := default_fuel;
   let rec go env = function

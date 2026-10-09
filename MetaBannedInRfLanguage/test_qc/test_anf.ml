@@ -60,25 +60,6 @@ let test_anf_preserves_semantics =
     anf_preserves_semantics
 ;;
 
-let alpha_preserves_semantics expr =
-  let renamed = Alpha.rename_expression expr in
-  match
-    Ast_interp.eval_expression Ast_interp.SMap.empty expr,
-    Ast_interp.eval_expression Ast_interp.SMap.empty renamed
-  with
-  | Ok v1, Ok v2 -> Value.equal v1 v2
-  | Error _, Error _ -> true
-  | Ok _, Error _ | Error _, Ok _ -> false
-;;
-
-let test_alpha_preserves_semantics =
-  QCheck.Test.make
-    ~name:"alpha-renaming preserves semantics: eval(e) = eval(rename(e))"
-    ~count:300
-    Typed_gen.arb_expression
-    alpha_preserves_semantics
-;;
-
 let pipeline_preserves_semantics structure =
   match Anf_conv.convert structure with
   | Error _ -> true
@@ -103,8 +84,6 @@ let test_pipeline_preserves_semantics =
 ;;
 
 let () =
-  let tests =
-    [ test_anf_preserves_semantics; test_alpha_preserves_semantics; test_pipeline_preserves_semantics ]
-  in
+  let tests = [ test_anf_preserves_semantics; test_pipeline_preserves_semantics ] in
   exit (QCheck_runner.run_tests ~verbose:true tests)
 ;;

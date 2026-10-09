@@ -173,11 +173,4 @@ let gen_structure : Ast.structure Gen.t =
   go [] 0 count
 ;;
 
-let gen_expression : Ast.expression Gen.t =
-  fun st ->
-  let ty = gen_type 2 st in
-  gen_expr [] ty 6 st
-;;
-
 let arb_structure = QCheck.make ~print:Ast.show_structure gen_structure
-let arb_expression = QCheck.make ~print:Ast.show_expression gen_expression
