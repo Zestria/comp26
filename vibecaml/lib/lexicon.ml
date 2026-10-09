@@ -73,6 +73,7 @@ let binary_operators =
 ;;
 
 let operators = List.concat_map fst binary_operators
+let builtins = operators @ [ "~-" ] @ [ "print_int" ]
 
 let is_digit = function
   | '0' .. '9' -> true
