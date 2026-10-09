@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 
 (** A-normal form: every argument of an application, every condition and every
     right-hand side of a let-binding is an immediate expression, and every
@@ -45,13 +45,11 @@ val naming_of : StringSet.t -> naming
 val naming_of_aexpr : aexpr -> naming
 val gensym : naming -> ?prefix:string -> unit -> string * naming
 val gensym_id : naming -> unit -> string * naming
-
 val fv_imm : immexpr -> StringSet.t
 val fv_cexpr : cexpr -> StringSet.t
 val fv_aexpr : aexpr -> StringSet.t
 val free_vars : aexpr -> string list
-
 val all_idents : aexpr -> StringSet.t
-
 val collect_params : aexpr -> string list * aexpr
 val build_abstr : string list -> aexpr -> aexpr
+val idents_of_expr : StringSet.t -> expr -> StringSet.t
