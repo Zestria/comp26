@@ -18,6 +18,8 @@ open SchonfinkelML_frontend.Common
     whole, so a lifted function is never partially applied just to pass its own
     parameters: the pass creates no closure of its own.
 
-    A recursive function stays in place, keeps its chain of parameters and calls
-    itself directly; only the abstractions nested deeper inside it are hoisted. *)
+    A recursive binding cannot be replaced by the name of its chain -- its body
+    calls it by name -- but the binding itself is floated to the front as it is:
+    the chain keeps its parameters and calls itself directly, and the function is
+    created once instead of on every evaluation of the binding. *)
 val lift : expr -> expr

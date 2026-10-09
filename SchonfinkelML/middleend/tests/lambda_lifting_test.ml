@@ -90,7 +90,9 @@ let%expect_test "curried chain is lifted as a whole" =
     |}]
 ;;
 
-let%expect_test "recursive function stays in place" =
+(* A recursive binding is not replaced by the name of its chain: its body calls
+   it by name.  The binding is kept as it is (here it is already at the front). *)
+let%expect_test "recursive function keeps its binding and calls itself" =
   print_lifted "let rec f = fun n -> f n in f 1";
   [%expect {| let rec f = fun n -> (f n) in (f 1) |}]
 ;;
@@ -110,6 +112,20 @@ let%expect_test "lambdas in the branches of an if are lifted" =
     {|
     let lift1 = fun x -> x in
       let lift2 = fun y -> y in if c then lift1 else lift2
+    |}]
+;;
+
+(* A recursive function keeps its own binding, so it can still call itself; that
+   binding is floated to the front like every other definition, so a nested
+   recursive function is not re-created on every call of its parent. *)
+let%expect_test "nested recursive function is floated to the front" =
+  print_lifted
+    "let rec f = fun n -> let rec g = fun i -> if i = 0 then 0 else g (i - 1) in g n in \
+     f 3";
+  [%expect
+    {|
+    let rec g = fun i -> if i = 0 then 0 else (g i - 1) in
+      let rec f = fun n -> (g n) in (f 3)
     |}]
 ;;
 

@@ -32,10 +32,10 @@ let rec subst x name = function
 (* Lifted definitions may call each other, so they are emitted in the order they
    are created: a definition is always created after the definitions nested in
    it, hence it never refers to a definition emitted later.  The list is kept in
-   reverse order of creation. *)
+   reverse order of creation; a floated [let rec] keeps its recursive flag. *)
 type state =
   { naming : Anf.naming
-  ; defs : (string * expr) list
+  ; defs : (let_flag * string * expr) list
   }
 
 let rec lift_expr st = function
@@ -54,11 +54,18 @@ let rec lift_expr st = function
        abstraction itself is replaced by the name of the definition. *)
     let st, def = lift_chain st e in
     let name, naming = Anf.gensym st.naming ~prefix:"lift" () in
-    { naming; defs = (name, def) :: st.defs }, Ident name
-  | Let (Recursive, f, rhs, rest) ->
-    let st, rhs = lift_chain st rhs in
+    { naming; defs = (NotRecursive, name, def) :: st.defs }, Ident name
+  | Let (Recursive, f, rhs0, rest) ->
+    let st, rhs = lift_chain st rhs0 in
     let st, rest = lift_expr st rest in
-    st, Let (Recursive, f, rhs, rest)
+    (match rhs0 with
+     | Abstr _ ->
+       (* The chain is closed (closure conversion guarantees it) and its name
+          stays bound inside the binding, so the whole [let rec] can be floated
+          to the front of the expression: the function is created once instead
+          of on every evaluation of this binding. *)
+       { st with defs = (Recursive, f, rhs) :: st.defs }, rest
+     | _ -> st, Let (Recursive, f, rhs, rest))
   | Let (NotRecursive, x, rhs0, rest) ->
     (* A right-hand side that becomes an abstraction is lifted; the binding that
        closure conversion introduced for it only names the lifted function, so
@@ -71,9 +78,9 @@ let rec lift_expr st = function
        st, Let (NotRecursive, x, rhs, rest))
 
 (* [lift_chain e] keeps the curried chain [fun p1 -> fun p2 -> ...] itself and
-   lifts the abstractions nested inside its body.  A recursive binding needs it
-   to stay where it is and keep calling itself, and a lifted definition needs it
-   to become a single function instead of one partial application per parameter. *)
+   lifts the abstractions nested inside its body.  A lifted definition needs it
+   to become a single function instead of one partial application per parameter,
+   and a recursive binding needs it to keep calling itself by name. *)
 and lift_chain st = function
   | Abstr (p, body) ->
     let st, body = lift_chain st body in
@@ -85,7 +92,7 @@ let lift e =
   let naming = Anf.naming_of (Anf.idents_of_expr Anf.StringSet.empty e) in
   let st, e = lift_expr { naming; defs = [] } e in
   List.fold_right
-    (fun (name, def) acc -> Let (NotRecursive, name, def, acc))
+    (fun (flag, name, def) acc -> Let (flag, name, def, acc))
     (List.rev st.defs)
     e
 ;;
