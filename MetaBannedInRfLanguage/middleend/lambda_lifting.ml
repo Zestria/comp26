@@ -56,15 +56,19 @@ let binder_counts program =
 ;;
 
 (* ---------- simplification ----------
-   Catch dead bindings so that output ANF is smaller:
-     let x = y in x    ==>  y
-     let x = f in x a  ==>  f a   (when x does not occur in the arguments)
-*)
+   let x = e in x a_1...a_n  ==>  e a_1...a_n
 
-let is_imm_var name = function
+   The other simplifications (let x = e in x, dead bindings) are already
+   done in Anf_simplify.  The binding this targets is born in closure
+   conversion (an application in value position), so it can only be
+   caught here, after CC. *)
+
+let occurs_imm name = function
   | ImmVar var -> String.equal name var
   | ImmInt _ | ImmBool _ | ImmUnit -> false
 ;;
+
+let occurs_imms name imms = List.exists (occurs_imm name) imms
 
 let rec simplify_aexpr (expr : aexpr) : aexpr =
   let expr =
@@ -72,22 +76,33 @@ let rec simplify_aexpr (expr : aexpr) : aexpr =
     | ALet (name, value, body) -> ALet (name, simplify_cexpr value, simplify_aexpr body)
     | ALetTuple (names, subject, body) -> ALetTuple (names, subject, simplify_aexpr body)
     | ALetRec (bindings, body) ->
-      ALetRec (List.map (fun (name, value) -> name, simplify_cexpr value) bindings, simplify_aexpr body)
+      ALetRec
+        ( List.map (fun (name, value) -> name, simplify_cexpr value) bindings
+        , simplify_aexpr body )
     | ACExpr cexpr -> ACExpr (simplify_cexpr cexpr)
   in
-  match expr with
-  | ALet (name, CImm (ImmVar y), ACExpr (CImm (ImmVar name'))) when String.equal name name' ->
-    ACExpr (CImm (ImmVar y))
-  | ALet (name, CImm (ImmVar f), ACExpr (CApp (ImmVar callee, args)))
-    when String.equal name callee && not (List.exists (is_imm_var callee) args) ->
-    ACExpr (CApp (ImmVar f, args))
-  | _ -> expr
+  simplify_top expr
 
 and simplify_cexpr = function
   | CIte (cond, then_branch, else_branch) ->
     CIte (cond, simplify_aexpr then_branch, simplify_aexpr else_branch)
   | CFun (params, body) -> CFun (params, simplify_aexpr body)
   | (CImm _ | CApp _ | CTuple _ | CMatchFailure) as cexpr -> cexpr
+
+and simplify_top (expr : aexpr) : aexpr =
+  let reduced =
+    match expr with
+    | ALet (name, value, ACExpr (CApp (ImmVar callee, args)))
+      when String.equal name callee && not (occurs_imms name args) ->
+      (match value with
+       | CImm imm -> Some (ACExpr (CApp (imm, args)))
+       | CApp (fn, args') -> Some (ACExpr (CApp (fn, args' @ args)))
+       | _ -> None)
+    | _ -> None
+  in
+  match reduced with
+  | None -> expr
+  | Some expr -> simplify_top expr
 ;;
 
 let simplify_item = function
