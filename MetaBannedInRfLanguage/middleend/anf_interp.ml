@@ -12,6 +12,19 @@ type env = Value.value SMap.t
 
 let ( let* ) = Result.bind
 
+let default_fuel = 20_000
+let fuel = ref default_fuel
+
+let make_closure f =
+  Value.VClosure
+    (fun args ->
+       if !fuel <= 0
+       then Error "fuel exhausted (likely non-terminating recursion)"
+       else (
+         decr fuel;
+         f args))
+;;
+
 let eval_imm env = function
   | Anf.ImmInt n -> Ok (Value.VInt n)
   | Anf.ImmBool b -> Ok (Value.VBool b)
@@ -59,15 +72,12 @@ let rec eval_cexpr env = function
      | _ -> Error "if-condition is not a bool")
   | Anf.CFun (params, body) ->
     Ok
-      (Value.VClosure
-         (fun args ->
-            match List.compare_lengths params args with
-            | 0 ->
-              let env =
-                List.fold_left2 (fun acc p v -> SMap.add p v acc) env params args
-              in
-              eval_aexpr env body
-            | _ -> Error "arity mismatch"))
+      (make_closure (fun args ->
+         match List.compare_lengths params args with
+         | 0 ->
+           let env = List.fold_left2 (fun acc p v -> SMap.add p v acc) env params args in
+           eval_aexpr env body
+         | _ -> Error "arity mismatch"))
   | Anf.CMatchFailure -> Error "match failure: no case matched"
 
 and eval_aexpr env = function
@@ -103,10 +113,9 @@ and make_rec_env env bindings =
   let wrapped =
     List.map
       (fun (_, cexpr) ->
-         Value.VClosure
-           (fun args ->
-              let* fn_value = eval_cexpr !env_ref cexpr in
-              apply_value fn_value args))
+         make_closure (fun args ->
+           let* fn_value = eval_cexpr !env_ref cexpr in
+           apply_value fn_value args))
       bindings
   in
   let env = List.fold_left2 (fun acc name v -> SMap.add name v acc) env names wrapped in
@@ -127,6 +136,7 @@ let eval_item env = function
 ;;
 
 let eval_program program =
+  fuel := default_fuel;
   let rec go env = function
     | [] -> Ok env
     | item :: rest ->

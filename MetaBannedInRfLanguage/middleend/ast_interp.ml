@@ -12,6 +12,19 @@ type env = Value.value SMap.t
 
 let ( let* ) = Result.bind
 
+let default_fuel = 20_000
+let fuel = ref default_fuel
+
+let make_closure f =
+  Value.VClosure
+    (fun args ->
+       if !fuel <= 0
+       then Error "fuel exhausted (likely non-terminating recursion)"
+       else (
+         decr fuel;
+         f args))
+;;
+
 let constant_value = function
   | Ast.CInt n -> Value.VInt n
   | Ast.CBool b -> Value.VBool b
@@ -48,7 +61,7 @@ let rec collect_args expr args =
   | fn -> fn, args
 ;;
 
-let rec eval_expression env expr =
+let rec eval_expr env expr =
   match expr with
   | Ast.EConst c -> Ok (constant_value c)
   | Ast.EIdent name ->
@@ -59,11 +72,11 @@ let rec eval_expression env expr =
      | None -> Error (Printf.sprintf "unbound variable %S" name))
   | Ast.EFun (pat, body) ->
     Ok
-      (Value.VClosure
+      (make_closure
          (function
            | [ v ] ->
              (match match_pattern env pat v with
-              | Some env -> eval_expression env body
+              | Some env -> eval_expr env body
               | None -> Error "pattern match failure in function argument")
            | _ -> Error "arity mismatch: function expects exactly one argument"))
   | Ast.EApply _ ->
@@ -73,43 +86,43 @@ let rec eval_expression env expr =
      | Ast.EIdent name when (not (SMap.mem name env)) && Value.is_primitive name ->
        Value.apply_primitive name args
      | _ ->
-       let* fn_val = eval_expression env fn_expr in
+       let* fn_val = eval_expr env fn_expr in
        apply_curried fn_val args)
   | Ast.ETuple (first, second, rest) ->
-    let* first = eval_expression env first in
-    let* second = eval_expression env second in
+    let* first = eval_expr env first in
+    let* second = eval_expr env second in
     let* rest = eval_list env rest in
     Ok (Value.VTuple (first, second, rest))
   | Ast.EIf (condition, then_branch, else_branch) ->
-    let* condition = eval_expression env condition in
+    let* condition = eval_expr env condition in
     (match condition with
-     | Value.VBool true -> eval_expression env then_branch
+     | Value.VBool true -> eval_expr env then_branch
      | Value.VBool false ->
        (match else_branch with
-        | Some else_branch -> eval_expression env else_branch
+        | Some else_branch -> eval_expr env else_branch
         | None -> Ok Value.VUnit)
      | _ -> Error "if-condition is not a bool")
   | Ast.ELet (NonRec, first, rest, body) ->
     let* env = bind_nonrec env (first :: rest) in
-    eval_expression env body
+    eval_expr env body
   | Ast.ELet (Rec, first, rest, body) ->
     let* env = bind_rec env (first :: rest) in
-    eval_expression env body
+    eval_expr env body
   | Ast.EFunction (first, rest) ->
     Ok
-      (Value.VClosure
+      (make_closure
          (function
            | [ v ] -> eval_cases env (first :: rest) v
            | _ -> Error "arity mismatch: function expects exactly one argument"))
   | Ast.EMatch (subject, first, rest) ->
-    let* v = eval_expression env subject in
+    let* v = eval_expr env subject in
     eval_cases env (first :: rest) v
 
 and eval_list env exprs =
   let rec go acc = function
     | [] -> Ok (List.rev acc)
     | expr :: rest ->
-      let* v = eval_expression env expr in
+      let* v = eval_expr env expr in
       go (v :: acc) rest
   in
   go [] exprs
@@ -129,14 +142,14 @@ and eval_cases env cases v =
   | [] -> Error "match failure: no case matched"
   | { Ast.case_pat; case_expr } :: rest ->
     (match match_pattern env case_pat v with
-     | Some env -> eval_expression env case_expr
+     | Some env -> eval_expr env case_expr
      | None -> eval_cases env rest v)
 
 and bind_nonrec outer_env bindings =
   let rec go env = function
     | [] -> Ok env
     | { Ast.vb_pat; vb_expr } :: rest ->
-      let* v = eval_expression outer_env vb_expr in
+      let* v = eval_expr outer_env vb_expr in
       (match match_pattern env vb_pat v with
        | Some env -> go env rest
        | None -> Error "pattern match failure in let binding")
@@ -161,10 +174,9 @@ and bind_rec env bindings =
   let wrapped =
     List.map
       (fun vb_expr ->
-         Value.VClosure
-           (fun args ->
-              let* fn_value = eval_expression !env_ref vb_expr in
-              apply_curried fn_value args))
+         make_closure (fun args ->
+           let* fn_value = eval_expr !env_ref vb_expr in
+           apply_curried fn_value args))
       exprs
   in
   let env = List.fold_left2 (fun acc name v -> SMap.add name v acc) env names wrapped in
@@ -174,13 +186,19 @@ and bind_rec env bindings =
 
 let eval_item env = function
   | Ast.SEval expr ->
-    let* _ = eval_expression env expr in
+    let* _ = eval_expr env expr in
     Ok env
   | Ast.SValue (NonRec, first, rest) -> bind_nonrec env (first :: rest)
   | Ast.SValue (Rec, first, rest) -> bind_rec env (first :: rest)
 ;;
 
+let eval_expression env expr =
+  fuel := default_fuel;
+  eval_expr env expr
+;;
+
 let eval_structure structure =
+  fuel := default_fuel;
   let rec go env = function
     | [] -> Ok env
     | item :: rest ->
