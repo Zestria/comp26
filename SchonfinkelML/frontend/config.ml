@@ -15,6 +15,12 @@ let string_of_parser_kind = function
   | Bottom_up -> "bottom-up"
 ;;
 
+let parser_kind_of_string = function
+  | "topdown" -> Ok Top_down
+  | "menhir" -> Ok Bottom_up
+  | s -> Error s
+;;
+
 type stop_after =
   | Parsing
   | Anf
@@ -63,6 +69,18 @@ let flag_specs cfg =
   [ ( "-o"
     , Arg.String (fun f -> cfg.output <- f)
     , " <file>  write output to <file>, \"-\" means stdout (default: -)" )
+  ; ( "-parsing"
+    , Arg.String
+        (fun s ->
+          match parser_kind_of_string s with
+          | Ok kind -> cfg.parser <- kind
+          | Error s ->
+            raise
+              (Arg.Bad
+                 (Printf.sprintf
+                    "unknown parser in -parsing: %s (expected topdown, menhir)"
+                    s)))
+    , " <kind>  choose the parser: topdown (default), menhir" )
   ; "--bottom-up", Arg.Unit (fun () -> cfg.parser <- Bottom_up), "Use LR(1) parser"
   ; ( "--top-down"
     , Arg.Unit (fun () -> cfg.parser <- Top_down)
@@ -84,9 +102,7 @@ let flag_specs cfg =
                  (Printf.sprintf
                     "unknown stage in --stop-after: %s (expected %s)"
                     s
-                    (String.concat
-                       ", "
-                       (List.map string_of_stop_after [ Parsing; Anf ])))))
+                    (String.concat ", " (List.map string_of_stop_after [ Parsing; Anf ])))))
     , " <stage>  stop after <stage>: parsing, anf" )
   ]
 ;;
