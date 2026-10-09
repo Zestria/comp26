@@ -17,7 +17,8 @@ type parser =
 (** Стадия конвейера, после которой компилятор печатает результат. *)
 type stage =
   | Parsing (** [--stop-after parsing] *)
-  | Closure_conversion (** [--stop-after cc]: rename и closure conversion *)
+  | Rename (** [--stop-after rename] *)
+  | Closure_conversion (** [--stop-after cc] *)
   | Lambda_lifting (** [--stop-after ll] *)
   | Anf (** [--stop-after anf] *)
 
