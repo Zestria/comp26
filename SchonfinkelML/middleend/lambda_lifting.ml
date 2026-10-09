@@ -8,19 +8,6 @@
 
 open SchonfinkelML_frontend.Common
 
-(* [collect_abstr (fun x -> fun y -> body)] splits a curried chain into its
-   parameters and the innermost body.  A chain is lifted as a whole: replacing
-   every abstraction separately would leave partial applications of the lifted
-   function, that is, exactly the closures this pass must not create. *)
-let rec collect_abstr = function
-  | Abstr (p, body) ->
-    let params, inner = collect_abstr body in
-    p :: params, inner
-  | e -> [], e
-;;
-
-let build_abstr params body = List.fold_right (fun p acc -> Abstr (p, acc)) params body
-
 (* Replace a variable by the name of a lifted function.  The name is fresh with
    respect to the whole expression, so no binder can capture it. *)
 let rec subst x name = function
@@ -62,9 +49,14 @@ let rec lift_expr st = function
     let st, t = lift_expr st t in
     let st, f = lift_expr st f in
     st, If (c, t, f)
-  | Abstr _ as e -> hoist st e
+  | Abstr _ as e ->
+    (* A definition is the chain of parameters with its body lifted; the
+       abstraction itself is replaced by the name of the definition. *)
+    let st, def = lift_chain st e in
+    let name, naming = Anf.gensym st.naming ~prefix:"lift" () in
+    { naming; defs = (name, def) :: st.defs }, Ident name
   | Let (Recursive, f, rhs, rest) ->
-    let st, rhs = lift_rec_rhs st rhs in
+    let st, rhs = lift_chain st rhs in
     let st, rest = lift_expr st rest in
     st, Let (Recursive, f, rhs, rest)
   | Let (NotRecursive, x, rhs0, rest) ->
@@ -78,18 +70,15 @@ let rec lift_expr st = function
        let st, rest = lift_expr st rest in
        st, Let (NotRecursive, x, rhs, rest))
 
-and lift_rec_rhs st = function
+(* [lift_chain e] keeps the curried chain [fun p1 -> fun p2 -> ...] itself and
+   lifts the abstractions nested inside its body.  A recursive binding needs it
+   to stay where it is and keep calling itself, and a lifted definition needs it
+   to become a single function instead of one partial application per parameter. *)
+and lift_chain st = function
   | Abstr (p, body) ->
-    let st, body = lift_rec_rhs st body in
+    let st, body = lift_chain st body in
     st, Abstr (p, body)
-  | rhs -> lift_expr st rhs
-
-and hoist st e =
-  let params, body = collect_abstr e in
-  let st, body = lift_expr st body in
-  let name, naming = Anf.gensym st.naming ~prefix:"lift" () in
-  let def = build_abstr params body in
-  { naming; defs = (name, def) :: st.defs }, Ident name
+  | e -> lift_expr st e
 ;;
 
 let lift e =
