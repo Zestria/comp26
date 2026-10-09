@@ -6,17 +6,27 @@
 
 ## Middleend
 
-The compiler pipeline is `parsing -> ANF -> lambda lifting`.  Lambda lifting
-hoists every lambda that is not bound by `let rec` to a top-level function;
-free variables of a lambda become extra parameters and the lambda itself is
-replaced by a partial application of the lifted function.  Recursive functions
-stay in place and call themselves directly.
+The compiler pipeline is `parsing -> closure conversion -> lambda lifting`.
+
+Closure conversion makes every abstraction closed: the free variables of a
+lambda become its leading parameters and the lambda is bound by a `let` that
+applies it to them.  Lambda lifting then hoists every abstraction that is not
+part of the right-hand side of a `let rec` to the front of the expression.  Its
+input is already closed, so lifting adds no parameters of its own and never
+partially applies a lifted function: a curried chain is lifted as one function,
+so the pass creates no closures.  A recursive function stays in place and calls
+itself directly; only the abstractions nested deeper inside it are lifted.
+
+A-normal form is a separate stage rather than a step of the pipeline; it can be
+inspected with `--stop-after anf`.
 
 `--stop-after <stage>` stops the pipeline after one of the stages:
 
 * `parsing` --- the parsed AST;
-* `anf` --- A-normal form;
-* `lambda-lifting` --- lambda-lifted A-normal form (the default).
+* `anf` --- A-normal form.
+
+Without `--stop-after` the pipeline runs to the end and prints the lifted
+program.
 
 ## How to run
 
@@ -24,7 +34,7 @@ stay in place and call themselves directly.
 dune build -p SchonfinkelML
 dune test  -p SchonfinkelML
 dune exec -p SchonfinkelML SchonfinkelML/compiler.exe -- <input.ml>            # top-down
-dune exec -p SchonfinkelML SchonfinkelML/compiler.exe -- --bottom-up <input.ml>
+dune exec -p SchonfinkelML SchonfinkelML/compiler.exe -- -parsing menhir <input.ml>
 dune exec -p SchonfinkelML SchonfinkelML/compiler.exe -- --stop-after anf <input.ml>
 ```
 
