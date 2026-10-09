@@ -24,6 +24,12 @@
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend qcheck))
 
+(test
+ (name test_anf)
+ (modules test_anf)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))
+
 (library
  (name frontend_expect_tests)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)

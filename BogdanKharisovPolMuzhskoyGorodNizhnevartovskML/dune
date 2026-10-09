@@ -15,4 +15,4 @@
  (public_name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (modules compiler)
- (libraries frontend))
+ (libraries frontend middleend))

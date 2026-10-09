@@ -2,7 +2,7 @@
 
 Compiler for a subset of OCaml.
 
-Current stage: parsing and AST output.
+Implemented stages: parsing and ANF.
 
 Two parsers produce the same AST:
 
@@ -25,14 +25,15 @@ comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorod
 ```
 
 - `-parsing topdown|menhir`: select the parser; defaults to topdown (Angstrom).
-- `--stop-after parsing`: stop after parsing and print the AST; currently the only stage.
-- `-o FILE`: write the AST to a file; `-o -` writes to stdout (the default).
+- `--stop-after parsing|anf`: print the source AST (default) or ANF.
+- `-o FILE`: write the selected representation to a file; `-o -` writes to stdout (the default).
 - `--operator-extension`: enable [operator declarations](#operator-declarations) (Angstrom only).
 - `FILE`: input file; omit it or use `-` to read stdin.
 
-When parser or output options are repeated, the last value takes effect.
-Input is read and parsed before the output file is opened. A parse error leaves
-an existing output file unchanged. Diagnostics are written to stderr.
+When parser, stage or output options are repeated, the last value takes effect.
+Input is read and transformed before the output file is opened. A parse or
+lowering error leaves an existing output file unchanged. Diagnostics are written
+to stderr. Selecting `parsing` does not perform semantic checks.
 
 ## Syntax
 

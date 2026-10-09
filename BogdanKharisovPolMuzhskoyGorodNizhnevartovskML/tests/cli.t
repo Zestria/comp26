@@ -3,6 +3,49 @@ Standard input uses Angstrom by default.
   $ printf '1\n' | ../compiler.exe
   [Evaluation (Int "1")]
 
+ANF output contains normalized computations and evaluates the structure to unit.
+
+  $ printf 'let x = 1 + 2;; x + 3' | ../compiler.exe --stop-after anf -o -
+  let x_0 = (+) 1 2 in
+  let _ = (+) x_0 3 in
+  ()
+
+Menhir also reaches ANF and writes to the requested file.
+
+  $ printf 'let x = 1 + 2;; x + 3' > anf-input
+  $ ../compiler.exe -parsing menhir --stop-after anf -o anf-output anf-input
+  $ cat anf-output
+  let x_0 = (+) 1 2 in
+  let _ = (+) x_0 3 in
+  ()
+
+An empty program has no computations and returns unit.
+
+  $ printf '' | ../compiler.exe --stop-after anf
+  ()
+
+The last requested stage wins; parsing still accepts unresolved names.
+
+  $ printf 'unknown' | ../compiler.exe --stop-after anf --stop-after parsing
+  [Evaluation (Var "unknown")]
+
+A lowering error preserves an existing output file and reports to stderr.
+
+  $ printf 'keep me\n' > preserved-anf-output
+  $ printf 'unknown' | ../compiler.exe --stop-after anf -o preserved-anf-output >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: Unbound value unknown
+  $ cat preserved-anf-output
+  keep me
+
+A lowering error also does not create a new output file.
+
+  $ printf 'unknown' | ../compiler.exe --stop-after anf -o absent-anf-output >out 2>err
+  [1]
+  $ test ! -e absent-anf-output
+
 Menhir reads a file containing definitions and evaluations.
 
   $ cat > input <<'EOF'
@@ -61,10 +104,10 @@ Multiple files are rejected.
 Help succeeds without opening the input file.
 
   $ ../compiler.exe missing-input --help
-  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing] [-o FILE] [--operator-extension] [FILE]
+  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf] [-o FILE] [--operator-extension] [FILE]
   Without FILE, read standard input.
     -parsing NAME Use topdown (default) or menhir
-    --stop-after STAGE Stop after parsing
+    --stop-after STAGE Stop after parsing (default) or anf
     -o FILE Write to FILE or - for stdout (default)
     --operator-extension  Enable operator declarations (Angstrom only)
     -  Read standard input
@@ -178,7 +221,7 @@ An unknown stage fails before opening input or output.
   [2]
   $ cat out
   $ head -n 1 err
-  ../compiler.exe: Unknown stage: unknown; expected parsing.
+  ../compiler.exe: Unknown stage: unknown; expected parsing or anf.
   $ test ! -e absent-stage-result
 
 The output option requires a filename.

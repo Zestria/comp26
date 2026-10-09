@@ -1,0 +1,369 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, shrexer06 *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
+type atom =
+  | Constant of Frontend.Constant.t
+  | Var of Id.t
+  | Primitive of Primitive.t
+
+type 'function_ computation =
+  | Atom of atom
+  | Tuple of atom * atom * atom list
+  | Field of atom * int
+  | Function of 'function_
+  | Apply of atom * atom * atom list
+  | If of atom * 'function_ term * 'function_ term
+
+and 'function_ term =
+  | Return of 'function_ computation
+  | Let of Id.t * 'function_ computation * 'function_ term
+  | Let_rec of Id.t * 'function_ term * 'function_ term
+  | Sequence of 'function_ computation * 'function_ term
+
+type function_definition =
+  { parameter : Id.t
+  ; parameters : Id.t list
+  ; body : function_definition term
+  }
+
+type expression = function_definition term
+type program = expression
+
+let atom_to_lambda = function
+  | Constant c -> Lambda.Constant c
+  | Var id -> Lambda.Var id
+  | Primitive p -> Lambda.Primitive p
+;;
+
+let rec to_lambda = function
+  | Return value -> computation_to_lambda value
+  | Let (id, value, body) -> Lambda.Let (id, computation_to_lambda value, to_lambda body)
+  | Let_rec (id, value, body) -> Lambda.Let_rec (id, to_lambda value, to_lambda body)
+  | Sequence (first, second) ->
+    Lambda.Sequence (computation_to_lambda first, to_lambda second)
+
+and computation_to_lambda = function
+  | Atom atom -> atom_to_lambda atom
+  | Tuple (a, b, rest) ->
+    Lambda.Tuple (atom_to_lambda a, atom_to_lambda b, List.map atom_to_lambda rest)
+  | Field (value, index) -> Lambda.Field (atom_to_lambda value, index)
+  | Function { parameter; parameters; body } ->
+    Lambda.Fun { parameter; parameters; body = to_lambda body }
+  | Apply (f, a, rest) ->
+    Lambda.Apply (atom_to_lambda f, atom_to_lambda a, List.map atom_to_lambda rest)
+  | If (condition, yes, no) ->
+    Lambda.If (atom_to_lambda condition, to_lambda yes, to_lambda no)
+;;
+
+module Scope = struct
+  (* Globally declared identities, kept separately from lexical scope. *)
+  type state = Id.Set.t
+
+  let ( let* ) = Result.bind
+  let empty = Id.Set.empty
+
+  let bind declared scope id =
+    if Id.Set.mem id declared
+    then Error (Lambda.Duplicate_binding id)
+    else Ok (Id.Set.add id declared, Id.Set.add id scope)
+  ;;
+
+  let rec bind_all declared scope = function
+    | [] -> Ok (declared, scope)
+    | id :: rest ->
+      let* declared, scope = bind declared scope id in
+      bind_all declared scope rest
+  ;;
+
+  let atom scope = function
+    | Var id when not (Id.Set.mem id scope) -> Error (Lambda.Unbound_variable id)
+    | Var _ | Constant _ | Primitive _ -> Ok ()
+  ;;
+
+  let rec atoms scope = function
+    | [] -> Ok ()
+    | value :: rest ->
+      let* () = atom scope value in
+      atoms scope rest
+  ;;
+
+  let rec term ~error function_ declared scope = function
+    | Return value -> computation ~error function_ declared scope value
+    | Let (id, value, body) ->
+      let* declared, inner = Result.map_error error (bind declared scope id) in
+      let* declared = computation ~error function_ declared scope value in
+      term ~error function_ declared inner body
+    | Let_rec (id, value, body) ->
+      let* declared, inner = Result.map_error error (bind declared scope id) in
+      let* declared = term ~error function_ declared inner value in
+      term ~error function_ declared inner body
+    | Sequence (first, second) ->
+      let* declared = computation ~error function_ declared scope first in
+      term ~error function_ declared scope second
+
+  and computation ~error function_ declared scope = function
+    | Atom value ->
+      let* () = Result.map_error error (atom scope value) in
+      Ok declared
+    | Tuple (a, b, rest) ->
+      let* () = Result.map_error error (atoms scope (a :: b :: rest)) in
+      Ok declared
+    | Field (_, index) when index < 0 -> Error (error (Lambda.Negative_field index))
+    | Field (value, _) ->
+      let* () = Result.map_error error (atom scope value) in
+      Ok declared
+    | Apply (f, a, rest) ->
+      let* () = Result.map_error error (atoms scope (f :: a :: rest)) in
+      Ok declared
+    | If (condition, yes, no) ->
+      let* () = Result.map_error error (atom scope condition) in
+      let* declared = term ~error function_ declared scope yes in
+      term ~error function_ declared scope no
+    | Function definition -> function_ declared scope definition
+  ;;
+
+  let run check = Result.map (fun _ -> ()) (check empty)
+end
+
+let validate expression =
+  let ( let* ) = Result.bind in
+  let rec function_ declared scope { parameter; parameters; body } =
+    let* declared, scope = Scope.bind_all declared scope (parameter :: parameters) in
+    Scope.term ~error:Fun.id function_ declared scope body
+  in
+  Scope.run (fun declared ->
+    Scope.term ~error:Fun.id function_ declared Id.Set.empty expression)
+;;
+
+let ( let* ) = Result.bind
+
+let rec map_accum_result ~atom ~function_ state = function
+  | Return value ->
+    let* state, value = map_computation_accum_result ~atom ~function_ state value in
+    Ok (state, Return value)
+  | Let (id, value, body) ->
+    let* state, value = map_computation_accum_result ~atom ~function_ state value in
+    let* state, body = map_accum_result ~atom ~function_ state body in
+    Ok (state, Let (id, value, body))
+  | Let_rec (id, value, body) ->
+    let* state, value = map_accum_result ~atom ~function_ state value in
+    let* state, body = map_accum_result ~atom ~function_ state body in
+    Ok (state, Let_rec (id, value, body))
+  | Sequence (first, second) ->
+    let* state, first = map_computation_accum_result ~atom ~function_ state first in
+    let* state, second = map_accum_result ~atom ~function_ state second in
+    Ok (state, Sequence (first, second))
+
+and map_computation_accum_result ~atom ~function_ state = function
+  | Atom value ->
+    let value = atom value in
+    Ok (state, Atom value)
+  | Tuple (a, b, rest) ->
+    let a = atom a in
+    let b = atom b in
+    let rest = List.map atom rest in
+    Ok (state, Tuple (a, b, rest))
+  | Field (value, index) ->
+    let value = atom value in
+    Ok (state, Field (value, index))
+  | Apply (f, a, rest) ->
+    let f = atom f in
+    let a = atom a in
+    let rest = List.map atom rest in
+    Ok (state, Apply (f, a, rest))
+  | If (condition, yes, no) ->
+    let condition = atom condition in
+    let* state, yes = map_accum_result ~atom ~function_ state yes in
+    let* state, no = map_accum_result ~atom ~function_ state no in
+    Ok (state, If (condition, yes, no))
+  | Function definition ->
+    let* state, definition = function_ state definition in
+    Ok (state, Function definition)
+;;
+
+(* The ordinary traversal has no error-producing callback. *)
+type no_error = |
+
+let map_accum ~atom ~function_ state expression =
+  let result : (_, no_error) result =
+    map_accum_result
+      ~atom
+      ~function_:(fun state value -> Ok (function_ state value))
+      state
+      expression
+  in
+  match result with
+  | Ok value -> value
+  | Error impossible -> .
+;;
+
+let map ~atom ~function_ expression =
+  let _, expression =
+    map_accum
+      ~atom
+      ~function_:(fun () definition ->
+        let definition = function_ definition in
+        (), definition)
+      ()
+      expression
+  in
+  expression
+;;
+
+let rec fold ~atom ~binder ~function_ state = function
+  | Return value -> fold_computation ~atom ~binder ~function_ state value
+  | Let (id, value, body) ->
+    let state = binder state id in
+    let state = fold_computation ~atom ~binder ~function_ state value in
+    fold ~atom ~binder ~function_ state body
+  | Let_rec (id, value, body) ->
+    let state = binder state id in
+    let state = fold ~atom ~binder ~function_ state value in
+    fold ~atom ~binder ~function_ state body
+  | Sequence (first, second) ->
+    let state = fold_computation ~atom ~binder ~function_ state first in
+    fold ~atom ~binder ~function_ state second
+
+and fold_computation ~atom ~binder ~function_ state = function
+  | Atom value | Field (value, _) -> atom state value
+  | Tuple (a, b, rest) | Apply (a, b, rest) ->
+    let state = atom state a in
+    let state = atom state b in
+    List.fold_left atom state rest
+  | If (condition, yes, no) ->
+    let state = atom state condition in
+    let state = fold ~atom ~binder ~function_ state yes in
+    fold ~atom ~binder ~function_ state no
+  | Function definition -> function_ state definition
+;;
+
+let bind id value = function
+  | Return (Atom (Var result)) when Id.equal id result -> Return value
+  | body -> Let (id, value, body)
+;;
+
+let sequence first second =
+  match first with
+  | Atom _ -> second
+  | Tuple _ | Field _ | Function _ | Apply _ | If _ -> Sequence (first, second)
+;;
+
+let of_lambda supply expression =
+  let rec normalize aliases expression continuation supply =
+    match expression with
+    | Lambda.Constant constant -> continuation (Atom (Constant constant)) supply
+    | Primitive primitive -> continuation (Atom (Primitive primitive)) supply
+    | Var id ->
+      let value = Option.value (Id.Map.find_opt id aliases) ~default:(Var id) in
+      continuation (Atom value) supply
+    | Tuple (a, b, rest) ->
+      atoms
+        aliases
+        rest
+        (fun rest supply ->
+           atom
+             aliases
+             b
+             (fun b supply ->
+                atom
+                  aliases
+                  a
+                  (fun a supply -> continuation (Tuple (a, b, rest)) supply)
+                  supply)
+             supply)
+        supply
+    | Field (value, index) ->
+      atom
+        aliases
+        value
+        (fun value supply -> continuation (Field (value, index)) supply)
+        supply
+    | Fun { parameter; parameters; body } ->
+      let* body, supply = normalize aliases body return supply in
+      continuation (Function { parameter; parameters; body }) supply
+    | Apply (f, a, rest) ->
+      atoms
+        aliases
+        rest
+        (fun rest supply ->
+           atom
+             aliases
+             a
+             (fun a supply ->
+                atom
+                  aliases
+                  f
+                  (fun f supply -> continuation (Apply (f, a, rest)) supply)
+                  supply)
+             supply)
+        supply
+    | Let (id, value, body) ->
+      normalize
+        aliases
+        value
+        (fun value supply ->
+           match value with
+           | Atom value ->
+             normalize (Id.Map.add id value aliases) body continuation supply
+           | value ->
+             let* body, supply = normalize aliases body continuation supply in
+             Ok (bind id value body, supply))
+        supply
+    | Let_rec (id, value, body) ->
+      let* value, supply = normalize aliases value return supply in
+      let* body, supply = normalize aliases body continuation supply in
+      Ok (Let_rec (id, value, body), supply)
+    | If (condition, yes, no) ->
+      atom
+        aliases
+        condition
+        (fun condition supply ->
+           (* Apply the continuation once to the whole conditional. Distributing
+           it into both branches would duplicate code and binding identities. *)
+           let* yes, supply = normalize aliases yes return supply in
+           let* no, supply = normalize aliases no return supply in
+           continuation (If (condition, yes, no)) supply)
+        supply
+    | Sequence (first, second) ->
+      normalize
+        aliases
+        first
+        (fun first supply ->
+           let* second, supply = normalize aliases second continuation supply in
+           Ok (sequence first second, supply))
+        supply
+  and return value supply = Ok (Return value, supply)
+  and atom aliases expression continuation supply =
+    normalize
+      aliases
+      expression
+      (fun value supply ->
+         match value with
+         | Atom value -> continuation value supply
+         | value ->
+           let* id, supply = Id.fresh supply "tmp" in
+           let* body, supply = continuation (Var id) supply in
+           Ok (bind id value body, supply))
+      supply
+  and atoms aliases expressions continuation supply =
+    match expressions with
+    | [] -> continuation [] supply
+    | expression :: rest ->
+      atoms
+        aliases
+        rest
+        (fun rest supply ->
+           atom
+             aliases
+             expression
+             (fun atom supply -> continuation (atom :: rest) supply)
+             supply)
+        supply
+  in
+  normalize Id.Map.empty expression return supply
+;;
