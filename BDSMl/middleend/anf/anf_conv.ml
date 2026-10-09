@@ -163,6 +163,11 @@ let rec compact_aexpr = function
              | ImmInt _ | ImmBool _ | ImmUnit -> true) ->
        compact_aexpr (substitute_aexpr name replacement body)
      | PUnderscore, CImm _, _ | PUnit, CImm ImmUnit, _ -> body
+     | ( PVar name
+       , CApp (function_, arguments)
+       , ACExpr (CApp (ImmId applied, more_arguments)) )
+       when name = applied ->
+       ACExpr (CApp (function_, arguments @ more_arguments))
      | PVar name, expression, ACExpr (CImm (ImmId result)) when name = result ->
        ACExpr expression
      | _ -> ALet (pattern, expression, body))

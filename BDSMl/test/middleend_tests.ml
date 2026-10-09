@@ -203,7 +203,18 @@ let compact_anf_aliases () =
     (Let (NonRec, PVar "x", Int 1, BinOp (Plus, Var "x", Int 2)));
   check
     (ACExpr (CApp (ImmId "f", [ ImmInt 2 ])))
-    (Let (NonRec, PVar "x", App (Var "f", Int 2), Var "x"))
+    (Let (NonRec, PVar "x", App (Var "f", Int 2), Var "x"));
+  check
+    (ACExpr (CApp (ImmId "f", [ ImmId "a"; ImmId "b" ])))
+    (Let
+       ( NonRec
+       , PVar "t1"
+       , App (Var "f", Var "a")
+       , Let
+           ( NonRec
+           , PVar "t2"
+           , App (Var "t1", Var "b")
+           , Var "t2" ) ))
 ;;
 
 let anf_preserves_shadowing_and_names () =
