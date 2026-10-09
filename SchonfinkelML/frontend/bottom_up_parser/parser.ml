@@ -13,7 +13,9 @@ type error = SchonfinkelML_frontend.Lexer.error
 
 let parse_expr (src : string) : (expr, unit) result =
   try
-    match Parser_gen.program SchonfinkelML_frontend.Lexer.token (Lexing.from_string src) with
+    match
+      Parser_gen.program SchonfinkelML_frontend.Lexer.token (Lexing.from_string src)
+    with
     | [ StrEval e ] -> Ok e
     | _ -> Error ()
   with
