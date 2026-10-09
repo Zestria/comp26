@@ -196,3 +196,7 @@ let shrink_structure structure = QCheck.Shrink.list ~shrink:shrink_structure_ite
 let arb_structure =
   QCheck.make ~print:Ast.show_structure ~shrink:shrink_structure gen_structure
 ;;
+
+let arb_expression =
+  QCheck.make ~print:Ast.show_expression ~shrink:shrink_expr gen_expression_sized
+;;

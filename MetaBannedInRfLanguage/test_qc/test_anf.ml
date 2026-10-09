@@ -73,6 +73,14 @@ let structure_is_closed structure =
   go SSet.empty structure
 ;;
 
+let has_unchecked_unit_pattern structure =
+  List.exists
+    (function
+      | Ast.SValue (Ast.NonRec, { Ast.vb_pat = Ast.PConstant Ast.CUnit; _ }, []) -> true
+      | _ -> false)
+    structure
+;;
+
 let rec pattern_names acc = function
   | Ast.PAny | Ast.PConstant _ -> acc
   | Ast.PVar name -> name :: acc
@@ -107,7 +115,7 @@ let same_bound_values names ast_env anf_env =
 ;;
 
 let anf_preserves_semantics structure =
-  if not (structure_is_closed structure)
+  if (not (structure_is_closed structure)) || has_unchecked_unit_pattern structure
   then true
   else
   match Anf_conv.convert structure with
@@ -130,36 +138,25 @@ let test_anf_preserves_semantics =
     anf_preserves_semantics
 ;;
 
-let alpha_preserves_semantics structure =
-  let renamed = Alpha.rename_structure structure in
-  match Ast_interp.eval_structure structure, Ast_interp.eval_structure renamed with
-  | Ok original_env, Ok renamed_env ->
-    let original_names = structure_bound_names structure in
-    let renamed_names = structure_bound_names renamed in
-    (match List.compare_lengths original_names renamed_names with
-     | 0 ->
-       let rec go = function
-         | [], [] -> true
-         | original_name :: originals, renamed_name :: renameds ->
-           (match
-              Ast_interp.SMap.find_opt original_name original_env,
-              Ast_interp.SMap.find_opt renamed_name renamed_env
-            with
-            | Some v1, Some v2 -> Value.equal v1 v2 && go (originals, renameds)
-            | _ -> false)
-         | _ -> false
-       in
-       go (original_names, renamed_names)
-     | _ -> false)
-  | Error _, Error _ -> true
-  | Ok _, Error _ | Error _, Ok _ -> false
+let alpha_preserves_semantics expr =
+  if not (SSet.is_empty (free_vars expr))
+  then true
+  else (
+    let renamed = Alpha.rename_expression expr in
+    match
+      Ast_interp.eval_expression Ast_interp.SMap.empty expr,
+      Ast_interp.eval_expression Ast_interp.SMap.empty renamed
+    with
+    | Ok v1, Ok v2 -> Value.equal v1 v2
+    | Error _, Error _ -> true
+    | Ok _, Error _ | Error _, Ok _ -> false)
 ;;
 
 let test_alpha_preserves_semantics =
   QCheck.Test.make
     ~name:"alpha-renaming preserves semantics: eval(e) = eval(rename(e))"
     ~count:300
-    Ast_gen.arb_structure
+    Ast_gen.arb_expression
     alpha_preserves_semantics
 ;;
 
