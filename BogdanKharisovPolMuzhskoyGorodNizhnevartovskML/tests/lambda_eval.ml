@@ -6,7 +6,6 @@
 
 [@@@ocaml.text "/*"]
 
-(* Interpreter for Lambda expressions. *)
 open Middleend
 open Eval_value
 

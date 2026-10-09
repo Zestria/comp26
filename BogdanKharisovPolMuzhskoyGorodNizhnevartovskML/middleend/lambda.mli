@@ -46,5 +46,6 @@ val invariant_error_to_string : invariant_error -> string
 
 (** Check scope, globally unique binding occurrences and nonnegative field
     indices. [globals] are existing bindings visible at entry. No type or
-    recursive-initialization checking is performed. *)
+    recursive-initialization checking is performed. Moving a binder preserves
+    its Id; copying it requires a fresh Id and renaming its uses. *)
 val validate : ?globals:Id.Set.t -> expression -> (unit, invariant_error) result

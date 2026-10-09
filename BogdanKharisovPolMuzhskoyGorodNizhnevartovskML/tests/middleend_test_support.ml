@@ -59,7 +59,6 @@ let equal source expected actual =
   true
 ;;
 
-(* Unexpected host exceptions remain test failures, with their original backtrace. *)
 let observe source evaluate input =
   let outcome =
     try evaluate input with

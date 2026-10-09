@@ -6,25 +6,16 @@
 
 [@@@ocaml.text "/*"]
 
-(** Functional intermediate language. Patterns have been compiled away;
-    binding identity is independent of source names. This is not a typed IR. *)
 type expression =
   | Constant of Frontend.Constant.t
   | Var of Id.t
   | Primitive of Primitive.t
-  (** A first-class primitive function. Application is strict, including for
-      [And] and [Or]; direct short-circuit calls are lowered to [If]. *)
   | Tuple of expression * expression * expression list
   | Field of expression * int
-  (** Zero-based projection; the input's tuple type is checked by typing. *)
   | Fun of function_definition
   | Apply of expression * expression * expression list
-  (** Preserve application groups. Arguments are evaluated right to left,
-      then the callee. *)
   | Let of Id.t * expression * expression
   | Let_rec of Id.t * expression * expression
-  (** General recursive values are retained. Their initialization restrictions
-      are not a name-resolution check. *)
   | If of expression * expression * expression
   | Sequence of expression * expression
 
@@ -34,7 +25,6 @@ and function_definition =
   ; body : expression
   }
 
-(** A standalone program runs its structure items in order and returns unit. *)
 type program = expression
 
 let rec free_variables = function
@@ -72,10 +62,6 @@ let invariant_error_to_string = function
   | Negative_field index -> "negative field index " ^ string_of_int index
 ;;
 
-(** Check lexical scope and uniqueness of binding occurrences over the entire
-    term, including disjoint branches. Does not check types or recursive-value
-    initialization. Moving a binder preserves its Id; copying it requires a
-    fresh Id and corresponding renaming of its uses. *)
 let validate ?(globals = Id.Set.empty) expression =
   let ( let* ) = Result.bind in
   let declare bound seen id =
