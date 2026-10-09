@@ -49,11 +49,10 @@ let report structure ast_env anf_env =
 ;;
 
 let () =
-  let full, path =
+  let path =
     match Sys.argv with
-    | [| _; "--full"; path |] -> true, path
-    | [| _; path |] -> false, path
-    | _ -> fail "usage: interp_check.exe [--full] <input.ml>"
+    | [| _; path |] -> path
+    | _ -> fail "usage: interp_check.exe <input.ml>"
   in
   let source = read_file path in
   match Rd_parser.parse_structure source with
@@ -62,9 +61,7 @@ let () =
     (match Anf_conv.convert structure with
      | Error message -> fail ("Anf_conv error: " ^ message)
      | Ok program ->
-       let program =
-         if full then Lambda_lifting.program (Closure_conversion.program program) else program
-       in
+       let program = Lambda_lifting.program (Closure_conversion.program program) in
        (match Ast_interp.eval_structure structure, Anf_interp.eval_program program with
         | Error message, _ -> fail ("AST evaluation error: " ^ message)
         | _, Error message -> fail ("ANF evaluation error: " ^ message)

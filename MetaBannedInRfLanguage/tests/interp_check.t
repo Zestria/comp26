@@ -9,10 +9,6 @@ AST and ANF interpreters agree on a factorial
   fact = <closure>
   r = 120
 
-  $ ./interp_check.exe --full factorial.ml
-  fact = <closure>
-  r = 120
-
 AST and ANF interpreters agree on a fibonacci
 
   $ cat > fibonacci.ml <<EOF
@@ -24,10 +20,6 @@ AST and ANF interpreters agree on a fibonacci
   fib = <closure>
   r = 21
 
-  $ ./interp_check.exe --full fibonacci.ml
-  fib = <closure>
-  r = 21
-
 AST and ANF interpreters agree on tuple destructuring
 
   $ cat > tuples.ml <<EOF
@@ -36,11 +28,6 @@ AST and ANF interpreters agree on tuple destructuring
   > EOF
 
   $ ./interp_check.exe tuples.ml
-  b = 4
-  a = 3
-  sum = 7
-
-  $ ./interp_check.exe --full tuples.ml
   b = 4
   a = 3
   sum = 7
@@ -62,11 +49,6 @@ AST and ANF interpreters agree on pattern matching
   r1 = false
   r2 = true
 
-  $ ./interp_check.exe --full match_example.ml
-  classify = <closure>
-  r1 = false
-  r2 = true
-
 AST and ANF interpreters agree on a higher-order function
 
   $ cat > higher_order.ml <<EOF
@@ -80,11 +62,6 @@ AST and ANF interpreters agree on a higher-order function
   inc = <closure>
   r = 5
 
-  $ ./interp_check.exe --full higher_order.ml
-  apply_twice = <closure>
-  inc = <closure>
-  r = 5
-
 AST and ANF interpreters agree on partial application
 
   $ cat > partial_application.ml <<EOF
@@ -94,13 +71,6 @@ AST and ANF interpreters agree on partial application
   > EOF
 
   $ ./interp_check.exe partial_application.ml
-  make_adder = <closure>
-  add5 = <closure>
-  r = 8
-
-Same result after closure conversion and lambda lifting
-
-  $ ./interp_check.exe --full partial_application.ml
   make_adder = <closure>
   add5 = <closure>
   r = 8
