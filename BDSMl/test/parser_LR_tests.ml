@@ -45,6 +45,14 @@ let regression_tests () =
     ; "-f x * 2", BinOp (Mult, UnOp (Neg, App (Var "f", Var "x")), Int 2)
     ; "not not true", UnOp (Not, UnOp (Not, Bool true))
     ; "1 + 2 * 3", BinOp (Plus, Int 1, BinOp (Mult, Int 2, Int 3))
+    ; ( "1 + if true then 2 else 3 * 4"
+      , BinOp (Plus, Int 1, If (Bool true, Int 2, BinOp (Mult, Int 3, Int 4))) )
+    ; ( "2 * let x = 3 in x + 1"
+      , BinOp
+          ( Mult
+          , Int 2
+          , Let (NonRec, PVar "x", Int 3, BinOp (Plus, Var "x", Int 1)) ) )
+    ; "f = fun x -> x", BinOp (Equal, Var "f", Abs (PVar "x", Var "x"))
     ; "8 - 3 - 1", BinOp (Minus, BinOp (Minus, Int 8, Int 3), Int 1)
     ; "8 / 2 / 2", BinOp (Div, BinOp (Div, Int 8, Int 2), Int 2)
     ; "1 < 2 = true", BinOp (Equal, BinOp (Less, Int 1, Int 2), Bool true)

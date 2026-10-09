@@ -196,7 +196,11 @@ and precedence = function
   | Mult | Div -> 50
 
 and parse_binary config min_precedence tokens =
-  let* left, tokens = parse_unary config tokens in
+  let* left, tokens =
+    match step tokens with
+    | Cons ((TLet | TIF | TFun), _) -> parse_expr config tokens
+    | _ -> parse_unary config tokens
+  in
   let rec loop left tokens =
     match step tokens with
     | Cons (token, rest) ->
