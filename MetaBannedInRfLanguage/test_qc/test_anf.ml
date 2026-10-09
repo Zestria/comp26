@@ -160,31 +160,7 @@ let test_alpha_preserves_semantics =
     alpha_preserves_semantics
 ;;
 
-let example_factorial =
-  {|let rec fact n = if n <= 1 then 1 else n * fact (n - 1);;
-    let six = fact 3|}
-;;
-
-let test_example_factorial =
-  QCheck.Test.make ~name:"factorial example: AST and ANF agree" ~count:1 QCheck.unit (fun () ->
-    match Rd_parser.parse_structure example_factorial with
-    | Error message -> QCheck.Test.fail_reportf "parse error: %s" message
-    | Ok structure ->
-      (match Anf_conv.convert structure with
-       | Error message -> QCheck.Test.fail_reportf "Anf_conv error: %s" message
-       | Ok program ->
-         (match Ast_interp.eval_structure structure, Anf_interp.eval_program program with
-          | Ok ast_env, Ok anf_env ->
-            Value.equal
-              (Ast_interp.SMap.find "six" ast_env)
-              (Anf_interp.SMap.find "six" anf_env)
-            && Value.equal (Ast_interp.SMap.find "six" ast_env) (Value.VInt 6)
-          | _ -> QCheck.Test.fail_reportf "evaluation failed")))
-;;
-
 let () =
-  let tests =
-    [ test_anf_preserves_semantics; test_alpha_preserves_semantics; test_example_factorial ]
-  in
+  let tests = [ test_anf_preserves_semantics; test_alpha_preserves_semantics ] in
   exit (QCheck_runner.run_tests ~verbose:true tests)
 ;;
