@@ -38,7 +38,7 @@ let rec collect bound = function
       bound @ List.concat_map (fun b -> pattern_vars b.binding_pattern) bindings
     in
     union
-      (List.concat_map (fun b -> collect bound' b.binding_expression) bindings)
+      (List.concat_map (fun b -> collect bound b.binding_expression) bindings)
       (collect bound' body)
   | Expr_fun (first, rest, body) ->
     collect (bound @ List.concat_map pattern_vars (first :: rest)) body
@@ -52,6 +52,26 @@ let rec collect bound = function
       (List.map (collect bound) es)
 ;;
 
+(* После rename все связанные имена различны. Поэтому имя свободной
+   переменной не может совпасть с внутренним связыванием: заменяем только
+   обращения, оставляя паттерны на месте. Это касается и вложенных fun. *)
+let rec substitute names = function
+  | Expr_ident name -> Expr_ident (Option.value ~default:name (List.assoc_opt name names))
+  | Expr_constant _ as expression -> expression
+  | Expr_fun (first, rest, body) -> Expr_fun (first, rest, substitute names body)
+  | Expr_let (flag, first, rest, body) ->
+    let binding binding =
+      { binding with binding_expression = substitute names binding.binding_expression }
+    in
+    Expr_let (flag, binding first, List.map binding rest, substitute names body)
+  | Expr_app (f, a) -> Expr_app (substitute names f, substitute names a)
+  | Expr_if (c, t, e) ->
+    Expr_if (substitute names c, substitute names t, substitute names e)
+  | Expr_tuple (first, second, rest) ->
+    Expr_tuple
+      (substitute names first, substitute names second, List.map (substitute names) rest)
+;;
+
 let rec transform env expr =
   let transform_binding env b =
     { b with binding_expression = transform env b.binding_expression }
@@ -60,12 +80,16 @@ let rec transform env expr =
   | (Expr_constant _ | Expr_ident _) as expr -> expr
   | Expr_fun (p, ps, e) ->
     let params = List.concat_map pattern_vars (p :: ps) in
-    let captures = diff (dedup (collect params e)) env in
-    let e' = transform env e in
+    let captures = diff (List.sort_uniq String.compare (collect params e)) env in
     (match captures with
-     | [] -> Expr_fun (p, ps, e')
+     | [] -> Expr_fun (p, ps, transform env e)
      | _ ->
-       let code_params = List.map (fun name -> Pat_var name) captures @ (p :: ps) in
+       (* Аргумент в месте создания замыкания сохраняет старое имя, а его
+          параметр обязан быть новым связыванием. Иначе CC снова создаст
+          затенение, на отсутствие которого рассчитывают lifting и ANF. *)
+       let names = List.map (fun name -> name, Fresh.name "capture") captures in
+       let e' = transform env (substitute names e) in
+       let code_params = List.map (fun (_, name) -> Pat_var name) names @ (p :: ps) in
        let code =
          match code_params with
          | first' :: rest' -> Expr_fun (first', rest', e')
