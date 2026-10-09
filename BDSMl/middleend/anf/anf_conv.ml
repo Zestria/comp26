@@ -10,6 +10,37 @@ open BDSMl_frontend
 open BDSMl_frontend.Ast
 open Anf_ast
 
+module Names = Set.Make (String)
+
+let rec source_names names = function
+  | Ast.Unit | Ast.Int _ | Ast.Bool _ -> names
+  | Ast.Var name -> Names.add name names
+  | Ast.BinOp (_, left, right) | Ast.App (left, right) ->
+    source_names (source_names names left) right
+  | Ast.UnOp (_, operand) -> source_names names operand
+  | Ast.If (condition, if_true, if_false) ->
+    source_names (source_names (source_names names condition) if_true) if_false
+  | Ast.Let (_, pattern, value, body) ->
+    source_names (source_names (pattern_name names pattern) value) body
+  | Ast.Abs (pattern, body) -> source_names (pattern_name names pattern) body
+
+and pattern_name names = function
+  | Ast.PVar name -> Names.add name names
+  | Ast.PUnit | Ast.PUnderscore -> names
+;;
+
+let reserved = ref Names.empty
+
+let fresh_anf () =
+  let rec choose () =
+    let name = Fresh.fresh_ident "a" in
+    if Names.mem name !reserved then choose () else name
+  in
+  let name = choose () in
+  reserved := Names.add name !reserved;
+  name
+;;
+
 let flatten_app (e : Ast.expr) : Ast.expr * Ast.expr list =
   let rec go e acc =
     match e with
@@ -43,7 +74,7 @@ let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
     to_cexpr e (function
       | CImm imm -> k imm
       | ce ->
-        let name = Fresh.fresh_ident "a" in
+        let name = fresh_anf () in
         ALet (Ast.PVar name, ce, k (ImmId name)))
 
 (** [to_imm] для списка: переводит выражения слева направо и передаёт
@@ -74,18 +105,94 @@ and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
 (** Переводит [e] целиком: [to_cexpr e (fun c -> ACExpr c)]. *)
 and to_aexpr (e : Ast.expr) : aexpr = to_cexpr e (fun ce -> ACExpr ce)
 
+let substitute_imm name replacement = function
+  | ImmId current when current = name -> replacement
+  | imm -> imm
+;;
+
+let rec bound_in_aexpr name = function
+  | ACExpr expression -> bound_in_cexpr name expression
+  | ALet (pattern, expression, body) ->
+    (match pattern with
+     | PVar bound when bound = name -> true
+     | _ -> bound_in_cexpr name expression || bound_in_aexpr name body)
+
+and bound_in_cexpr name = function
+  | CIf (_, if_true, if_false) ->
+    bound_in_aexpr name if_true || bound_in_aexpr name if_false
+  | CImm _ | CBinOp _ | CUnOp _ | CApp _ -> false
+;;
+
+let rec substitute_aexpr name replacement = function
+  | ACExpr expression -> ACExpr (substitute_cexpr name replacement expression)
+  | ALet (pattern, expression, body) ->
+    let expression = substitute_cexpr name replacement expression in
+    let body =
+      match pattern with
+      | PVar bound when bound = name -> body
+      | _ -> substitute_aexpr name replacement body
+    in
+    ALet (pattern, expression, body)
+
+and substitute_cexpr name replacement = function
+  | CImm imm -> CImm (substitute_imm name replacement imm)
+  | CBinOp (operator, left, right) ->
+    CBinOp
+      (operator, substitute_imm name replacement left, substitute_imm name replacement right)
+  | CUnOp (operator, operand) -> CUnOp (operator, substitute_imm name replacement operand)
+  | CApp (function_, arguments) ->
+    CApp
+      ( substitute_imm name replacement function_
+      , List.map (substitute_imm name replacement) arguments )
+  | CIf (condition, if_true, if_false) ->
+    CIf
+      ( substitute_imm name replacement condition
+      , substitute_aexpr name replacement if_true
+      , substitute_aexpr name replacement if_false )
+;;
+
+let rec compact_aexpr = function
+  | ACExpr expression -> ACExpr (compact_cexpr expression)
+  | ALet (pattern, expression, body) ->
+    let expression = compact_cexpr expression in
+    let body = compact_aexpr body in
+    (match pattern, expression, body with
+     | PVar name, CImm replacement, _
+       when (match replacement with
+             | ImmId source -> not (bound_in_aexpr source body)
+             | ImmInt _ | ImmBool _ | ImmUnit -> true) ->
+       compact_aexpr (substitute_aexpr name replacement body)
+     | PUnderscore, CImm _, _ | PUnit, CImm ImmUnit, _ -> body
+     | PVar name, expression, ACExpr (CImm (ImmId result)) when name = result ->
+       ACExpr expression
+     | _ -> ALet (pattern, expression, body))
+
+and compact_cexpr = function
+  | CIf (condition, if_true, if_false) ->
+    CIf (condition, compact_aexpr if_true, compact_aexpr if_false)
+  | expression -> expression
+;;
+
 (** Переводит одно определение верхнего уровня. *)
 let anf_decl (item : Ast.structure_item) : decl =
   match item with
-  | StrEval e -> AEval (to_aexpr e)
+  | StrEval e -> AEval (compact_aexpr (to_aexpr e))
   | StrLet (r, p, e) ->
     let params, body = split_params e in
-    ADecl (r, p, params, to_aexpr body)
+    ADecl (r, p, params, compact_aexpr (to_aexpr body))
 ;;
 
 (** Переводит всю программу. Не забыть [Fresh.reset ()] в начале. *)
 let anf (program : Ast.program) : aprogram =
   Fresh.reset ();
+  reserved :=
+    List.fold_left
+      (fun names -> function
+        | StrEval expression -> source_names names expression
+        | StrLet (_, pattern, expression) ->
+          source_names (pattern_name names pattern) expression)
+      Names.empty
+      program;
   let rec go prog acc =
     match prog with
     | p :: tl -> go tl (anf_decl p :: acc)

@@ -1,6 +1,7 @@
 open BDSMl_frontend
 open BDSMl_frontend.Ast
 open BDSMl_middleend.Ast_passes
+open BDSMl_middleend.Anf
 
 let check_free_vars name expected expression =
   let actual = Free_vars.free_vars expression |> Free_vars.String_set.elements in
@@ -191,6 +192,62 @@ let lifts_local_recursion () =
     "let f y = let rec loop i = if i = 0 then y else loop (i - 1) in loop 10"
 ;;
 
+let compact_anf_aliases () =
+  let open Anf_ast in
+  let check expected expression =
+    let actual = Anf_conv.anf [ StrEval expression ] in
+    Alcotest.(check bool) "minimal ANF" true (actual = [ AEval expected ])
+  in
+  check
+    (ACExpr (CBinOp (Plus, ImmInt 1, ImmInt 2)))
+    (Let (NonRec, PVar "x", Int 1, BinOp (Plus, Var "x", Int 2)));
+  check
+    (ACExpr (CApp (ImmId "f", [ ImmInt 2 ])))
+    (Let (NonRec, PVar "x", App (Var "f", Int 2), Var "x"))
+;;
+
+let anf_preserves_shadowing_and_names () =
+  let open Anf_ast in
+  let source =
+    Let
+      ( NonRec
+      , PVar "x"
+      , Var "y"
+      , Let
+          ( NonRec
+          , PVar "y"
+          , App (Var "f", Int 3)
+          , BinOp (Plus, Var "x", Var "y") ) )
+  in
+  let actual = Anf_conv.anf [ StrEval source ] in
+  let expected =
+    [ AEval
+        (ALet
+           ( PVar "x"
+           , CImm (ImmId "y")
+           , ALet
+               ( PVar "y"
+               , CApp (ImmId "f", [ ImmInt 3 ])
+               , ACExpr (CBinOp (Plus, ImmId "x", ImmId "y")) ) ))
+    ]
+  in
+  Alcotest.(check bool) "alias does not capture a later binding" true (actual = expected);
+  let collision =
+    Anf_conv.anf
+      [ StrEval (App (Var "f", BinOp (Plus, Var "a_1", Int 2))) ]
+  in
+  let expected_collision =
+    [ AEval
+        (ALet
+           ( PVar "a_2"
+           , CBinOp (Plus, ImmId "a_1", ImmInt 2)
+           , ACExpr (CApp (ImmId "f", [ ImmId "a_2" ])) ))
+    ]
+  in
+  Alcotest.(check bool) "temporary avoids source names" true
+    (collision = expected_collision)
+;;
+
 let () =
   Alcotest.run
     "middleend"
@@ -208,6 +265,10 @@ let () =
       , [ Alcotest.test_case "CPS factorial" `Quick lifts_cps_factorial
         ; Alcotest.test_case "CPS fibonacci" `Quick lifts_cps_fibonacci
         ; Alcotest.test_case "local recursion" `Quick lifts_local_recursion
+        ] )
+    ; ( "ANF"
+      , [ Alcotest.test_case "remove aliases" `Quick compact_anf_aliases
+        ; Alcotest.test_case "scope and names" `Quick anf_preserves_shadowing_and_names
         ] )
     ]
 ;;
