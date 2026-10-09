@@ -8,12 +8,12 @@ Menhir reads a file containing definitions and evaluations.
   $ cat > input <<'EOF'
   > let x = 1;; x + 2
   > EOF
-  $ ../compiler.exe --parser menhir input
+  $ ../compiler.exe -parsing menhir input
   [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 
 Explicit Angstrom selection and explicit standard input.
 
-  $ ../compiler.exe --parser angstrom - < input
+  $ ../compiler.exe -parsing topdown - < input
   [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 
 Empty input is an empty program.
@@ -29,7 +29,7 @@ An option-like filename can follow --.
 
 A Menhir parse error goes to stderr with exit code 1.
 
-  $ printf 'let x =' | ../compiler.exe --parser menhir >out 2>err
+  $ printf 'let x =' | ../compiler.exe -parsing menhir >out 2>err
   [1]
   $ cat out
   $ cat err
@@ -50,14 +50,6 @@ A missing file reports an I/O error.
   $ cat err
   I/O error: missing-input: No such file or directory
 
-An unknown parser is a command-line error.
-
-  $ ../compiler.exe --parser unknown >out 2>err
-  [2]
-  $ cat out
-  $ head -n 1 err
-  ../compiler.exe: Unknown parser: unknown; expected angstrom or menhir.
-
 Multiple files are rejected.
 
   $ ../compiler.exe input input >out 2>err
@@ -69,9 +61,11 @@ Multiple files are rejected.
 Help succeeds without opening the input file.
 
   $ ../compiler.exe missing-input --help
-  Usage: compiler [--parser angstrom|menhir] [--operator-extension] [FILE]
+  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing] [-o FILE] [--operator-extension] [FILE]
   Without FILE, read standard input.
-    --parser NAME Use angstrom (default) or menhir
+    -parsing NAME Use topdown (default) or menhir
+    --stop-after STAGE Stop after parsing
+    -o FILE Write to FILE or - for stdout (default)
     --operator-extension  Enable operator declarations (Angstrom only)
     -  Read standard input
     --  Treat remaining arguments as filenames
@@ -92,15 +86,128 @@ The extension supports prefix arities beyond two.
 
 Menhir rejects the extension option before opening the input file.
 
-  $ ../compiler.exe --operator-extension --parser menhir missing-input >out 2>err
+  $ ../compiler.exe --operator-extension -parsing menhir missing-input >out 2>err
   [2]
   $ cat out
   $ cat err
   --operator-extension requires the Angstrom parser
 
+Topdown selection overrides a preceding Menhir selection.
+
+  $ printf 'prefix 3 (%%%%);; %%%% a b c' | ../compiler.exe -parsing menhir -parsing topdown --operator-extension
+  [Evaluation (Apply (Var "%%", [Var "a"; Var "b"; Var "c"]))]
+
+A later Menhir selection overrides a preceding topdown selection.
+
+  $ ../compiler.exe -parsing topdown -parsing menhir --operator-extension missing-input
+  --operator-extension requires the Angstrom parser
+  [2]
+
+The parsing stage preserves syntactically valid input without type checking.
+
+  $ printf 'if 1 then 2 else false' | ../compiler.exe --stop-after parsing
+  [Evaluation (If (Int "1", Int "2", Some (false)))]
+
+Explicit stdout output.
+
+  $ printf '1' | ../compiler.exe -o -
+  [Evaluation (Int "1")]
+
+File output replaces existing contents, accepts spaces, and leaves stdout empty.
+
+  $ printf 'old contents that must be replaced\n' > 'result ast'
+  $ printf '1' | ../compiler.exe -o 'result ast'
+  $ cat 'result ast'
+  [Evaluation (Int "1")]
+
+An empty program is still written to the output file.
+
+  $ printf '' | ../compiler.exe --stop-after parsing -o empty-result
+  $ cat empty-result
+  []
+
+Input is read before an output with the same path is opened.
+
+  $ printf '1' > same-path
+  $ ../compiler.exe -o same-path same-path
+  $ cat same-path
+  [Evaluation (Int "1")]
+
+Only the last output option takes effect.
+
+  $ printf '1' | ../compiler.exe -o unused-result -o -
+  [Evaluation (Int "1")]
+  $ test ! -e unused-result
+
+An output error goes to stderr with exit code 1.
+
+  $ printf '1' | ../compiler.exe -o missing-directory/result >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  I/O error: missing-directory/result: No such file or directory
+
+A parse error preserves an existing output file.
+
+  $ printf 'keep me\n' > preserved-result
+  $ printf 'let x =' | ../compiler.exe -parsing menhir -o preserved-result >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Parse error: Syntax error
+  $ cat preserved-result
+  keep me
+
+A parse error does not create a new output file.
+
+  $ printf 'let x =' | ../compiler.exe -parsing menhir -o absent-result >out 2>err
+  [1]
+  $ test ! -e absent-result
+
+An unknown parser is rejected before opening the input file.
+
+  $ ../compiler.exe -parsing unknown missing-input >out 2>err
+  [2]
+  $ cat out
+  $ head -n 1 err
+  ../compiler.exe: Unknown parser: unknown; expected topdown or menhir.
+
+An unknown stage fails before opening input or output.
+
+  $ ../compiler.exe --stop-after unknown -o absent-stage-result missing-input >out 2>err
+  [2]
+  $ cat out
+  $ head -n 1 err
+  ../compiler.exe: Unknown stage: unknown; expected parsing.
+  $ test ! -e absent-stage-result
+
+The output option requires a filename.
+
+  $ ../compiler.exe -o >out 2>err
+  [2]
+  $ cat out
+  $ head -n 1 err
+  ../compiler.exe: option '-o' needs an argument.
+
+The parser option requires a parser name.
+
+  $ ../compiler.exe -parsing >out 2>err
+  [2]
+  $ cat out
+  $ head -n 1 err
+  ../compiler.exe: option '-parsing' needs an argument.
+
+The stage option requires a stage name.
+
+  $ ../compiler.exe --stop-after >out 2>err
+  [2]
+  $ cat out
+  $ head -n 1 err
+  ../compiler.exe: option '--stop-after' needs an argument.
+
 Option order does not bypass the parser restriction.
 
-  $ ../compiler.exe --parser menhir --operator-extension missing-input >out 2>err
+  $ ../compiler.exe -parsing menhir --operator-extension missing-input >out 2>err
   [2]
   $ cat out
   $ cat err

@@ -24,9 +24,15 @@ comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorod
 [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 ```
 
-- `--parser angstrom|menhir`: select the parser; defaults to Angstrom.
+- `-parsing topdown|menhir`: select the parser; defaults to topdown (Angstrom).
+- `--stop-after parsing`: stop after parsing and print the AST; currently the only stage.
+- `-o FILE`: write the AST to a file; `-o -` writes to stdout (the default).
 - `--operator-extension`: enable [operator declarations](#operator-declarations) (Angstrom only).
 - `FILE`: input file; omit it or use `-` to read stdin.
+
+When parser or output options are repeated, the last value takes effect.
+Input is read and parsed before the output file is opened. A parse error leaves
+an existing output file unchanged. Diagnostics are written to stderr.
 
 ## Syntax
 
