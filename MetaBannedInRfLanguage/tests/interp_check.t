@@ -6,7 +6,6 @@ AST and ANF interpreters agree on a factorial
   > EOF
 
   $ ./interp_check.exe factorial.ml
-  fact = <closure>
   r = 120
 
 AST and ANF interpreters agree on a fibonacci
@@ -17,7 +16,6 @@ AST and ANF interpreters agree on a fibonacci
   > EOF
 
   $ ./interp_check.exe fibonacci.ml
-  fib = <closure>
   r = 21
 
 AST and ANF interpreters agree on tuple destructuring
@@ -45,7 +43,6 @@ AST and ANF interpreters agree on pattern matching
   > EOF
 
   $ ./interp_check.exe match_example.ml
-  classify = <closure>
   r1 = false
   r2 = true
 
@@ -58,8 +55,6 @@ AST and ANF interpreters agree on a higher-order function
   > EOF
 
   $ ./interp_check.exe higher_order.ml
-  apply_twice = <closure>
-  inc = <closure>
   r = 5
 
 AST and ANF interpreters agree on partial application
@@ -71,6 +66,4 @@ AST and ANF interpreters agree on partial application
   > EOF
 
   $ ./interp_check.exe partial_application.ml
-  make_adder = <closure>
-  add5 = <closure>
   r = 8

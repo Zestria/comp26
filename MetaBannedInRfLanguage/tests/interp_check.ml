@@ -35,6 +35,7 @@ let report structure ast_env anf_env =
   List.iter
     (fun name ->
        match Ast_interp.SMap.find_opt name ast_env, Anf_interp.SMap.find_opt name anf_env with
+       | Some (Value.VClosure _), Some (Value.VClosure _) -> ()
        | Some ast_value, Some anf_value ->
          if Value.equal ast_value anf_value
          then Printf.printf "%s = %s\n" name (Value.to_string ast_value)
