@@ -7,6 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open SchonfinkelML_frontend.Common
+open Names
 
 type immexpr =
   | ImmNum of int
@@ -37,98 +38,7 @@ let wrap (bindings : binding list) body =
   List.fold_right (fun (flag, name, rhs) acc -> ALet (flag, name, rhs, acc)) bindings body
 ;;
 
-module StringSet = Set.Make (String)
-
-let rec idents_of_expr acc = function
-  | Ident x -> StringSet.add x acc
-  | Const _ -> acc
-  | App (e1, e2) -> idents_of_expr (idents_of_expr acc e1) e2
-  | Let (_, v, e1, e2) -> idents_of_expr (idents_of_expr (StringSet.add v acc) e1) e2
-  | If (e1, e2, e3) -> idents_of_expr (idents_of_expr (idents_of_expr acc e1) e2) e3
-  | Abstr (v, e) -> idents_of_expr (StringSet.add v acc) e
-;;
-
-(* Fresh names must not collide with names that occur in the source.  The
-   supply is threaded through the conversion instead of living in mutable
-   cells, so [create_anf] stays a pure function. *)
-type naming =
-  { reserved : StringSet.t
-  ; counter : int
-  }
-
-let naming_of idents = { reserved = idents; counter = 0 }
-
-let gensym (naming : naming) ?(prefix = "temp") () =
-  let rec pick counter =
-    let name = Printf.sprintf "%s%d" prefix counter in
-    if StringSet.mem name naming.reserved then pick (counter + 1) else name, counter
-  in
-  let name, counter = pick (naming.counter + 1) in
-  name, { naming with counter }
-;;
-
 let gensym_id naming () = gensym naming ~prefix:"v" ()
-
-let fv_imm : immexpr -> StringSet.t = function
-  | ImmId x -> StringSet.singleton x
-  | ImmNum _ | ImmBool _ | ImmUnit -> StringSet.empty
-;;
-
-let rec fv_cexpr : cexpr -> StringSet.t = function
-  | CBinop (_, a, b) -> StringSet.union (fv_imm a) (fv_imm b)
-  | CImmExpr i -> fv_imm i
-  | CIfExpr (i, t, e) ->
-    StringSet.union (fv_imm i) (StringSet.union (fv_aexpr t) (fv_aexpr e))
-  | CApp (f, a, args) ->
-    List.fold_left
-      (fun acc x -> StringSet.union acc (fv_imm x))
-      (StringSet.union (fv_imm f) (fv_imm a))
-      args
-  | CAbstr (p, body) -> StringSet.remove p (fv_aexpr body)
-
-and fv_aexpr : aexpr -> StringSet.t = function
-  | ALet (flag, name, rhs, rest) ->
-    let fv_rhs = fv_aexpr rhs in
-    let fv_rhs = if flag = Recursive then StringSet.remove name fv_rhs else fv_rhs in
-    StringSet.union fv_rhs (StringSet.remove name (fv_aexpr rest))
-  | ACExpr c -> fv_cexpr c
-;;
-
-let free_vars a = StringSet.elements (fv_aexpr a)
-
-let rec idents_cexpr acc : cexpr -> StringSet.t = function
-  | CBinop (_, a, b) -> idents_imm (idents_imm acc a) b
-  | CImmExpr i -> idents_imm acc i
-  | CIfExpr (i, t, e) -> idents_aexpr (idents_aexpr (idents_imm acc i) t) e
-  | CApp (f, a, args) -> List.fold_left idents_imm (idents_imm (idents_imm acc f) a) args
-  | CAbstr (p, body) -> idents_aexpr (StringSet.add p acc) body
-
-and idents_imm acc : immexpr -> StringSet.t = function
-  | ImmId x -> StringSet.add x acc
-  | ImmNum _ | ImmBool _ | ImmUnit -> acc
-
-and idents_aexpr acc : aexpr -> StringSet.t = function
-  | ALet (_, name, rhs, rest) ->
-    idents_aexpr (idents_aexpr (StringSet.add name acc) rhs) rest
-  | ACExpr c -> idents_cexpr acc c
-;;
-
-let all_idents a = idents_aexpr StringSet.empty a
-let naming_of_aexpr a = naming_of (all_idents a)
-
-let rec collect_params = function
-  | ACExpr (CAbstr (p, body)) ->
-    let ps, inner = collect_params body in
-    p :: ps, inner
-  | other -> [], other
-;;
-
-let rec build_abstr params body =
-  match params with
-  | [] -> body
-  | [ p ] -> ACExpr (CAbstr (p, body))
-  | p :: rest -> ACExpr (CAbstr (p, build_abstr rest body))
-;;
 
 let flatten_app left right =
   let rec go f first rest =
