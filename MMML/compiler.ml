@@ -110,7 +110,9 @@ let () =
        | None -> parse mode stdin
        | Some path ->
          let channel = open_in_bin path in
-         Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () -> parse mode channel)
+         Fun.protect
+           ~finally:(fun () -> close_in_noerr channel)
+           (fun () -> parse mode channel)
      with
      | Sys_error message ->
        Format.eprintf "%s@." message;
