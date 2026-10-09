@@ -18,7 +18,7 @@ let should_rename name =
   let length = String.length name in
   (* todo: поправить чтобы была хвостовая рекурсия *)
   let rec helper i =
-    i < length - 1 && ((name.[i] = '_' && name.[i + 1] == '_') || helper (i + 1))
+    i < length - 1 && ((name.[i] = '_' && name.[i + 1] = '_') || helper (i + 1))
   in
   helper 0
 ;;
@@ -98,8 +98,7 @@ let rec rename_structure env = function
 ;;
 
 let rename structure =
-  let builtins = Lexicon.operators @ [ "~-" ] @ [ "print_int" ] in
-  let initial_env = List.map (fun name -> name, name) builtins in
-  try Ok (rename_structure initial_env structure) with
+  let env = List.map (fun name -> name, name) Lexicon.builtins in
+  try Ok (rename_structure env structure) with
   | Rename_error e -> Error e
 ;;
