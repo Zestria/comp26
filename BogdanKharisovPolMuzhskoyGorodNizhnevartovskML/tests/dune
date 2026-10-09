@@ -6,6 +6,24 @@
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (deps ../compiler.exe))
 
+(test
+ (name test_lower)
+ (modules test_lower)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))
+
+(test
+ (name test_eval_value)
+ (modules test_eval_value)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))
+
+(library
+ (name middleend_test_support)
+ (modules middleend_test_support lambda_eval eval_value)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend qcheck))
+
 (library
  (name frontend_expect_tests)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
