@@ -33,23 +33,3 @@ and aexpr =
 
 val create_anf : expr -> aexpr
 val string_of_aexpr : aexpr -> string
-
-module StringSet : Set.S with type elt = string
-
-type naming =
-  { reserved : StringSet.t
-  ; counter : int
-  }
-
-val naming_of : StringSet.t -> naming
-val naming_of_aexpr : aexpr -> naming
-val gensym : naming -> ?prefix:string -> unit -> string * naming
-val gensym_id : naming -> unit -> string * naming
-val fv_imm : immexpr -> StringSet.t
-val fv_cexpr : cexpr -> StringSet.t
-val fv_aexpr : aexpr -> StringSet.t
-val free_vars : aexpr -> string list
-val all_idents : aexpr -> StringSet.t
-val collect_params : aexpr -> string list * aexpr
-val build_abstr : string list -> aexpr -> aexpr
-val idents_of_expr : StringSet.t -> expr -> StringSet.t

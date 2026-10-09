@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open SchonfinkelML_frontend.Common
-module StringSet = Anf.StringSet
+module StringSet = Names.StringSet
 
 let builtins = StringSet.of_list [ "+"; "-"; "*"; "/"; "<"; ">"; "="; "<="; ">=" ]
 
@@ -43,14 +43,14 @@ let rec fv ctx = function
 ;;
 
 type uniq_state =
-  { naming : Anf.naming
+  { naming : Names.naming
   ; seen : StringSet.t
   }
 
 let bind_fresh st x =
   if StringSet.mem x st.seen
   then (
-    let x', naming = Anf.gensym st.naming ~prefix:(x ^ "_") () in
+    let x', naming = Names.gensym st.naming ~prefix:(x ^ "_") () in
     x', { naming; seen = StringSet.add x' st.seen })
   else x, { st with seen = StringSet.add x st.seen }
 ;;
@@ -110,7 +110,7 @@ let rec convert ctx naming = function
     if fvs = []
     then naming, build_abstr params body
     else (
-      let clo, naming = Anf.gensym naming ~prefix:"clo_" () in
+      let clo, naming = Names.gensym naming ~prefix:"clo_" () in
       let extended = build_abstr (fvs @ params) body in
       let wrapper = apply_names (Ident clo) fvs in
       naming, Let (NotRecursive, clo, extended, wrapper))
@@ -136,7 +136,7 @@ let rec convert ctx naming = function
           let naming, rest = convert ctx naming rest in
           naming, Let (Recursive, f, closed, rest)
         | _ :: _ ->
-          let clo, naming = Anf.gensym naming ~prefix:"clo_" () in
+          let clo, naming = Names.gensym naming ~prefix:"clo_" () in
           let ctx_rest = { ctx with subst = (f, Ident clo) :: ctx.subst } in
           let naming, rest = convert ctx_rest naming rest in
           naming, Let (Recursive, f, closed, Let (NotRecursive, clo, self, rest))))
@@ -144,7 +144,7 @@ let rec convert ctx naming = function
 
 let closure_convert ?(globals = []) e =
   let globals = StringSet.union builtins (StringSet.of_list globals) in
-  let naming = Anf.naming_of (Anf.idents_of_expr globals e) in
+  let naming = Names.naming_of (Names.idents_of_expr globals e) in
   let st, e = uniquify { naming; seen = globals } [] e in
   let convert_naming = { st.naming with counter = 0 } in
   snd (convert { globals; subst = [] } convert_naming e)
@@ -162,7 +162,7 @@ let closure_convert_program ?(globals = []) (p : program) : program =
   let reserved =
     List.fold_left
       (fun acc -> function
-         | StrLet (_, _, e) | StrEval e -> Anf.idents_of_expr acc e)
+         | StrLet (_, _, e) | StrEval e -> Names.idents_of_expr acc e)
       globals
       p
   in
@@ -181,7 +181,7 @@ let closure_convert_program ?(globals = []) (p : program) : program =
          | StrEval e ->
            let naming, e = convert_top naming e in
            naming, StrEval e)
-      (Anf.naming_of reserved)
+      (Names.naming_of reserved)
       p
   in
   items
