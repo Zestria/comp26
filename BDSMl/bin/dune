@@ -23,6 +23,7 @@
   short_circuit.ml
   if_argument.ml
   recursive_capture.ml
+  evaluation_order.ml
   check_stages.sh
   runtime.c
   %{exe:../compiler.exe}))

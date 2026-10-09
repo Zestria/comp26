@@ -1,6 +1,6 @@
 set -eu
 
-for source in fac_cps.ml fib_cps.ml closure_input.ml nested_functions.ml shadowing.ml short_circuit.ml if_argument.ml recursive_capture.ml; do
+for source in fac_cps.ml fib_cps.ml closure_input.ml nested_functions.ml shadowing.ml short_circuit.ml if_argument.ml recursive_capture.ml evaluation_order.ml; do
   expected=$(ocaml "$source")
   for parser in topdown menhir; do
     for stage in parsing alpha cc ll anf; do

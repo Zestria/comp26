@@ -77,12 +77,12 @@ let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
         let name = fresh_anf () in
         ALet (Ast.PVar name, ce, k (ImmId name)))
 
-(** [to_imm] для списка: переводит выражения слева направо и передаёт
-    в [k] список атомов. *)
+(** OCaml вычисляет аргументы приложения справа налево. Порядок атомов в
+    списке остаётся исходным, а вычисления выполняются с конца списка. *)
 and to_imm_list (es : Ast.expr list) (k : immexpr list -> aexpr) : aexpr =
   match es with
   | [] -> k []
-  | e :: tl -> to_imm e (fun imm -> to_imm_list tl (fun imms -> k (imm :: imms)))
+  | e :: tl -> to_imm_list tl (fun imms -> to_imm e (fun imm -> k (imm :: imms)))
 
 and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
   match e with
@@ -90,11 +90,12 @@ and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
   | Ast.BinOp (And, a, b) -> to_cexpr (Ast.If (a, b, Ast.Bool false)) k
   | Ast.BinOp (Or, a, b) -> to_cexpr (Ast.If (a, Ast.Bool true, b)) k
   | Ast.BinOp (op, e1, e2) ->
-    to_imm e1 (fun a -> to_imm e2 (fun b -> k (CBinOp (op, a, b))))
+    to_imm e2 (fun b -> to_imm e1 (fun a -> k (CBinOp (op, a, b))))
   | Ast.UnOp (op, e1) -> to_imm e1 (fun a -> k (CUnOp (op, a)))
   | Ast.App _ ->
     let f, args = flatten_app e in
-    to_imm f (fun f_imm -> to_imm_list args (fun args_imm -> k (CApp (f_imm, args_imm))))
+    to_imm_list args (fun args_imm ->
+      to_imm f (fun f_imm -> k (CApp (f_imm, args_imm))))
   | Ast.If (c, e1, e2) ->
     to_imm c (fun c_imm -> k (CIf (c_imm, to_aexpr e1, to_aexpr e2)))
   | Ast.Let (Rec, _, _, _) ->
