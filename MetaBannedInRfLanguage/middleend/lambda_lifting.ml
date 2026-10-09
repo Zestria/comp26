@@ -55,6 +55,48 @@ let binder_counts program =
   counts
 ;;
 
+(* ---------- simplification ----------
+   Catch dead bindings so that output ANF is smaller:
+     let x = y in x    ==>  y
+     let x = f in x a  ==>  f a   (when x does not occur in the arguments)
+*)
+
+let is_imm_var name = function
+  | ImmVar var -> String.equal name var
+  | ImmInt _ | ImmBool _ | ImmUnit -> false
+;;
+
+let rec simplify_aexpr (expr : aexpr) : aexpr =
+  let expr =
+    match expr with
+    | ALet (name, value, body) -> ALet (name, simplify_cexpr value, simplify_aexpr body)
+    | ALetTuple (names, subject, body) -> ALetTuple (names, subject, simplify_aexpr body)
+    | ALetRec (bindings, body) ->
+      ALetRec (List.map (fun (name, value) -> name, simplify_cexpr value) bindings, simplify_aexpr body)
+    | ACExpr cexpr -> ACExpr (simplify_cexpr cexpr)
+  in
+  match expr with
+  | ALet (name, CImm (ImmVar y), ACExpr (CImm (ImmVar name'))) when String.equal name name' ->
+    ACExpr (CImm (ImmVar y))
+  | ALet (name, CImm (ImmVar f), ACExpr (CApp (ImmVar callee, args)))
+    when String.equal name callee && not (List.exists (is_imm_var callee) args) ->
+    ACExpr (CApp (ImmVar f, args))
+  | _ -> expr
+
+and simplify_cexpr = function
+  | CIte (cond, then_branch, else_branch) ->
+    CIte (cond, simplify_aexpr then_branch, simplify_aexpr else_branch)
+  | CFun (params, body) -> CFun (params, simplify_aexpr body)
+  | (CImm _ | CApp _ | CTuple _ | CMatchFailure) as cexpr -> cexpr
+;;
+
+let simplify_item = function
+  | AValue (name, body) -> AValue (name, simplify_aexpr body)
+  | ARec bindings ->
+    ARec (List.map (fun (name, value) -> name, simplify_cexpr value) bindings)
+  | AEval body -> AEval (simplify_aexpr body)
+;;
+
 type ctx =
   { gen : Fresh.t
   ; counts : (string, int) Hashtbl.t
@@ -136,6 +178,7 @@ let hoist_item ctx = function
 ;;
 
 let program program =
+  let program = List.map simplify_item program in
   let gen = Fresh.create_from_program program in
   let ctx = { gen; counts = binder_counts program } in
   List.concat_map (hoist_item ctx) program
