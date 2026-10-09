@@ -53,6 +53,24 @@ let apply_value fn_value args =
   | _ -> Error "cannot apply a non-function value"
 ;;
 
+let rec take n list =
+  if n <= 0
+  then []
+  else (
+    match list with
+    | [] -> []
+    | x :: xs -> x :: take (n - 1) xs)
+;;
+
+let rec drop n list =
+  if n <= 0
+  then list
+  else (
+    match list with
+    | [] -> []
+    | _ :: xs -> drop (n - 1) xs)
+;;
+
 let rec eval_cexpr env = function
   | Anf.CImm imm -> eval_imm env imm
   | Anf.CApp (fn, args) ->
@@ -70,14 +88,7 @@ let rec eval_cexpr env = function
      | Value.VBool true -> eval_aexpr env then_branch
      | Value.VBool false -> eval_aexpr env else_branch
      | _ -> Error "if-condition is not a bool")
-  | Anf.CFun (params, body) ->
-    Ok
-      (make_closure (fun args ->
-         match List.compare_lengths params args with
-         | 0 ->
-           let env = List.fold_left2 (fun acc p v -> SMap.add p v acc) env params args in
-           eval_aexpr env body
-         | _ -> Error "arity mismatch"))
+  | Anf.CFun (params, body) -> Ok (Value.VClosure (apply_closure env params body))
   | Anf.CMatchFailure -> Error "match failure: no case matched"
 
 and eval_aexpr env = function
@@ -106,6 +117,30 @@ and eval_aexpr env = function
         | _ -> Error "tuple arity mismatch")
      | _ -> Error "expected a tuple")
   | Anf.ALetRec (bindings, body) -> eval_aexpr (make_rec_env env bindings) body
+
+and apply_closure env params body args =
+  if !fuel <= 0
+  then Error "fuel exhausted (likely non-terminating recursion)"
+  else (
+    decr fuel;
+    let nparams = List.length params in
+    let nargs = List.length args in
+    if nargs = nparams
+    then (
+      let env = List.fold_left2 (fun acc p v -> SMap.add p v acc) env params args in
+      eval_aexpr env body)
+    else if nargs < nparams
+    then (
+      let given = take nargs params in
+      let remaining = drop nargs params in
+      let env = List.fold_left2 (fun acc p v -> SMap.add p v acc) env given args in
+      Ok (Value.VClosure (apply_closure env remaining body)))
+    else (
+      let these = take nparams args in
+      let rest = drop nparams args in
+      let env = List.fold_left2 (fun acc p v -> SMap.add p v acc) env params these in
+      let* fn_value = eval_aexpr env body in
+      apply_value fn_value rest))
 
 and make_rec_env env bindings =
   let env_ref = ref env in
