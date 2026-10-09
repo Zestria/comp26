@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 
 type immexpr =
   | ImmNum of int

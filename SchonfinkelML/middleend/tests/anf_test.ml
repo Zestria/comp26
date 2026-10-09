@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 module Anf = Middleend.Anf
 
 let print_anf e = print_endline (Anf.string_of_aexpr (Anf.create_anf e))
@@ -63,17 +63,17 @@ let%expect_test "let with non-trivial body keeps evaluation order" =
 
 let%expect_test "add" =
   print_anf (eadd (eadd (econsti 2) (econsti 2)) (econsti 2));
-  [%expect {| let v8 = 2 + 2 in v8 + 2 |}]
+  [%expect {| let v1 = 2 + 2 in v1 + 2 |}]
 ;;
 
 let%expect_test "add funcs" =
   print_anf (eadd (eapp (Ident "f") (Ident "x")) (eapp (Ident "g") (Ident "x")));
-  [%expect {| let v10 = (f x) in let v11 = (g x) in v10 + v11 |}]
+  [%expect {| let v1 = (f x) in let v2 = (g x) in v1 + v2 |}]
 ;;
 
 let%expect_test "let" =
   print_anf (elet "foo" (eapp (Ident "f") (Ident "x")) (eadd (Ident "foo") (econsti 3)));
-  [%expect {| let v12 = (f x) in let foo = v12 in foo + 3 |}]
+  [%expect {| let foo = (f x) in foo + 3 |}]
 ;;
 
 let%expect_test "lambda" =
@@ -82,11 +82,11 @@ let%expect_test "lambda" =
        "foo"
        (elambda "x" (eadd (Ident "x") (econsti 4)))
        (eapp (Ident "foo") (econsti 3)));
-  [%expect {| let v14 = fun x -> x + 4 in let foo = v14 in (foo 3) |}]
+  [%expect {| let foo = fun x -> x + 4 in (foo 3) |}]
 ;;
 
 let%expect_test "if expression" =
   print_anf
     (elet "foo" (eif (eeq (Ident "x") (Ident "y")) (Ident "x") (Ident "y")) (econsti 3));
-  [%expect {| let v18 = x = y in let v17 = if v18 then x else y in let foo = v17 in 3 |}]
+  [%expect {| let foo = let v1 = x = y in if v1 then x else y in 3 |}]
 ;;
