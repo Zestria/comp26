@@ -8,7 +8,7 @@
 
 open SchonfinkelML_frontend.Common
 
-(* Replace a variable by the name of a lifted function.  The name is fresh with
+(** Replace a variable by the name of a lifted function.  The name is fresh with
    respect to the whole expression, so no binder can capture it. *)
 let rec subst x name = function
   | Ident y when String.equal x y -> Ident name
@@ -29,7 +29,7 @@ let rec subst x name = function
       , if String.equal y x then rest else subst x name rest )
 ;;
 
-(* Lifted definitions may call each other, so they are emitted in the order they
+(** Lifted definitions may call each other, so they are emitted in the order they
    are created: a definition is always created after the definitions nested in
    it, hence it never refers to a definition emitted later.  The list is kept in
    reverse order of creation. *)
@@ -62,9 +62,7 @@ let rec lift_expr st = function
      | Abstr _ ->
        (* The chain is closed (closure conversion guarantees it) and its name
           stays bound inside the binding, so the whole [let rec] can be floated
-          to the front of the expression.  The name needs no freshening either:
-          closure conversion renames binders that would shadow each other, so
-          two floated recursive bindings never end up with the same name. *)
+          to the front of the expression. *)
        { st with defs = (Recursive, f, rhs) :: st.defs }, rest
      | _ -> st, Let (Recursive, f, rhs, rest))
   | Let (NotRecursive, x, rhs0, rest) ->
@@ -78,10 +76,8 @@ let rec lift_expr st = function
        let st, rest = lift_expr st rest in
        st, Let (NotRecursive, x, rhs, rest))
 
-(* [lift_chain e] keeps the curried chain [fun p1 -> fun p2 -> ...] itself and
-   lifts the abstractions nested inside its body.  A lifted definition needs it
-   to become a single function instead of one partial application per parameter,
-   and a recursive binding needs it to keep calling itself by name. *)
+(** [lift_chain e] keeps the curried chain [fun p1 -> fun p2 -> ...] itself and
+   lifts the abstractions nested inside its body. *)
 and lift_chain st = function
   | Abstr (p, body) ->
     let st, body = lift_chain st body in
