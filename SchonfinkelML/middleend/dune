@@ -1,6 +1,6 @@
 (library
  (name middleend)
- (modules anf names closure_conversion)
+ (modules anf names closure_conversion lambda_lifting)
  (libraries SchonfinkelML_frontend)
  (package SchonfinkelML))
 
@@ -8,7 +8,7 @@
  tests
  (library
   (name middleend_tests)
-  (modules anf_test closure_conversion_test)
+  (modules anf_test closure_conversion_test lambda_lifting_test)
   (libraries middleend SchonfinkelML_frontend top_down)
   (inline_tests)
   (preprocess

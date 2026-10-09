@@ -52,7 +52,11 @@ let lower cfg expr =
   match cfg.stop_after with
   | Some Parsing -> string_of_expr expr
   | Some Anf -> Middleend.Anf.string_of_aexpr (Middleend.Anf.create_anf expr)
-  | None -> string_of_expr (Middleend.Closure_conversion.closure_convert expr)
+  | None ->
+    let lifted =
+      Middleend.Lambda_lifting.lift (Middleend.Closure_conversion.closure_convert expr)
+    in
+    string_of_expr lifted
 ;;
 
 let run input cfg =
