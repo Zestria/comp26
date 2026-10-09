@@ -1,5 +1,3 @@
-module Ir = Middleend.Closure_ir
-
 type runtime_error =
   | Division_by_zero
   | Unbound_name of string
@@ -7,7 +5,6 @@ type runtime_error =
   | Expected_boolean
   | Not_callable
   | Non_ground_result
-  | Invalid_ir
   | Fuel_exhausted
   | Unsupported_recursion
 
@@ -21,18 +18,15 @@ exception Runtime of runtime_error
 type value =
   | Scalar of Ast.constant
   | Native of (value -> value)
-  | Closed of Ir.code * value array
 
 let integer = function
   | Scalar (Ast.Integer value) -> value
-  | Scalar (Ast.Boolean _ | Ast.Unit) | Native _ | Closed _ ->
-    raise (Runtime Expected_integer)
+  | Scalar (Ast.Boolean _ | Ast.Unit) | Native _ -> raise (Runtime Expected_integer)
 ;;
 
 let boolean = function
   | Scalar (Ast.Boolean value) -> value
-  | Scalar (Ast.Integer _ | Ast.Unit) | Native _ | Closed _ ->
-    raise (Runtime Expected_boolean)
+  | Scalar (Ast.Integer _ | Ast.Unit) | Native _ -> raise (Runtime Expected_boolean)
 ;;
 
 let bind env pattern value =
@@ -87,7 +81,7 @@ let observe fuel run =
     try
       match run tick (external_bindings trace) with
       | Scalar constant -> Ok constant
-      | Native _ | Closed _ -> Error Non_ground_result
+      | Native _ -> Error Non_ground_result
     with
     | Runtime error -> Error error
   in
@@ -108,7 +102,7 @@ let source ?(fuel = 100_000) ~result_name definitions =
         let argument = eval env argument in
         (match callee with
          | Native function_ -> function_ argument
-         | Scalar _ | Closed _ -> raise (Runtime Not_callable))
+         | Scalar _ -> raise (Runtime Not_callable))
       | Ast.If_then_else (condition, yes, no) ->
         if boolean (eval env condition) then eval env yes else eval env no
       | Ast.Let_in (flag, pattern, rhs, body) ->
@@ -136,58 +130,6 @@ let source ?(fuel = 100_000) ~result_name definitions =
     lookup final_env result_name)
 ;;
 
-let target ?(fuel = 100_000) ~result_name program =
-  observe fuel (fun tick externals ->
-    let read env current = function
-      | Ir.Local name -> lookup env name
-      | Ir.External name ->
-        if List.mem name program.Ir.externals
-        then lookup externals name
-        else raise (Runtime Invalid_ir)
-      | Ir.Self ->
-        (match current with
-         | Some closure -> closure
-         | None -> raise (Runtime Invalid_ir))
-      | Ir.Env_slot index ->
-        (match current with
-         | Some (Closed (_, captures)) when index >= 0 && index < Array.length captures ->
-           captures.(index)
-         | Some (Scalar _ | Native _ | Closed _) | None -> raise (Runtime Invalid_ir))
-    in
-    let rec eval env current expression =
-      tick ();
-      match expression with
-      | Ir.Constant constant -> Scalar constant
-      | Ir.Reference reference -> read env current reference
-      | Ir.Make_closure (code, captures) ->
-        Closed (code, Array.of_list (List.map (read env current) captures))
-      | Ir.Call (callee, argument) ->
-        let callee = eval env current callee in
-        let argument = eval env current argument in
-        (match callee with
-         | Closed (code, _) ->
-           eval (bind [] code.parameter argument) (Some callee) code.body
-         | Native function_ -> function_ argument
-         | Scalar _ -> raise (Runtime Not_callable))
-      | Ir.Let (pattern, rhs, body) ->
-        let value = eval env current rhs in
-        eval (bind env pattern value) current body
-      | Ir.If (condition, yes, no) ->
-        if boolean (eval env current condition)
-        then eval env current yes
-        else eval env current no
-    in
-    let final_env =
-      List.fold_left
-        (fun env (Ir.Definition (pattern, rhs)) ->
-           let value = eval env None rhs in
-           bind env pattern value)
-        []
-        program.Ir.definitions
-    in
-    lookup final_env result_name)
-;;
-
 let show_observation { outcome; trace } =
   let result =
     match outcome with
@@ -200,7 +142,6 @@ let show_observation { outcome; trace } =
        | Expected_boolean -> "expected boolean"
        | Not_callable -> "not callable"
        | Non_ground_result -> "non-ground result"
-       | Invalid_ir -> "invalid IR"
        | Fuel_exhausted -> "fuel exhausted"
        | Unsupported_recursion -> "unsupported recursion")
   in

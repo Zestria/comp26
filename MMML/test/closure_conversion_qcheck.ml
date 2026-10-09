@@ -1,5 +1,4 @@
 open Middleend
-module Ir = Closure_ir
 module Cc = Closure_conversion
 module Gen = Closure_generator
 module Eval = Closure_eval
@@ -12,7 +11,7 @@ let convert program =
 
 let semantic_equivalence =
   QCheck.Test.make
-    ~name:"closure conversion: typed closed AST and IR have the same result"
+    ~name:"closure conversion: original and converted AST have the same result"
     ~count:1_000
     Gen.arbitrary
     (fun term ->
@@ -20,16 +19,11 @@ let semantic_equivalence =
        then QCheck.Test.fail_report "invalid generator output";
        let source = Gen.program term in
        let target = convert source in
-       (match Ir.validate target with
+       (match Closure_test_invariants.check ~externals:Eval.external_names target with
         | Ok () -> ()
-        | Error errors ->
-          QCheck.Test.fail_reportf
-            "invalid converted IR: %s"
-            (String.concat
-               "\n"
-               (List.map (Format.asprintf "%a" Ir.pp_validation_error) errors)));
+        | Error error -> QCheck.Test.fail_report error);
        let before = Eval.source ~result_name:"result" source in
-       let after = Eval.target ~result_name:"result" target in
+       let after = Eval.source ~result_name:"result" target in
        match before.outcome, after.outcome with
        | Ok _, Ok _ when before = after -> true
        | _ ->
@@ -37,7 +31,7 @@ let semantic_equivalence =
            "source: %s\ntarget: %s\nIR: %a"
            (Eval.show_observation before)
            (Eval.show_observation after)
-           Ir.pp_program
+           Ast.pp_program
            target)
 ;;
 
@@ -58,8 +52,8 @@ let deterministic =
             ]);
        let second = convert source in
        first = second
-       && Format.asprintf "%a" Ir.pp_program first
-          = Format.asprintf "%a" Ir.pp_program second)
+       && Format.asprintf "%a" Ast.pp_program first
+          = Format.asprintf "%a" Ast.pp_program second)
 ;;
 
 let shrinking =

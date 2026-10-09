@@ -1,6 +1,5 @@
 module Names = Set.Make (String)
 module Scope = Map.Make (String)
-module Ir = Closure_ir
 
 type problem =
   | Unbound_identifier of string
@@ -12,6 +11,10 @@ type error =
   ; problem : problem
   }
 
+type binding =
+  | External of string
+  | Value of Ast.expr
+
 let ( let* ) = Result.bind
 let fail path problem = Error { path = List.rev path; problem }
 
@@ -22,7 +25,7 @@ let remove_pattern names = function
 
 let bind_pattern scope = function
   | Ast.PWildcard -> scope
-  | Ast.PVariable name -> Scope.add name (Ir.Local name) scope
+  | Ast.PVariable name -> Scope.add name (Value (Ast.Variable name)) scope
 ;;
 
 let rec free_names = function
@@ -34,14 +37,13 @@ let rec free_names = function
   | Ast.If_then_else (condition, yes, no) ->
     Names.union (free_names condition) (Names.union (free_names yes) (free_names no))
   | Ast.Let_in (flag, pattern, rhs, body) ->
-    let rhs_names = free_names rhs in
-    let body_names = remove_pattern (free_names body) pattern in
-    let rhs_names =
+    let rhs = free_names rhs in
+    let rhs =
       match flag with
-      | Ast.Nonrecursive -> rhs_names
-      | Ast.Recursive -> remove_pattern rhs_names pattern
+      | Ast.Nonrecursive -> rhs
+      | Ast.Recursive -> remove_pattern rhs pattern
     in
-    Names.union rhs_names body_names
+    Names.union rhs (remove_pattern (free_names body) pattern)
 ;;
 
 let resolve scope path name =
@@ -50,91 +52,182 @@ let resolve scope path name =
   | None -> fail path (Unbound_identifier name)
 ;;
 
-let rec expression scope path = function
-  | Ast.Constant value -> Ok (Ir.Constant value)
-  | Ast.Variable name ->
-    let* reference = resolve scope path name in
-    Ok (Ir.Reference reference)
-  | Ast.Lambda (parameter, body) -> closure scope path None parameter body
-  | Ast.Application (callee, argument) ->
-    let* callee = expression scope ("callee" :: path) callee in
-    let* argument = expression scope ("argument" :: path) argument in
-    Ok (Ir.Call (callee, argument))
-  | Ast.If_then_else (condition, yes, no) ->
-    let* condition = expression scope ("if.condition" :: path) condition in
-    let* yes = expression scope ("if.then" :: path) yes in
-    let* no = expression scope ("if.else" :: path) no in
-    Ok (Ir.If (condition, yes, no))
-  | Ast.Let_in (flag, pattern, rhs, body) ->
-    let* rhs = binding_rhs scope ("let.rhs" :: path) flag pattern rhs in
-    let* body = expression (bind_pattern scope pattern) ("let.body" :: path) body in
-    Ok (Ir.Let (pattern, rhs, body))
+let value = function
+  | External name -> Ast.Variable name
+  | Value expression -> expression
+;;
 
-and binding_rhs scope path flag pattern rhs =
-  match flag, pattern, rhs with
-  | Ast.Nonrecursive, _, rhs -> expression scope path rhs
-  | Ast.Recursive, Ast.PWildcard, _ -> fail path Recursive_wildcard
-  | Ast.Recursive, Ast.PVariable name, Ast.Lambda (parameter, body) ->
-    closure scope path (Some name) parameter body
-  | Ast.Recursive, Ast.PVariable name, _ -> fail path (Recursive_rhs_not_lambda name)
+(* Only consecutive lambdas form a parameter group; never cross a let or if. *)
+let rec parameters reversed = function
+  | Ast.Lambda (parameter, body) -> parameters (parameter :: reversed) body
+  | body -> List.rev reversed, body
+;;
 
-and closure scope path self_name parameter body =
-  let names = remove_pattern (free_names body) parameter in
-  let names =
-    match self_name with
-    | None -> names
-    | Some name -> Names.remove name names
+let fresh_supply ~externals definitions =
+  let used = ref (Names.of_list externals) in
+  let reserve name = used := Names.add name !used in
+  let pattern = function
+    | Ast.PWildcard -> ()
+    | Ast.PVariable name -> reserve name
   in
-  (* Rebuild the scope at a code boundary: nothing may retain an outer Local,
-     Env_slot or Self implicitly. Nested captures are resolved in this scope. *)
-  let rec capture_layout names index code_scope labels captures =
-    match names with
-    | [] -> Ok (code_scope, List.rev labels, List.rev captures)
-    | name :: rest ->
-      let* reference = resolve scope ("lambda.capture" :: path) name in
-      (match reference with
-       | Ir.External _ ->
-         capture_layout rest index (Scope.add name reference code_scope) labels captures
-       | Ir.Local _ | Ir.Env_slot _ | Ir.Self ->
-         capture_layout
-           rest
-           (index + 1)
-           (Scope.add name (Ir.Env_slot index) code_scope)
-           (name :: labels)
-           (reference :: captures))
+  let rec expression = function
+    | Ast.Constant _ -> ()
+    | Ast.Variable name -> reserve name
+    | Ast.Lambda (p, body) ->
+      pattern p;
+      expression body
+    | Ast.Application (fn, arg) ->
+      expression fn;
+      expression arg
+    | Ast.If_then_else (c, yes, no) ->
+      expression c;
+      expression yes;
+      expression no
+    | Ast.Let_in (_, p, rhs, body) ->
+      pattern p;
+      expression rhs;
+      expression body
   in
-  let* code_scope, capture_names, captures =
-    capture_layout (Names.elements names) 0 Scope.empty [] []
-  in
-  let code_scope =
-    match self_name with
-    | None -> code_scope
-    | Some name -> Scope.add name Ir.Self code_scope
-  in
-  let* body =
-    expression (bind_pattern code_scope parameter) ("lambda.body" :: path) body
-  in
-  Ok (Ir.Make_closure ({ parameter; capture_names; body }, captures))
+  List.iter
+    (fun (Ast.Definition (_, p, rhs)) ->
+       pattern p;
+       expression rhs)
+    definitions;
+  let counter = ref 0 in
+  fun prefix ->
+    let rec find () =
+      let name = "cc_" ^ prefix ^ "_" ^ string_of_int !counter in
+      incr counter;
+      if Names.mem name !used
+      then find ()
+      else (
+        reserve name;
+        name)
+    in
+    find ()
 ;;
 
 let convert ~externals definitions =
-  let externals = List.sort_uniq String.compare externals in
+  let fresh = fresh_supply ~externals definitions in
+  let rec expression scope path = function
+    | Ast.Constant value -> Ok (Ast.Constant value)
+    | Ast.Variable name ->
+      let* reference = resolve scope path name in
+      Ok (value reference)
+    | Ast.Lambda (parameter, body) ->
+      let* _, code, captures = closure scope path None parameter body in
+      Ok (Ast.application code captures)
+    | Ast.Application (callee, argument) ->
+      let* callee = expression scope ("callee" :: path) callee in
+      let* argument = expression scope ("argument" :: path) argument in
+      Ok (Ast.Application (callee, argument))
+    | Ast.If_then_else (condition, yes, no) ->
+      let* condition = expression scope ("if.condition" :: path) condition in
+      let* yes = expression scope ("if.then" :: path) yes in
+      let* no = expression scope ("if.else" :: path) no in
+      Ok (Ast.If_then_else (condition, yes, no))
+    | Ast.Let_in (Ast.Nonrecursive, pattern, rhs, body) ->
+      let* rhs = expression scope ("let.rhs" :: path) rhs in
+      let* body = expression (bind_pattern scope pattern) ("let.body" :: path) body in
+      Ok (Ast.Let_in (Ast.Nonrecursive, pattern, rhs, body))
+    | Ast.Let_in (Ast.Recursive, pattern, rhs, body) ->
+      let* name, raw, code, captures = recursive scope ("let.rhs" :: path) pattern rhs in
+      let* body = expression (bind_pattern scope pattern) ("let.body" :: path) body in
+      let body =
+        if captures = []
+        then body
+        else
+          Ast.Let_in
+            ( Ast.Nonrecursive
+            , Ast.PVariable name
+            , Ast.application (Ast.Variable raw) captures
+            , body )
+      in
+      Ok (Ast.Let_in (Ast.Recursive, Ast.PVariable raw, code, body))
+  and recursive scope path pattern rhs =
+    match pattern, rhs with
+    | Ast.PWildcard, _ -> fail path Recursive_wildcard
+    | Ast.PVariable name, Ast.Lambda (parameter, body) ->
+      let* raw, code, captures = closure scope path (Some name) parameter body in
+      (match raw with
+       | Some raw -> Ok (name, raw, code, captures)
+       | None -> assert false)
+    | Ast.PVariable name, _ -> fail path (Recursive_rhs_not_lambda name)
+  and closure scope path self parameter body =
+    let params, body = parameters [ parameter ] body in
+    let names = List.fold_left remove_pattern (free_names body) params in
+    let names =
+      match self with
+      | None -> names
+      | Some name -> Names.remove name names
+    in
+    let rec layout remaining inner reversed_formals reversed_values =
+      match remaining with
+      | [] -> Ok (inner, List.rev reversed_formals, List.rev reversed_values)
+      | name :: rest ->
+        let* reference = resolve scope ("lambda.capture" :: path) name in
+        (match reference with
+         | External _ ->
+           layout rest (Scope.add name reference inner) reversed_formals reversed_values
+         | Value captured ->
+           let formal = fresh "capture" in
+           layout
+             rest
+             (Scope.add name (Value (Ast.Variable formal)) inner)
+             (Ast.PVariable formal :: reversed_formals)
+             (captured :: reversed_values))
+    in
+    let* inner, formals, captures = layout (Names.elements names) Scope.empty [] [] in
+    let raw =
+      Option.map (fun name -> if captures = [] then name else fresh "code") self
+    in
+    let inner =
+      match self, raw with
+      | Some name, Some raw ->
+        let args =
+          List.map
+            (function
+              | Ast.PVariable name -> Ast.Variable name
+              | Ast.PWildcard -> assert false)
+            formals
+        in
+        Scope.add name (Value (Ast.application (Ast.Variable raw) args)) inner
+      | _ -> inner
+    in
+    let inner = List.fold_left bind_pattern inner params in
+    let* body = expression inner ("lambda.body" :: path) body in
+    Ok (raw, Ast.function_ (formals @ params) body, captures)
+  in
   let initial_scope =
     List.fold_left
-      (fun scope name -> Scope.add name (Ir.External name) scope)
+      (fun scope name -> Scope.add name (External name) scope)
       Scope.empty
       externals
   in
   let rec loop index scope reversed = function
-    | [] -> Ok { Ir.externals; definitions = List.rev reversed }
+    | [] -> Ok (List.rev reversed)
     | Ast.Definition (flag, pattern, rhs) :: rest ->
       let path = [ Printf.sprintf "definition[%d]" index ] in
-      let* rhs = binding_rhs scope path flag pattern rhs in
-      loop
-        (index + 1)
-        (bind_pattern scope pattern)
-        (Ir.Definition (pattern, rhs) :: reversed)
-        rest
+      let* items =
+        match flag with
+        | Ast.Nonrecursive ->
+          let* rhs = expression scope path rhs in
+          Ok [ Ast.Definition (flag, pattern, rhs) ]
+        | Ast.Recursive ->
+          let* name, raw, code, captures = recursive scope path pattern rhs in
+          let definition = Ast.Definition (Ast.Recursive, Ast.PVariable raw, code) in
+          if captures = []
+          then Ok [ definition ]
+          else
+            Ok
+              [ definition
+              ; Ast.Definition
+                  ( Ast.Nonrecursive
+                  , Ast.PVariable name
+                  , Ast.application (Ast.Variable raw) captures )
+              ]
+      in
+      loop (index + 1) (bind_pattern scope pattern) (List.rev_append items reversed) rest
   in
   loop 0 initial_scope [] definitions
 ;;
