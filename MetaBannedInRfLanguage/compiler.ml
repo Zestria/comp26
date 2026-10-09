@@ -66,6 +66,17 @@ let run (cli : Cli.t) =
   | Stop_after_anf ->
     let* program = Anf_conv.convert structure in
     write_output cli.output (Anf_pprint.string_of_program program)
+  | Stop_after_cc ->
+    let* program = Anf_conv.convert structure in
+    write_output
+      cli.output
+      (Anf_pprint.string_of_program (Closure_conversion.program program))
+  | Stop_after_ll ->
+    let* program = Anf_conv.convert structure in
+    let program = Closure_conversion.program program in
+    write_output
+      cli.output
+      (Anf_pprint.string_of_program (Lambda_lifting.program program))
 ;;
 
 let () =

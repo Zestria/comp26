@@ -13,6 +13,8 @@ type parsing =
 type stop_after =
   | Stop_after_parsing
   | Stop_after_anf
+  | Stop_after_cc
+  | Stop_after_ll
 
 type output =
   | To_stdout
@@ -27,8 +29,8 @@ type t =
   }
 
 let usage =
-  "usage: compiler.exe [-parsing topdown|menhir] [--stop-after parsing|anf] \
-   [-o <filename>|-o -] [-ops <settings>] <input.ml>"
+  "usage: compiler.exe [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o \
+   <filename>|-o -] [-ops <settings>] <input.ml>"
 ;;
 
 let help_text =
@@ -45,11 +47,13 @@ options:
                             topdown  - recursive-descent (Angstrom) parser
                             menhir   - bottom-up (menhir) parser
 
-  --stop-after <parsing|anf>
+  --stop-after <parsing|anf|cc|ll>
                           stop the pipeline after the given stage and print
                           its result (default: parsing)
                             parsing  - print the parsed AST
                             anf      - print the program after ANF conversion
+                            cc       - print the program after closure conversion
+                            ll       - print the program after lambda lifting
 
   -o <filename>           write the output to <filename>
   -o -                    write the output to stdout (default)
@@ -77,8 +81,13 @@ let parsing_of_string = function
 let stop_after_of_string = function
   | "parsing" -> Ok Stop_after_parsing
   | "anf" -> Ok Stop_after_anf
+  | "cc" -> Ok Stop_after_cc
+  | "ll" -> Ok Stop_after_ll
   | value ->
-    Error (Printf.sprintf "unknown --stop-after value %S (expected \"parsing\" or \"anf\")" value)
+    Error
+      (Printf.sprintf
+         "unknown --stop-after value %S (expected \"parsing\", \"anf\", \"cc\" or \"ll\")"
+         value)
 ;;
 
 type partial =
