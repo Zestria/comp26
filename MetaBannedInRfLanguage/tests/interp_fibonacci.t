@@ -8,3 +8,7 @@ AST and ANF interpreters agree on a fibonacci
   $ ./interp_check.exe fibonacci.ml
   fib = <closure>
   r = 21
+
+  $ ./interp_check.exe --full fibonacci.ml
+  fib = <closure>
+  r = 21

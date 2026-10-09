@@ -9,3 +9,8 @@ AST and ANF interpreters agree on tuple destructuring
   b = 4
   a = 3
   sum = 7
+
+  $ ./interp_check.exe --full tuples.ml
+  b = 4
+  a = 3
+  sum = 7

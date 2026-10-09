@@ -8,3 +8,7 @@ AST and ANF interpreters agree on a factorial
   $ ./interp_check.exe factorial.ml
   fact = <closure>
   r = 120
+
+  $ ./interp_check.exe --full factorial.ml
+  fact = <closure>
+  r = 120

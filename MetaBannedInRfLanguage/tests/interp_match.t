@@ -14,3 +14,8 @@ AST and ANF interpreters agree on pattern matching
   classify = <closure>
   r1 = false
   r2 = true
+
+  $ ./interp_check.exe --full match_example.ml
+  classify = <closure>
+  r1 = false
+  r2 = true

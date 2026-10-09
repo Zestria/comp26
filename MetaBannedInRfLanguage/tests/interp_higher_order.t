@@ -10,3 +10,8 @@ AST and ANF interpreters agree on a higher-order function
   apply_twice = <closure>
   inc = <closure>
   r = 5
+
+  $ ./interp_check.exe --full higher_order.ml
+  apply_twice = <closure>
+  inc = <closure>
+  r = 5
