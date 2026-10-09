@@ -133,6 +133,64 @@ let alpha_nonrecursive_binding () =
     (Printer.print_program (Alpha.alpha source))
 ;;
 
+let rec has_local_function = function
+  | Unit | Int _ | Bool _ | Var _ -> false
+  | Abs _ | Let (Rec, _, _, _) -> true
+  | BinOp (_, left, right) | App (left, right) ->
+    has_local_function left || has_local_function right
+  | UnOp (_, operand) -> has_local_function operand
+  | If (condition, if_true, if_false) ->
+    has_local_function condition
+    || has_local_function if_true
+    || has_local_function if_false
+  | Let (NonRec, _, value, body) ->
+    has_local_function value || has_local_function body
+;;
+
+let check_lifted_source source =
+  let parsed =
+    match LL_parser.Parser.parse_string_LL source with
+    | Ok program -> program
+    | Error _ -> Alcotest.fail "could not parse the CPS example"
+  in
+  let lifted =
+    parsed
+    |> Alpha.alpha
+    |> Closure_conv.closure_conv
+    |> Lambda_lift.lambda_lift
+  in
+  let is_lifted_item = function
+    | StrEval expression -> not (has_local_function expression)
+    | StrLet (_, _, value) ->
+      let rec skip_parameters = function
+        | Abs (_, body) -> skip_parameters body
+        | body -> not (has_local_function body)
+      in
+      skip_parameters value
+  in
+  Alcotest.(check bool) "only top-level functions remain" true
+    (List.for_all is_lifted_item lifted);
+  let printed = Printer.print_program lifted in
+  (match Parse.parse printed with
+   | Ok _ -> ()
+   | Error message -> Alcotest.fail ("lifted output is not valid source: " ^ message))
+;;
+
+let lifts_cps_factorial () =
+  check_lifted_source
+    "let rec fact_cps n k = if n <= 1 then k 1 else fact_cps (n - 1) (fun m -> k (n * m)) in fact_cps 5 (fun x -> x)"
+;;
+
+let lifts_cps_fibonacci () =
+  check_lifted_source
+    "let rec fib_cps n k = if n <= 1 then k n else fib_cps (n - 1) (fun a -> fib_cps (n - 2) (fun b -> k (a + b))) in fib_cps 10 (fun x -> x)"
+;;
+
+let lifts_local_recursion () =
+  check_lifted_source
+    "let f y = let rec loop i = if i = 0 then y else loop (i - 1) in loop 10"
+;;
+
 let () =
   Alcotest.run
     "middleend"
@@ -145,6 +203,11 @@ let () =
       , [ Alcotest.test_case "anonymous closure" `Quick converts_anonymous_closure
         ; Alcotest.test_case "local recursion" `Quick converts_local_recursion
         ; Alcotest.test_case "shadowing" `Quick captures_a_shadowing_local
+        ] )
+    ; ( "lambda lifting"
+      , [ Alcotest.test_case "CPS factorial" `Quick lifts_cps_factorial
+        ; Alcotest.test_case "CPS fibonacci" `Quick lifts_cps_fibonacci
+        ; Alcotest.test_case "local recursion" `Quick lifts_local_recursion
         ] )
     ]
 ;;
