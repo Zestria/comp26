@@ -60,6 +60,83 @@ After lambda lifting every closed function is a top-level item
   let t8 x = x;;
   let main = fib_cps 10 t8;;
 
+Lambdas in both branches of an if: LL lifts each one separately
+
+  $ cat > ifthen.ml <<EOF
+  > let flag = 1
+  > let main = if flag then (fun x -> x + 1) else (fun x -> x * 2)
+  > EOF
+
+  $ ../compiler.exe -parsing topdown --stop-after ll ifthen.ml
+  let flag = 1;;
+  let f__ll1 x = x + 1;;
+  let f__ll2 x = x * 2;;
+  let main =
+    if flag
+    then f__ll1
+    else f__ll2
+  ;;
+
+Partial application of a top-level function from several places:
+the binder is used more than once, so can_reuse does not fire
+
+  $ cat > partial.ml <<EOF
+  > let add x y = x + y
+  > let inc = add 1
+  > let add2 = add 2
+  > let main = inc (add2 5)
+  > EOF
+
+  $ ../compiler.exe -parsing topdown --stop-after ll partial.ml
+  let add x y = x + y;;
+  let inc = add 1;;
+  let add2 = add 2;;
+  let main =
+    let t1 = add2 5 in
+    inc t1
+  ;;
+
+Mutual recursion: LL keeps even/odd in one let rec group
+
+  $ cat > mutual2.ml <<EOF
+  > let rec even n = if n = 0 then 1 else odd (n - 1)
+  > and odd n = if n = 0 then 0 else even (n - 1)
+  > ;;
+  > let main = even 10
+  > EOF
+
+  $ ../compiler.exe -parsing topdown --stop-after ll mutual2.ml
+  let rec even n =
+    let t1 = n = 0 in
+    if t1
+    then 1
+    else
+      let t2 = n - 1 in
+      odd t2
+  and odd n =
+    let t3 = n = 0 in
+    if t3
+    then 0
+    else
+      let t4 = n - 1 in
+      even t4
+  ;;
+  let main = even 10;;
+
+Nested lambdas: LL lifts the inner one first, then the outer
+
+  $ cat > nested_ll.ml <<EOF
+  > let main =
+  >   (fun x ->
+  >     let g = fun y -> x + y in
+  >     g 1)
+  >   10
+  > EOF
+
+  $ ../compiler.exe -parsing topdown --stop-after ll nested_ll.ml
+  let g y = 10 + y;;
+  let main = g 1;;
+
 The output of lambda lifting parses back
 
   $ ../compiler.exe -parsing topdown --stop-after ll fac_cps.ml > ll_fac.ml

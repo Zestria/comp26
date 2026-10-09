@@ -64,6 +64,33 @@ CPS factorial and fibonacci after closure conversion
     fib_cps 10 t8
   ;;
 
+Mutual recursion: CC leaves ARec alone, no closures are introduced
+
+  $ cat > mutual2.ml <<EOF
+  > let rec even n = if n = 0 then 1 else odd (n - 1)
+  > and odd n = if n = 0 then 0 else even (n - 1)
+  > ;;
+  > let main = even 10
+  > EOF
+
+  $ ../compiler.exe -parsing topdown --stop-after cc mutual2.ml
+  let rec even n =
+    let t1 = n = 0 in
+    if t1
+    then 1
+    else
+      let t2 = n - 1 in
+      odd t2
+  and odd n =
+    let t3 = n = 0 in
+    if t3
+    then 0
+    else
+      let t4 = n - 1 in
+      even t4
+  ;;
+  let main = even 10;;
+
 The output of closure conversion parses back
 
   $ ../compiler.exe -parsing topdown --stop-after cc fac_cps.ml > cc_fac.ml
