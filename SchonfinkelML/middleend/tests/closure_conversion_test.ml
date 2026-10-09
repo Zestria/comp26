@@ -90,7 +90,7 @@ let%expect_test "captured variable becomes a leading parameter" =
   print_converted "let a = 1 in let f = fun x -> x + a in f 5";
   [%expect {|
     let a = 1 in
-      let f = let lam_clo1 = fun a -> fun x -> x + a in (lam_clo1 a) in (f 5)
+      let f = let clo_1 = fun a -> fun x -> x + a in (clo_1 a) in (f 5)
     |}]
 ;;
 
@@ -99,8 +99,7 @@ let%expect_test "multiple captures keep a deterministic order" =
   [%expect {|
     let a = 1 in
       let b = 2 in
-        let f =
-          let lam_clo1 = fun a -> fun b -> fun x -> x + a + b in ((lam_clo1 a) b)
+        let f = let clo_1 = fun a -> fun b -> fun x -> x + a + b in ((clo_1 a) b)
           in (f 3)
     |}]
 ;;
@@ -116,7 +115,7 @@ let%expect_test "recursive function with captured variable" =
   [%expect {|
     let n = 10 in
       let rec loop = fun n -> fun i -> if i > n then 0 else i + ((loop n) i + 1)
-        in let loop_clo1 = (loop n) in (loop_clo1 1)
+        in let clo_1 = (loop n) in (clo_1 1)
     |}]
 ;;
 
@@ -124,7 +123,7 @@ let%expect_test "closure with captures used as a value" =
   print_converted "let a = 1 in let f = fun x -> x + a in let g = f in g 5";
   [%expect {|
     let a = 1 in
-      let f = let lam_clo1 = fun a -> fun x -> x + a in (lam_clo1 a) in
+      let f = let clo_1 = fun a -> fun x -> x + a in (clo_1 a) in
         let g = f in (g 5)
     |}]
 ;;
@@ -134,7 +133,7 @@ let%expect_test "fresh names do not collide with source names" =
   [%expect {|
     let f_clo0 = 42 in
       let a = 1 in
-        let f = let lam_clo1 = fun a -> fun x -> x + a in (lam_clo1 a) in (f 5)
+        let f = let clo_1 = fun a -> fun x -> x + a in (clo_1 a) in (f 5)
     |}]
 ;;
 
@@ -153,10 +152,10 @@ let%expect_test "cps factorial" =
   [%expect {|
     let rec fact =
       fun n -> fun k -> if n = 0 then (k 1) else
-                          ((fact n - 1) (let lam_clo1 =
+                          ((fact n - 1) (let clo_1 =
                                            fun k -> fun n -> fun acc -> (k
                                                                         n * acc)
-                                           in ((lam_clo1 k) n)))
+                                           in ((clo_1 k) n)))
       in ((fact 5) (fun x -> x))
     |}]
 ;;
@@ -176,20 +175,20 @@ let%expect_test "cps fibonacci" =
   [%expect {|
     let rec fib =
       fun n -> fun k -> if n < 2 then (k n) else
-                          ((fib n - 1) (let lam_clo3 =
+                          ((fib n - 1) (let clo_2 =
                                           fun fib -> fun k -> fun n -> fun x ->
                                                                         (
                                                                         (fib
                                                                         n - 2) (
-                                                                        let lam_clo2 =
+                                                                        let clo_1 =
                                                                         fun k ->
                                                                         fun x ->
                                                                         fun y ->
                                                                         (k
                                                                         x + y) in
                                                                         (
-                                                                        (lam_clo2 k) x)))
-                                          in (((lam_clo3 fib) k) n)))
+                                                                        (clo_1 k) x)))
+                                          in (((clo_2 fib) k) n)))
       in ((fib 6) (fun x_1 -> x_1))
     |}]
 ;;
@@ -228,12 +227,12 @@ let%test "closed lambda invariant holds on shadowed names" =
 
 let%test "no wrapper when there are no captures" =
   let c = converted_of_string "let f = fun x -> x + 1 in f 5" in
-  not (exists_name_substr "_clo" c)
+  not (exists_name_substr "clo_" c)
 ;;
 
 let%test "wrapper appears when there are captures" =
   let c = converted_of_string "let a = 1 in let f = fun x -> x + a in f 5" in
-  exists_name_substr "_clo" c
+  exists_name_substr "clo_" c
 ;;
 
 let%test "fresh names avoid user collisions" =
@@ -244,15 +243,15 @@ let%test "fresh names avoid user collisions" =
 ;;
 
 let%test "cps factorial has wrappers for its lambdas" =
-  exists_name_substr "_clo" (converted_of_string cps_fact)
+  exists_name_substr "clo_" (converted_of_string cps_fact)
 ;;
 
 let%test "cps fibonacci has wrappers for its lambdas" =
-  exists_name_substr "_clo" (converted_of_string cps_fib)
+  exists_name_substr "clo_" (converted_of_string cps_fib)
 ;;
 
 let%test "closed lambda has no wrapper" =
-  not (exists_name_substr "_clo" (converted_of_string "let f = fun x -> x + 1 in f 5"))
+  not (exists_name_substr "clo_" (converted_of_string "let f = fun x -> x + 1 in f 5"))
 ;;
 
 (* ----------------------------------------------------------------- *)
