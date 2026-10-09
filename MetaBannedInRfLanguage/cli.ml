@@ -75,7 +75,8 @@ example:
 let parsing_of_string = function
   | "topdown" -> Ok Topdown
   | "menhir" -> Ok Menhir
-  | value -> Error (Printf.sprintf "unknown -parsing value %S (expected topdown or menhir)" value)
+  | value ->
+    Error (Printf.sprintf "unknown -parsing value %S (expected topdown or menhir)" value)
 ;;
 
 let stop_after_of_string = function
@@ -169,10 +170,15 @@ let parse_arguments_impl argv =
         (match partial.p_input_file with
          | Some first ->
            Error
-             (Printf.sprintf "input file already given (%S), unexpected argument %S" first file)
+             (Printf.sprintf
+                "input file already given (%S), unexpected argument %S"
+                first
+                file)
          | None -> loop { partial with p_input_file = Some file } (index + 1)))
   in
   loop default_partial 1
 ;;
 
-let parse_arguments argv = if requests_help argv then Ok Show_help else parse_arguments_impl argv
+let parse_arguments argv =
+  if requests_help argv then Ok Show_help else parse_arguments_impl argv
+;;

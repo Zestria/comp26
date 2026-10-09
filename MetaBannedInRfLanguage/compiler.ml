@@ -22,7 +22,9 @@ let write_output (output : Cli.output) text =
     print_string text;
     Ok ()
   | To_file path ->
-    (try Ok (Out_channel.with_open_bin path (fun oc -> Out_channel.output_string oc text)) with
+    (try
+       Ok (Out_channel.with_open_bin path (fun oc -> Out_channel.output_string oc text))
+     with
      | Sys_error message -> Error message)
 ;;
 
