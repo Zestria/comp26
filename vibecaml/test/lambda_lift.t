@@ -87,22 +87,14 @@ CPS-факториал после closure conversion: анонимная фун�
   90
   90
 
-Локальный `let rec` не поддерживается: его отвергает уже closure conversion,
-lambda lifting страхует.
+Локальный `let rec` не поддерживается.
 
   $ cat > local_rec.ml <<'ML'
   > let f n = let rec loop i = if i > n then 0 else loop (i + 1) in loop 0
   > ML
 
   $ vibecamlc --stop-after ll local_rec.ml
-  vibecaml: локальный let rec не поддерживается
-  [1]
-
-Closure conversion — отдельная задача участника команды. Нельзя выдавать
-неизменённый исходник за результат этого прохода.
-
-  $ vibecamlc --stop-after cc fack.ml
-  vibecaml: стадия cc пока не подключена: ожидаются rename и closure conversion
+  vibecaml: Rename: поддерживается только `let rec` верхнего уровня
   [1]
 
 В `let rec` верхнего уровня справа должна стоять функция: иначе после выноса

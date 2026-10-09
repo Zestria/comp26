@@ -24,7 +24,9 @@ let () =
          Config.default_extensions
          "let answer = ((fun first -> first + 1) 3, (fun second -> second * 2) 4)")
   in
-  let lifted = unwrap (Lambda_lift.lift source) in
+  let renamed = unwrap (Rename.rename source) in
+  let cc = unwrap (Closure_conv.convert renamed) in
+  let lifted = unwrap (Lambda_lift.lift cc) in
   let anf = unwrap (Anf_conv.convert lifted) in
   let names = ref [ reserved ] in
   let add name = names := name :: !names in

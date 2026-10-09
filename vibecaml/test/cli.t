@@ -135,11 +135,19 @@
   let x = f 1
 
   $ vibecamlc --stop-after typing small.ml
-  vibecaml: неизвестная стадия: typing (ожидается parsing, cc, ll или anf)
+  vibecaml: неизвестная стадия: typing (ожидается parsing, rename, cc, ll или anf)
   [1]
 
   $ vibecamlc --stop-after
   vibecaml: после --stop-after ожидается значение
+  [1]
+
+  $ vibecamlc --dump-ast --stop-after rename small.ml
+  vibecaml: --dump-ast и --dump-pp работают только с --stop-after parsing
+  [1]
+
+  $ vibecamlc --dump-ast --stop-after cc small.ml
+  vibecaml: --dump-ast и --dump-pp работают только с --stop-after parsing
   [1]
 
   $ vibecamlc --dump-ast --stop-after ll small.ml
