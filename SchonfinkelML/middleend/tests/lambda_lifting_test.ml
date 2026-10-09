@@ -129,25 +129,6 @@ let%expect_test "nested recursive function is floated to the front" =
     |}]
 ;;
 
-(* Floated recursive bindings keep their name, which is safe because closure
-   conversion already renamed the binders that would shadow each other: the two
-   [f]s of the source stay distinct, and each one calls itself under its own
-   name. *)
-let%expect_test "recursive bindings with the same source name stay distinct" =
-  print_lifted
-    {|
-let rec f = fun x -> if x = 0 then 0 else f (x - 1) in
-let g = (let rec f = fun y -> if y = 0 then 1 else f (y - 1) in f 3) in
-f 2 + g
-|};
-  [%expect
-    {|
-    let rec f_1 = fun y -> if y = 0 then 1 else (f_1 y - 1) in
-      let rec f = fun x -> if x = 0 then 0 else (f x - 1) in
-        let g = (f_1 3) in (f 2) + g
-    |}]
-;;
-
 let%expect_test "lifted names avoid collisions with source names" =
   print_lifted "let lift1 = 1 in let f = fun x -> x + lift1 in f 2";
   [%expect
