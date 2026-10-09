@@ -16,8 +16,13 @@
  (deps
   cli_input.ml
   closure_input.ml
-  cps_fact.ml
-  cps_fib.ml
+  fac_cps.ml
+  fib_cps.ml
+  nested_functions.ml
+  shadowing.ml
+  short_circuit.ml
+  if_argument.ml
   recursive_capture.ml
+  check_stages.sh
   runtime.c
   %{exe:../compiler.exe}))

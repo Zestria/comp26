@@ -20,7 +20,8 @@ let run ~stop_after program =
   | Alpha ->
     Ast_passes.Alpha.alpha program |> Printer.print_program
   | Closure_conv ->
-    Ast_passes.Closure_conv.closure_conv program
+    Ast_passes.Alpha.alpha program
+    |> Ast_passes.Closure_conv.closure_conv
     |> Printer.print_program
   | Lambda_lift ->
     Ast_passes.Alpha.alpha program
