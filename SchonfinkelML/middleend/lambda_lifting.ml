@@ -34,7 +34,7 @@ let rec subst x name = function
    it, hence it never refers to a definition emitted later.  The list is kept in
    reverse order of creation. *)
 type state =
-  { naming : Anf.naming
+  { naming : Names.naming
   ; defs : (let_flag * string * expr) list
   }
 
@@ -53,7 +53,7 @@ let rec lift_expr st = function
     (* A definition is the chain of parameters with its body lifted; the
        abstraction itself is replaced by the name of the definition. *)
     let st, def = lift_chain st e in
-    let name, naming = Anf.gensym st.naming ~prefix:"lift" () in
+    let name, naming = Names.gensym st.naming ~prefix:"lift" () in
     { naming; defs = (NotRecursive, name, def) :: st.defs }, Ident name
   | Let (Recursive, f, rhs0, rest) ->
     let st, rhs = lift_chain st rhs0 in
@@ -86,7 +86,7 @@ and lift_chain st = function
 ;;
 
 let lift e =
-  let naming = Anf.naming_of (Anf.idents_of_expr Anf.StringSet.empty e) in
+  let naming = Names.naming_of (Names.idents_of_expr Names.StringSet.empty e) in
   let st, e = lift_expr { naming; defs = [] } e in
   List.fold_right
     (fun (flag, name, def) acc -> Let (flag, name, def, acc))
