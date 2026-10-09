@@ -29,24 +29,9 @@
  (libraries MMML.frontend qcheck))
 
 (library
- (name lambda_lifting_test)
- (package MMML)
- (modules lambda_lifting_test)
- (libraries MMML.frontend MMML.middleend)
- (inline_tests)
- (preprocess
-  (pps ppx_expect)))
-
-(test
- (name closure_ir_test)
- (package MMML)
- (modules closure_ir_test)
- (libraries MMML.middleend))
-
-(library
  (name closure_test_support)
  (wrapped false)
- (modules closure_eval closure_generator)
+ (modules closure_eval closure_generator closure_test_invariants)
  (libraries MMML.frontend MMML.middleend qcheck))
 
 (test
@@ -60,3 +45,9 @@
  (package MMML)
  (modules closure_conversion_qcheck)
  (libraries MMML.frontend MMML.middleend closure_test_support qcheck))
+
+(test
+ (name closure_usage_example)
+ (package MMML)
+ (modules closure_usage_example)
+ (libraries MMML.frontend MMML.middleend closure_test_support))

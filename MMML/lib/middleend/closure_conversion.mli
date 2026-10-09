@@ -1,29 +1,25 @@
-(** Closure conversion directly from parser AST. Lexical shadowing is resolved
-    by scoped environments; no alpha-renaming or ANF is required. *)
-
 type problem =
   | Unbound_identifier of string
   | Recursive_wildcard
   | Recursive_rhs_not_lambda of string
 
-(** Structural context, from the top-level definition to the failing node.
-    The parser AST has no source locations, so diagnostics do not invent them. *)
 type error =
   { path : string list
   ; problem : problem
   }
 
-(** External names are explicitly supplied by the caller; duplicates and input
-    order have no effect. Lexical bindings take precedence over externals.
-    Their runtime semantics, including primitives, belong to the IR consumer.
+(** Each consecutive lambda group receives its free local names as fresh
+    leading parameters, ordered by the original name. Function values are
+    formed by partial application. Groups never cross let/if/application.
+    Self references also use partial application in value positions.
 
-    Recursive definitions must bind a name to a lambda. This includes curried
-    functions and recursion capturing outer values. Recursive wildcard and
-    other recursive RHS forms return [Error]. The input AST is not mutated.
+    Source bindings and public top-level names are retained. Generated names
+    avoid all source names and declared externals. Repeated calls and external
+    list order/duplicates do not change the result. The input is not mutated.
 
-    The result retains nested code and unary calls. Captures are ordered by
-    [String.compare]; creation reads existing bindings exactly once. No
-    evaluation, hoisting, type inference or primitive lowering is performed. *)
-val convert : externals:string list -> Ast.program -> (Closure_ir.program, error) result
+    Recursive bindings require a named lambda RHS. Errors carry structural
+    paths, not fabricated source locations. External names must be declared;
+    primitive semantics belong to later passes/runtime. *)
+val convert : externals:string list -> Ast.program -> (Ast.program, error) result
 
 val pp_error : Format.formatter -> error -> unit

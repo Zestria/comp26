@@ -1,4 +1,4 @@
-(** Test-only semantic oracles. Both use callee-before-argument evaluation;
+(** Test-only AST oracle, independent of the converter. Uses callee-before-argument evaluation;
     this does not specify a machine ABI or the whole MiniML runtime. *)
 
 type runtime_error =
@@ -8,7 +8,6 @@ type runtime_error =
   | Expected_boolean
   | Not_callable
   | Non_ground_result
-  | Invalid_ir
   | Fuel_exhausted
   | Unsupported_recursion
 
@@ -19,11 +18,4 @@ type observation =
 
 val external_names : string list
 val source : ?fuel:int -> result_name:string -> Ast.program -> observation
-
-val target
-  :  ?fuel:int
-  -> result_name:string
-  -> Middleend.Closure_ir.program
-  -> observation
-
 val show_observation : observation -> string

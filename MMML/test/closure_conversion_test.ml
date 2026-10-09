@@ -1,5 +1,4 @@
 open Middleend
-module Ir = Closure_ir
 module Cc = Closure_conversion
 module Eval = Closure_eval
 
@@ -7,8 +6,6 @@ let p name = Ast.PVariable name
 let v name = Ast.Variable name
 let int value = Ast.Constant (Ast.Integer value)
 let def name rhs = Ast.Definition (Ast.Nonrecursive, p name, rhs)
-let local name = Ir.Reference (Ir.Local name)
-let external_ref name = Ir.Reference (Ir.External name)
 
 let parse source =
   match Parser_menhir.parse_program source with
@@ -20,13 +17,9 @@ let convert ?(externals = Eval.external_names) program =
   match Cc.convert ~externals program with
   | Error error -> failwith (Format.asprintf "%a" Cc.pp_error error)
   | Ok result ->
-    (match Ir.validate result with
+    (match Closure_test_invariants.check ~externals result with
      | Ok () -> result
-     | Error errors ->
-       failwith
-         (String.concat
-            "\n"
-            (List.map (Format.asprintf "%a" Ir.pp_validation_error) errors)))
+     | Error error -> failwith error)
 ;;
 
 let equal label expected actual = if expected <> actual then failwith label
@@ -34,7 +27,7 @@ let equal label expected actual = if expected <> actual then failwith label
 let compare_behavior ?(trace = []) ?(result_name = "result") expected ast =
   let converted = convert ast in
   let source = Eval.source ~result_name ast in
-  let target = Eval.target ~result_name converted in
+  let target = Eval.source ~result_name converted in
   let wanted = { Eval.outcome = expected; trace } in
   if source <> wanted || target <> wanted
   then
@@ -45,7 +38,7 @@ let compare_behavior ?(trace = []) ?(result_name = "result") expected ast =
          (Eval.show_observation source)
          (Eval.show_observation target)
          (Ast.show_program ast)
-         (Format.asprintf "%a" Ir.pp_program converted))
+         (Format.asprintf "%a" Ast.pp_program converted))
 ;;
 
 let integer_result source expected =
@@ -61,48 +54,49 @@ let check_error program problem =
 ;;
 
 let structure () =
-  equal "empty program" { Ir.externals = []; definitions = [] } (convert ~externals:[] []);
+  equal "empty" [] (convert ~externals:[] []);
   check_error [ def "result" (v "missing") ] (Cc.Unbound_identifier "missing");
   check_error (parse "let f x = missing") (Cc.Unbound_identifier "missing");
-  let ast = parse "let id x = x" in
-  let expected =
-    { Ir.externals = []
-    ; definitions =
-        [ Ir.Definition
-            ( p "id"
-            , Ir.Make_closure
-                ({ parameter = p "x"; capture_names = []; body = local "x" }, []) )
-        ]
-    }
-  in
-  equal "identity IR" expected (convert ~externals:[] ast);
-  let ast = parse "let make_adder x = fun y -> x + y" in
-  let inner =
-    { Ir.parameter = p "y"
-    ; capture_names = [ "x" ]
-    ; body = Ir.Call (Ir.Call (external_ref "+", Ir.Reference (Ir.Env_slot 0)), local "y")
-    }
-  in
-  let expected =
-    { Ir.externals = [ "+" ]
-    ; definitions =
-        [ Ir.Definition
-            ( p "make_adder"
-            , Ir.Make_closure
-                ( { parameter = p "x"
-                  ; capture_names = []
-                  ; body = Ir.Make_closure (inner, [ Ir.Local "x" ])
-                  }
-                , [] ) )
-        ]
-    }
-  in
-  equal "make_adder documented IR" expected (convert ~externals:[ "+" ] ast);
+  let closed = parse "let id x = x let add x y = x + y" in
+  equal "closed parameter groups unchanged" closed (convert closed);
+  let source = parse "let make x z = let f y = x + z + y in f" in
+  (match Closure_test_invariants.check ~externals:Eval.external_names source with
+   | Error _ -> ()
+   | Ok () -> failwith "checker accepted implicit capture");
+  let output = convert source in
+  (match output with
+   | [ Ast.Definition
+         ( _
+         , _
+         , Ast.Lambda
+             ( px
+             , Ast.Lambda
+                 ( pz
+                 , Ast.Let_in
+                     ( _
+                     , _
+                     , Ast.Application
+                         ( Ast.Application
+                             ( Ast.Lambda
+                                 ( Ast.PVariable cx
+                                 , Ast.Lambda (Ast.PVariable cz, Ast.Lambda (py, body)) )
+                             , Ast.Variable actual_x )
+                         , Ast.Variable actual_z )
+                     , _ ) ) ) )
+     ] ->
+     equal "original params" (p "x", p "z", p "y") (px, pz, py);
+     equal "capture values" ("x", "z") (actual_x, actual_z);
+     equal
+       "capture substitution"
+       (Ast.infix "+" (Ast.infix "+" (v cx) (v cz)) (v "y"))
+       body;
+     assert (cx <> cz && cx <> "x" && cz <> "z")
+   | _ -> failwith (Ast.show_program output));
   equal
     "external order and duplicates"
-    (convert ~externals:[ "+"; "-" ] ast)
-    (convert ~externals:[ "-"; "+"; "+" ] ast);
-  let ast =
+    (convert ~externals:[ "+"; "-" ] source)
+    (convert ~externals:[ "-"; "+"; "+" ] source);
+  let original =
     [ def
         "result"
         (Ast.application
@@ -110,33 +104,31 @@ let structure () =
            [ Ast.Application (v "g", v "x"); Ast.Application (v "h", v "y") ])
     ]
   in
-  let actual = convert ~externals:[ "f"; "g"; "h"; "x"; "y" ] ast in
   equal
-    "unary call shape"
-    [ Ir.Definition
-        ( p "result"
-        , Ir.Call
-            ( Ir.Call (external_ref "f", Ir.Call (external_ref "g", external_ref "x"))
-            , Ir.Call (external_ref "h", external_ref "y") ) )
-    ]
-    actual.definitions;
-  let ast = parse "let z = 3 let a = 1 let f x = z + a + x" in
-  (match List.rev (convert ast).definitions with
-   | Ir.Definition (_, Ir.Make_closure (code, captures)) :: _ ->
-     equal "stable slots" [ "a"; "z" ] code.capture_names;
-     equal "matching captures" [ Ir.Local "a"; Ir.Local "z" ] captures
-   | _ -> failwith "missing closure");
-  let first = convert ast in
+    "unary calls stay in place"
+    original
+    (convert ~externals:[ "f"; "g"; "h"; "x"; "y" ] original);
   ignore (convert (parse "let ignored x = fun y -> x"));
-  let second = convert ast in
-  equal "repeatable conversion" first second;
+  equal "deterministic" output (convert source);
   equal
-    "repeatable rendering"
-    (Format.asprintf "%a" Ir.pp_program first)
-    (Format.asprintf "%a" Ir.pp_program second)
+    "printer deterministic"
+    (Ast.show_program output)
+    (Ast.show_program (convert source));
+  (* Generated names must avoid bound, free and external names alike. *)
+  let collision =
+    parse
+      "let cc_capture_0 = 10 let cc_code_1 = 20 let f x = cc_capture_0 + cc_code_1 + x \
+       let result = f 3"
+  in
+  compare_behavior (Ok (Ast.Integer 33)) collision
 ;;
 
 let nonrecursive () =
+  integer_result
+    "let make x = let f y = x + y in f let a = make 10 let b = make 20 let result = a 1 \
+     + b 1"
+    32;
+  integer_result "let make x = fun x -> x let result = make 10 3" 3;
   List.iter
     (fun (source, expected) -> integer_result source expected)
     [ "let result = let x = 1 in let x = x + 1 in x", 2
@@ -176,6 +168,18 @@ let nonrecursive () =
 ;;
 
 let recursive () =
+  integer_result
+    "let make base = let pass f x = f x in let rec loop n = if n = 0 then base else pass \
+     loop (n - 1) in loop let result = make 7 3"
+    7;
+  integer_result
+    "let make base = let rec loop n = if n = 0 then base else (let saved x = loop x in \
+     saved (n - 1)) in loop let result = make 7 3"
+    7;
+  integer_result
+    "let make base = let rec loop n = if n = 0 then base else (let self = loop in self \
+     (n - 1)) in loop let result = make 7 3"
+    7;
   List.iter
     (fun (source, expected) -> integer_result source expected)
     [ ( "let make base = let rec loop n = if n = 0 then base else loop (n - 1) in loop \
