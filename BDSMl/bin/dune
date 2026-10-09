@@ -16,5 +16,8 @@
  (deps
   cli_input.ml
   closure_input.ml
+  cps_fact.ml
+  cps_fib.ml
+  recursive_capture.ml
   runtime.c
   %{exe:../compiler.exe}))

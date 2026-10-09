@@ -39,3 +39,16 @@
   $ ../compiler.exe -parsing topdown --stop-after cc closure_input.ml -o closure_output.ml
   $ ocaml closure_output.ml
   7
+
+  $ ../compiler.exe -parsing topdown --stop-after ll cps_fact.ml -o fact_lifted.ml
+  $ ocaml fact_lifted.ml
+  120
+  $ ../compiler.exe -parsing topdown --stop-after anf cps_fact.ml -o fact_anf.ml
+  $ ocaml fact_anf.ml
+  120
+  $ ../compiler.exe -parsing menhir --stop-after anf cps_fib.ml -o fib_anf.ml
+  $ ocaml fib_anf.ml
+  55
+  $ ../compiler.exe -parsing menhir --stop-after anf recursive_capture.ml -o recursive_capture_anf.ml
+  $ ocaml recursive_capture_anf.ml
+  0
