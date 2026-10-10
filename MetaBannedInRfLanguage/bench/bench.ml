@@ -70,9 +70,14 @@ let parsers =
 (* Both parsers must succeed and agree, otherwise the comparison is meaningless. *)
 let check_input (name, source) =
   match List.map (fun (_, parse) -> parse source) parsers with
-  | [ Ok topdown; Ok menhir ] when topdown = menhir -> ()
-  | [ Ok _; Ok _ ] -> failwith (Printf.sprintf "%s: parsers produce different ASTs" name)
-  | _ -> failwith (Printf.sprintf "%s: one of the parsers fails" name)
+  | [ Ok topdown; Ok menhir ] when topdown = menhir -> Ok ()
+  | [ Ok _; Ok _ ] -> Error (Printf.sprintf "%s: parsers produce different ASTs" name)
+  | _ -> Error (Printf.sprintf "%s: one of the parsers fails" name)
+;;
+
+let fail message =
+  prerr_endline ("bench: " ^ message);
+  exit 2
 ;;
 
 let bench_input seconds (name, source) =
@@ -90,10 +95,21 @@ let bench_input seconds (name, source) =
 let () =
   let seconds =
     match Sys.argv with
-    | [| _ |] -> 1
-    | [| _; seconds |] -> int_of_string seconds
-    | _ -> failwith "usage: bench.exe [seconds per measurement]"
+    | [| _ |] -> Some 1
+    | [| _; seconds |] ->
+      (match int_of_string_opt seconds with
+       | Some seconds when seconds > 0 -> Some seconds
+       | _ -> None)
+    | _ -> None
   in
-  List.iter check_input inputs;
-  List.iter (bench_input seconds) inputs
+  match seconds with
+  | None -> fail "usage: bench.exe [seconds per measurement]"
+  | Some seconds ->
+    List.iter
+      (fun input ->
+         match check_input input with
+         | Ok () -> ()
+         | Error message -> fail message)
+      inputs;
+    List.iter (bench_input seconds) inputs
 ;;

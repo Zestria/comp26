@@ -1,5 +1,23 @@
 (ocamllex menhir_lexer)
 
-(menhir
- (modules menhir_grammar)
- (flags --strict))
+; A plain rule instead of the (menhir) stanza: the stanza always uses the .mli
+; menhir generates, which has no license header and fails zanuda. The table
+; back-end avoids the `_v` variables of the code back-end that zanuda rejects.
+
+(rule
+ (targets
+  menhir_grammar.ml
+  menhir_grammar.mli
+  menhir_grammar_raw.ml
+  menhir_grammar_raw.mli)
+ (deps menhir_grammar.mly)
+ (action
+  (progn
+   (run menhir --strict --table --base menhir_grammar_raw %{deps})
+   (run cp menhir_grammar_raw.ml menhir_grammar.ml)
+   (with-stdout-to
+    menhir_grammar.mli
+    (progn
+     (echo
+      "[@@@ocaml.text \"/*\"]\n\n(** Copyright 2026, Lemekhov Daniil *)\n\n(** SPDX-License-Identifier: LGPL-3.0-or-later *)\n\n[@@@ocaml.text \"/*\"]\n\n")
+     (run cat menhir_grammar_raw.mli))))))
