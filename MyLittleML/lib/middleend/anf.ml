@@ -101,8 +101,7 @@ let rec_flag_of_bool (rec_ : bool) : rec_flag =
   if rec_ then Rec else Nonrec
 ;;
 
-(** Smart constructor for [ALet]: [let x = v in x] is just [v] (mirrors
-    [mk_alet] from PudgeWithMoML's ANF pass, comp25).  Only non-recursive
+(** Smart constructor for [ALet]: [let x = v in x] is just [v].  Only non-recursive
     bindings fuse: under [Rec] the name may occur in its own right-hand
     side, so the binding must stay.  Applied to every [ALet] the ANF
     generator builds. *)

@@ -8,8 +8,7 @@
 
 (** Lambda lifting for the MyLittleML middle-end (Task 2).
 
-    Runs after closure conversion (mirroring PudgeWithMoML's CC → LL order,
-    comp25): every lambda in the program is therefore closed — its free
+    Runs after closure conversion: every lambda in the program is therefore closed — its free
     variables are a subset of its parameters, top-level names, and names
     bound by an enclosing recursive [ALet] (see [Closure.is_closed]) — so
     hoisting a lambda to the top level never breaks scope.

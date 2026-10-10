@@ -11,8 +11,7 @@
     Every [CFun] whose body mentions variables that are neither its
     parameters nor top-level globals gets those free variables prepended to
     its parameter list, and the original binding site is rewritten to apply
-    the widened function to them immediately (eta-expansion, mirroring
-    PudgeWithMoML's CC pass, comp25):
+    the widened function to them immediately (eta-expansion):
 
     {[let f = fun x -> x + y in f 1]}
     becomes
