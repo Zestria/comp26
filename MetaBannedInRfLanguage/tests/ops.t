@@ -161,3 +161,16 @@ Malformed settings
   $ ../driver/compiler.exe -ops "left 5 + ; right 3 +" prec.ml
   compiler: operator "+" is overridden twice (in infix settings)
   [1]
+
+A prefix minus in parentheses is not an operator value
+
+  $ cat > paren.ml <<EOF
+  > let a = (-1);;
+  > let f x = g (-x) (x * (-2));;
+  > let m = ( - );;
+  > let t = (1, -2)
+  > EOF
+
+  $ ../driver/compiler.exe -parsing topdown paren.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir paren.ml > menhir.txt
+  $ diff topdown.txt menhir.txt
