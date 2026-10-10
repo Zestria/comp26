@@ -1,0 +1,5 @@
+(test
+ (name test_mid)
+ (package MyLittleML)
+ (modules test_mid)
+ (libraries qcheck parsing middleend))

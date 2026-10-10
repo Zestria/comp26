@@ -1,0 +1,8 @@
+(library
+ (name middleend)
+ (public_name MyLittleML.middleend)
+ (libraries parsing)
+ (preprocess
+  (pps ppx_deriving.show))
+ (instrumentation
+  (backend bisect_ppx_ng)))
