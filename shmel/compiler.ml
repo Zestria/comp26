@@ -117,7 +117,7 @@ let run_llvm_demo () =
   let i64_type = Llvm.i64_type context in
   let void_type = Llvm.void_type context in
   let ptr_type = Llvm.pointer_type context in
-  let prepare_main () =
+  let prepare_main print_int =
     let ft =
       let args = Array.make 0 ptr_type in
       Llvm.function_type i64_type args
@@ -128,7 +128,7 @@ let run_llvm_demo () =
     let (_ : Llvm.llvalue) =
       Shmel.build_call
         (Llvm.function_type void_type [| i64_type |])
-        Shmel.(lookup_func_exn "print_int")
+        print_int
         [ Llvm.const_int i64_type 70 ]
     in
     let (_ : Llvm.llvalue) = Llvm.build_ret (Llvm.const_int i64_type 0) builder in
@@ -145,8 +145,11 @@ let run_llvm_demo () =
       (Llvm.function_type (Llvm.void_type context) [| i64_type |])
       the_module
   in
-  prepare_main ();
-  Llvm.print_module "out.ll" the_module
+  Result.map
+    (fun print_int ->
+       prepare_main print_int;
+       Llvm.print_module "out.ll" the_module)
+    (Shmel.lookup_func "print_int")
 ;;
 
 let parse opts text =
@@ -218,6 +221,9 @@ let () =
   match parse_args args with
   | Error msg -> fail 2 "Error: %s@.Try '--help' for usage.@." msg
   | Ok Help -> print_string usage
-  | Ok Llvm_demo -> run_llvm_demo ()
+  | Ok Llvm_demo ->
+    (match run_llvm_demo () with
+     | Ok () -> ()
+     | Error msg -> fail 1 "Error: %s@." msg)
   | Ok (Compile opts) -> compile opts
 ;;
