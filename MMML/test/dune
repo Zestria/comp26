@@ -6,6 +6,7 @@
 
 (library
  (name anf_test_support)
+ (package MMML)
  (wrapped false)
  (modules anf_test_eval)
  (libraries MMML.middleend))
@@ -66,6 +67,7 @@
 
 (library
  (name closure_test_support)
+ (package MMML)
  (wrapped false)
  (modules closure_eval closure_generator closure_test_invariants)
  (libraries MMML.frontend MMML.middleend qcheck))
