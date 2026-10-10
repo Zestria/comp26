@@ -32,8 +32,16 @@ let () =
          throughputN
            ~repeat
            t
-           [ "top_down_parser", (fun s -> ignore (top_down_parser s)), content
-           ; "bottom_up_parser", (fun s -> ignore (bottom_up_parser s)), content
+           [ ( "top_down_parser"
+             , (fun s ->
+                 let _ = top_down_parser s in
+                 ())
+             , content )
+           ; ( "bottom_up_parser"
+             , (fun s ->
+                 let _ = bottom_up_parser s in
+                 ())
+             , content )
            ])
       files
   in
