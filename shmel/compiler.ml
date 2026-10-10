@@ -7,53 +7,101 @@
 [@@@ocaml.text "/*"]
 
 open Shmel_lib
+open Shmel_middleend
 
 type parser_kind =
-  | Comb
+  | Topdown
   | Menhir
+
+type stage =
+  | Parsing
+  | Anf_stage
+  | Closure_stage
+  | Lifting_stage
+
+type output =
+  | Stdout
+  | File of string
 
 type opts =
   { parser_kind : parser_kind
   ; extended : bool
   ; show_ast : bool
-  ; llvm_demo : bool
+  ; stop_after : stage
+  ; output : output
+  ; input : string option
   }
 
+type command =
+  | Help
+  | Llvm_demo
+  | Compile of opts
+
 let default_opts =
-  { parser_kind = Comb; extended = false; show_ast = false; llvm_demo = false }
+  { parser_kind = Topdown
+  ; extended = false
+  ; show_ast = false
+  ; stop_after = Anf_stage
+  ; output = Stdout
+  ; input = None
+  }
 ;;
 
-let usage () =
-  print_string
-    "Usage: compiler.exe [options] [file]\n\
-     Reads an expression from <file> (or stdin) and parses it.\n\n\
-     Options:\n\
-    \  --parser=comb|menhir  Select top-down (default) or bottom-up parser\n\
-    \  --extended            Allow reserved words as identifiers (e.g. `let in = 1 in in`); combinator parser only\n\
-    \  --ast                 Print the parsed AST\n\
-    \  --llvm-demo           Run the LLVM codegen demo instead of parsing (writes out.ll)\n\
-    \  --help                Show this message\n"
+let usage =
+  "Usage: compiler.exe [options] [file]\n\
+   Compiles an ML program from <file> (or stdin).\n\n\
+   Options:\n\
+  \  -parsing topdown|menhir   Parser to use: top-down (default) or bottom-up\n\
+  \  --stop-after parsing|anf|closure|lifting  Stop after the stage and print its result \
+   (default: anf)\n\
+  \  -o <file>                 Write the result to <file>; '-o -' writes to stdout \
+   (default)\n\
+  \  --extended                Allow reserved words as identifiers (e.g. `let in = 1 in \
+   in`); top-down parser only\n\
+  \  --ast                     With '--stop-after parsing', also print the AST\n\
+  \  --llvm-demo               Run the LLVM codegen demo instead of compiling (writes \
+   out.ll)\n\
+  \  --help                    Show this message\n"
 ;;
 
-let parse_args () =
-  let rec loop opts input_file = function
-    | [] -> opts, input_file
-    | "--help" :: _ ->
-      usage ();
-      exit 0
-    | "--ast" :: rest -> loop { opts with show_ast = true } input_file rest
-    | "--extended" :: rest -> loop { opts with extended = true } input_file rest
-    | "--llvm-demo" :: rest -> loop { opts with llvm_demo = true } input_file rest
-    | "--parser=comb" :: rest -> loop { opts with parser_kind = Comb } input_file rest
-    | "--parser=menhir" :: rest -> loop { opts with parser_kind = Menhir } input_file rest
-    | filename :: rest ->
-      (match input_file with
-       | None -> loop opts (Some filename) rest
-       | Some _ ->
-         Format.eprintf "Error: multiple input files specified\n";
-         exit 1)
+let parse_args args =
+  let rec loop llvm_demo opts = function
+    | [] ->
+      (match llvm_demo, opts with
+       | true, _ -> Ok Llvm_demo
+       | false, { parser_kind = Menhir; extended = true; _ } ->
+         Error "--extended is only supported by the top-down parser"
+       | false, _ -> Ok (Compile opts))
+    | ("--help" | "-help") :: _ -> Ok Help
+    | "-parsing" :: "topdown" :: rest ->
+      loop llvm_demo { opts with parser_kind = Topdown } rest
+    | "-parsing" :: "menhir" :: rest ->
+      loop llvm_demo { opts with parser_kind = Menhir } rest
+    | "-parsing" :: _ -> Error "-parsing expects 'topdown' or 'menhir'"
+    | "--stop-after" :: "parsing" :: rest ->
+      loop llvm_demo { opts with stop_after = Parsing } rest
+    | "--stop-after" :: "anf" :: rest ->
+      loop llvm_demo { opts with stop_after = Anf_stage } rest
+    | "--stop-after" :: "closure" :: rest ->
+      loop llvm_demo { opts with stop_after = Closure_stage } rest
+    | "--stop-after" :: "lifting" :: rest ->
+      loop llvm_demo { opts with stop_after = Lifting_stage } rest
+    | "--stop-after" :: _ ->
+      Error "--stop-after expects 'parsing', 'anf', 'closure' or 'lifting'"
+    | "-o" :: "-" :: rest -> loop llvm_demo { opts with output = Stdout } rest
+    | "-o" :: file :: rest -> loop llvm_demo { opts with output = File file } rest
+    | [ "-o" ] -> Error "-o expects a file name or '-'"
+    | "--extended" :: rest -> loop llvm_demo { opts with extended = true } rest
+    | "--ast" :: rest -> loop llvm_demo { opts with show_ast = true } rest
+    | "--llvm-demo" :: rest -> loop true opts rest
+    | arg :: _ when String.length arg > 1 && Char.equal arg.[0] '-' ->
+      Error (Printf.sprintf "unknown option '%s'" arg)
+    | file :: rest ->
+      (match opts.input with
+       | None -> loop llvm_demo { opts with input = Some file } rest
+       | Some _ -> Error "multiple input files specified")
   in
-  loop default_opts None (List.tl (Array.to_list Sys.argv))
+  loop false default_opts args
 ;;
 
 (* Task-3 LLVM codegen demo, kept behind --llvm-demo so the default
@@ -101,40 +149,75 @@ let run_llvm_demo () =
   Llvm.print_module "out.ll" the_module
 ;;
 
-let run opts input_text =
-  let text = String.trim input_text in
-  let result =
-    match opts.parser_kind with
-    | Comb ->
-      if opts.extended
-      then Main.parse_with_comb_extended text
-      else Main.parse_with_comb text
-    | Menhir ->
-      if opts.extended
-      then (
-        Format.eprintf "Error: --extended is only supported by the combinator parser\n";
-        exit 1)
-      else Main.parse_with_menhir_result text
-  in
-  match result with
-  | Error (`Parsing_error msg) ->
-    Format.eprintf "Parser error: %s\n" msg;
-    exit 1
-  | Ok ast ->
-    if opts.show_ast then Format.printf "%a\n" Ast.pp_expr ast;
-    print_string (Printast.show ast);
-    print_newline ()
+let parse opts text =
+  match opts.parser_kind, opts.extended with
+  | Topdown, false -> Main.parse_program_with_comb text
+  | Topdown, true -> Main.parse_program_with_comb_extended text
+  | Menhir, _ -> Main.parse_program_with_menhir text
+;;
+
+let read_input = function
+  | None -> Ok (In_channel.input_all stdin)
+  | Some file ->
+    (try Ok (In_channel.with_open_text file In_channel.input_all) with
+     | Sys_error msg -> Error msg)
+;;
+
+let emit opts program ppf =
+  match opts.stop_after with
+  | Parsing ->
+    if opts.show_ast then Format.fprintf ppf "%a@." Ast.pp_program program;
+    Format.fprintf ppf "%s@." (Printast.show_program program)
+  | Anf_stage -> Format.fprintf ppf "%a@." Anf.pp_program (Anf.of_program program)
+  | Closure_stage ->
+    Format.fprintf
+      ppf
+      "%a@."
+      Anf.pp_program
+      (Closure_conversion.of_program (Anf.of_program program))
+  | Lifting_stage ->
+    Format.fprintf
+      ppf
+      "%a@."
+      Anf.pp_program
+      (Lambda_lifting.of_program (Closure_conversion.of_program (Anf.of_program program)))
+;;
+
+let write output f =
+  match output with
+  | Stdout -> Ok (f Format.std_formatter)
+  | File file ->
+    (try
+       Ok
+         (Out_channel.with_open_text file (fun oc ->
+            f (Format.formatter_of_out_channel oc)))
+     with
+     | Sys_error msg -> Error msg)
+;;
+
+let fail code fmt = Format.kfprintf (fun _ -> exit code) Format.err_formatter fmt
+
+let compile opts =
+  match read_input opts.input with
+  | Error msg -> fail 1 "Error: %s@." msg
+  | Ok text ->
+    (match parse opts text with
+     | Error (`Parsing_error msg) -> fail 1 "Parser error: %s@." msg
+     | Ok program ->
+       (match write opts.output (emit opts program) with
+        | Ok () -> ()
+        | Error msg -> fail 1 "Error: %s@." msg))
 ;;
 
 let () =
-  let opts, input_file = parse_args () in
-  if opts.llvm_demo
-  then run_llvm_demo ()
-  else (
-    let input_text =
-      match input_file with
-      | Some filename -> In_channel.(with_open_text filename input_all)
-      | None -> In_channel.(input_all stdin)
-    in
-    run opts input_text)
+  let args =
+    match Array.to_list Sys.argv with
+    | _ :: args -> args
+    | [] -> []
+  in
+  match parse_args args with
+  | Error msg -> fail 2 "Error: %s@.Try '--help' for usage.@." msg
+  | Ok Help -> print_string usage
+  | Ok Llvm_demo -> run_llvm_demo ()
+  | Ok (Compile opts) -> compile opts
 ;;
