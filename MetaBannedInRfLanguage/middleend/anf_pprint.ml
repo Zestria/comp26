@@ -104,10 +104,10 @@ and pp_rec_bindings ppf bindings =
 and pp_aexpr ppf aexpr = fprintf ppf "@[<v>%a@]" pp_aexpr_lines aexpr
 
 and pp_aexpr_lines ppf = function
+  | ALet (name, value, body) when is_simple value ->
+    fprintf ppf "%a in@,%a" (pp_binding "let") (name, value) pp_aexpr_lines body
   | ALet (name, value, body) ->
-    if is_simple value
-    then fprintf ppf "%a in@,%a" (pp_binding "let") (name, value) pp_aexpr_lines body
-    else fprintf ppf "%a@,in@,%a" (pp_binding "let") (name, value) pp_aexpr_lines body
+    fprintf ppf "%a@,in@,%a" (pp_binding "let") (name, value) pp_aexpr_lines body
   | ALetTuple (names, subject, body) ->
     let pp_slot ppf = function
       | Some name -> pp_name ppf name

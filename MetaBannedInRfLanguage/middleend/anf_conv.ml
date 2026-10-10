@@ -97,16 +97,45 @@ let binders_item = function
       (first :: rest)
 ;;
 
-(* ---------- context and environment ---------- *)
+(* ---------- context, state and environment ---------- *)
 
 type ctx =
   { all_names : SSet.t
   ; rebound : SSet.t
-  ; mutable generated : SSet.t
-  ; mutable temps : SSet.t
-  ; mutable counter : int
-  ; mutable used : SSet.t
   }
+
+(* What the conversion learns as it goes; threaded through [_ m]. *)
+type state =
+  { generated : SSet.t
+  ; temps : SSet.t
+  ; counter : int
+  ; used : SSet.t
+  }
+
+type 'a m = state -> 'a * state
+
+let return value state = value, state
+
+let ( let* ) computation f state =
+  let value, state = computation state in
+  f value state
+;;
+
+let map_m f items state =
+  let reversed, state =
+    List.fold_left
+      (fun (acc, state) item ->
+         let value, state = f item state in
+         value :: acc, state)
+      ([], state)
+      items
+  in
+  List.rev reversed, state
+;;
+
+let map2_m f xs ys = map_m (fun (x, y) -> f x y) (List.combine xs ys)
+let get_used state = state.used, state
+let set_used used state = (), { state with used }
 
 type env =
   { subst : imm SMap.t
@@ -117,38 +146,36 @@ let empty_env = { subst = SMap.empty; tuples = SMap.empty }
 let lookup env name = Option.value (SMap.find_opt name env.subst) ~default:(ImmVar name)
 let add_subst env name imm = { env with subst = SMap.add name imm env.subst }
 
-let is_taken ctx name =
-  SSet.mem name ctx.all_names || SSet.mem name ctx.generated || SSet.mem name ctx.used
+let is_taken ctx state name =
+  SSet.mem name ctx.all_names || SSet.mem name state.generated || SSet.mem name state.used
 ;;
 
-let claim ctx name =
-  ctx.used <- SSet.add name ctx.used;
-  name
+let claim name state = name, { state with used = SSet.add name state.used }
+
+let generate name state =
+  claim name { state with generated = SSet.add name state.generated }
 ;;
 
-let generate ctx name =
-  ctx.generated <- SSet.add name ctx.generated;
-  claim ctx name
-;;
-
-let rec fresh_temp ctx =
-  ctx.counter <- ctx.counter + 1;
-  let name = "t" ^ Int.to_string ctx.counter in
-  if is_taken ctx name
-  then fresh_temp ctx
-  else (
-    ctx.temps <- SSet.add name ctx.temps;
-    generate ctx name)
+let fresh_temp ctx state =
+  let rec attempt counter =
+    let name = "t" ^ Int.to_string counter in
+    if is_taken ctx state name
+    then attempt (counter + 1)
+    else generate name { state with counter; temps = SSet.add name state.temps }
+  in
+  attempt (state.counter + 1)
 ;;
 
 (* Renames a local binder only if its name is already taken in the item. *)
-let bind_name ctx name =
-  if not (SSet.mem name ctx.used)
-  then claim ctx name
+let bind_name ctx name state =
+  if not (SSet.mem name state.used)
+  then claim name state
   else (
     let rec attempt index =
       let candidate = Printf.sprintf "%s_%d" name index in
-      if is_taken ctx candidate then attempt (index + 1) else generate ctx candidate
+      if is_taken ctx state candidate
+      then attempt (index + 1)
+      else generate candidate state
     in
     attempt 1)
 ;;
@@ -210,16 +237,24 @@ let rec collect_args expr args =
 ;;
 
 let tail cexpr = ACExpr cexpr
+let return_tail cexpr = return (tail cexpr)
 
-(* [k] is called exactly once, so no code is duplicated. *)
-let rec to_cexpr ctx env expr k =
+(* [k] is called exactly once, so no code is duplicated.
+
+   Where two parts are converted one after another, the order matters: it
+   decides which of two equal binders gets the [_1] suffix. In a conditional
+   the else branch (or the rest of the cases) goes first, and a temporary is
+   drawn after the code that follows it. *)
+let rec to_cexpr ctx env expr (k : cexpr -> aexpr m) : aexpr m =
   match expr with
   | EConst constant -> k (CImm (imm_of_constant constant))
   | EIdent name -> k (CImm (lookup env name))
   | EApply _ ->
     let fn, args = collect_args expr [] in
     to_imms ctx env args (fun args -> apply ctx env fn args k)
-  | EFun _ | EFunction _ -> k (lambda ctx env expr)
+  | EFun _ | EFunction _ ->
+    let* fn = lambda ctx env expr in
+    k fn
   | ETuple (first, second, rest) ->
     to_imm ctx env first (fun first ->
       to_imm ctx env second (fun second ->
@@ -229,23 +264,28 @@ let rec to_cexpr ctx env expr k =
     to_imm ctx env cond (function
       | ImmBool true -> to_cexpr ctx env then_branch k
       | ImmBool false -> to_cexpr ctx env else_branch k
-      | cond -> k (CIte (cond, to_tail ctx env then_branch, to_tail ctx env else_branch)))
+      | cond ->
+        let* else_branch = to_tail ctx env else_branch in
+        let* then_branch = to_tail ctx env then_branch in
+        k (CIte (cond, then_branch, else_branch)))
   | ELet (NonRec, first, rest, body) ->
     bind_nonrec ctx env env (first :: rest) (fun env -> to_cexpr ctx env body k)
   | ELet (Rec, first, rest, body) ->
-    let env, bindings = bind_rec ctx env ~rename:true (first :: rest) in
-    ALetRec (bindings, to_cexpr ctx env body k)
+    let* env, bindings = bind_rec ctx env ~rename:true (first :: rest) in
+    let* body = to_cexpr ctx env body k in
+    return (ALetRec (bindings, body))
   | EMatch (subject, first, rest) ->
     to_shape ctx env subject (fun shape -> compile_cases ctx env shape (first :: rest) k)
 
-and to_tail ctx env expr = to_cexpr ctx env expr tail
+and to_tail ctx env expr = to_cexpr ctx env expr return_tail
 
 and to_imm ctx env expr k =
   to_cexpr ctx env expr (function
     | CImm imm -> k imm
     | cexpr ->
-      let name = fresh_temp ctx in
-      ALet (name, cexpr, k (ImmVar name)))
+      let* name = fresh_temp ctx in
+      let* body = k (ImmVar name) in
+      return (ALet (name, cexpr, body)))
 
 and to_imms ctx env exprs k =
   match exprs with
@@ -274,23 +314,25 @@ and apply ctx env fn args k =
   | _ -> to_imm ctx env fn (fun fn -> k (fold_app ctx fn args))
 
 and lambda ctx env expr =
-  let outer = ctx.used in
+  let* outer = get_used in
   let rec params env acc refutable = function
     | EFun (pat, body) ->
       (match pat with
        | PVar name ->
-         let renamed = bind_name ctx name in
+         let* renamed = bind_name ctx name in
          params (add_subst env name (ImmVar renamed)) (renamed :: acc) refutable body
-       | PAny | PConstant CUnit -> params env (fresh_temp ctx :: acc) refutable body
+       | PAny | PConstant CUnit ->
+         let* name = fresh_temp ctx in
+         params env (name :: acc) refutable body
        | PConstant _ | PTuple _ ->
-         let name = fresh_temp ctx in
+         let* name = fresh_temp ctx in
          params env (name :: acc) ((name, pat) :: refutable) body)
     | EFunction (first, rest) ->
-      let name = fresh_temp ctx in
-      List.rev (name :: acc), env, refutable, EMatch (EIdent name, first, rest)
-    | body -> List.rev acc, env, refutable, body
+      let* name = fresh_temp ctx in
+      return (List.rev (name :: acc), env, refutable, EMatch (EIdent name, first, rest))
+    | body -> return (List.rev acc, env, refutable, body)
   in
-  let names, env, refutable, body = params env [] [] expr in
+  let* names, env, refutable, body = params env [] [] expr in
   let body =
     List.fold_left
       (fun body (name, pat) ->
@@ -298,9 +340,9 @@ and lambda ctx env expr =
       body
       refutable
   in
-  let body = to_tail ctx env body in
-  ctx.used <- outer;
-  CFun (names, body)
+  let* body = to_tail ctx env body in
+  let* () = set_used outer in
+  return (CFun (names, body))
 
 and bind_nonrec ctx env into bindings k =
   match bindings with
@@ -312,12 +354,16 @@ and bind_nonrec ctx env into bindings k =
        to_cexpr ctx env vb_expr (function
          | CImm imm -> continue (add_subst into name imm)
          | cexpr ->
-           let renamed = bind_name ctx name in
-           ALet (renamed, cexpr, continue (add_subst into name (ImmVar renamed))))
+           let* renamed = bind_name ctx name in
+           let* body = continue (add_subst into name (ImmVar renamed)) in
+           return (ALet (renamed, cexpr, body)))
      | PAny | PConstant CUnit ->
        to_cexpr ctx env vb_expr (function
          | CImm _ -> continue into
-         | cexpr -> ALet (fresh_temp ctx, cexpr, continue into))
+         | cexpr ->
+           let* body = continue into in
+           let* name = fresh_temp ctx in
+           return (ALet (name, cexpr, body)))
      | PConstant _ | PTuple _ ->
        to_shape ctx env vb_expr (fun shape -> bind_shape ctx into shape vb_pat continue))
 
@@ -330,8 +376,8 @@ and bind_rec ctx env ~rename bindings =
          | _ -> raise (Unsupported "only variables can be bound by let rec"))
       bindings
   in
-  let renamed =
-    List.map (fun name -> if rename then bind_name ctx name else claim ctx name) names
+  let* renamed =
+    map_m (fun name -> if rename then bind_name ctx name else claim name) names
   in
   let env =
     List.fold_left2
@@ -342,17 +388,22 @@ and bind_rec ctx env ~rename bindings =
   in
   let compile renamed { vb_expr; _ } =
     match vb_expr with
-    | EFun _ | EFunction _ -> renamed, lambda ctx env vb_expr
+    | EFun _ | EFunction _ ->
+      let* fn = lambda ctx env vb_expr in
+      return (renamed, fn)
     | _ -> raise (Unsupported "the right-hand side of let rec must be a function")
   in
-  env, List.map2 compile renamed bindings
+  let* bindings = map2_m compile renamed bindings in
+  return (env, bindings)
 
 and bind_shape ctx env shape pat k =
   match_pattern ctx env shape pat (fun outcome _ matched ->
     match outcome with
-    | Never -> tail CMatchFailure
+    | Never -> return_tail CMatchFailure
     | Always -> k matched
-    | Cond cond -> tail (CIte (cond, k matched, tail CMatchFailure)))
+    | Cond cond ->
+      let* body = k matched in
+      return_tail (CIte (cond, body, tail CMatchFailure)))
 
 and compile_cases ctx env shape cases k =
   match cases with
@@ -363,9 +414,9 @@ and compile_cases ctx env shape cases k =
       | Never -> compile_cases ctx env shape rest k
       | Always -> to_cexpr ctx matched case_expr k
       | Cond cond ->
-        k
-          (CIte
-             (cond, to_tail ctx matched case_expr, compile_cases ctx env shape rest tail)))
+        let* else_branch = compile_cases ctx env shape rest return_tail in
+        let* then_branch = to_tail ctx matched case_expr in
+        k (CIte (cond, then_branch, else_branch)))
 
 and match_pattern ctx env shape pat k =
   destruct ctx env shape pat (Some []) [] (fun env tests vars ->
@@ -413,8 +464,8 @@ and components ctx env subject pats k =
     (match SMap.find_opt name env.tuples with
      | Some imms when List.compare_lengths imms pats = 0 -> k env imms
      | _ ->
-       let names =
-         List.map
+       let* names =
+         map_m
            (function
              | PVar var -> bind_name ctx var
              | _ -> fresh_temp ctx)
@@ -422,7 +473,8 @@ and components ctx env subject pats k =
        in
        let imms = List.map (fun name -> ImmVar name) names in
        let env = { env with tuples = SMap.add name imms env.tuples } in
-       ALetTuple (List.map Option.some names, subject, k env imms))
+       let* body = k env imms in
+       return (ALetTuple (List.map Option.some names, subject, body)))
   | _ -> raise (Unsupported "a tuple pattern cannot match a constant")
 
 and emit_tests ctx tests k =
@@ -430,8 +482,9 @@ and emit_tests ctx tests k =
     match expected with
     | ImmBool true -> k subject
     | _ ->
-      let name = fresh_temp ctx in
-      ALet (name, CApp (ImmVar "=", [ subject; expected ]), k (ImmVar name))
+      let* name = fresh_temp ctx in
+      let* body = k (ImmVar name) in
+      return (ALet (name, CApp (ImmVar "=", [ subject; expected ]), body))
   in
   let rec conjunction acc = function
     | [] -> k acc
@@ -440,11 +493,9 @@ and emit_tests ctx tests k =
         match acc with
         | None -> conjunction (Some cond) rest
         | Some acc ->
-          let name = fresh_temp ctx in
-          ALet
-            ( name
-            , CApp (ImmVar "&&", [ acc; cond ])
-            , conjunction (Some (ImmVar name)) rest ))
+          let* name = fresh_temp ctx in
+          let* body = conjunction (Some (ImmVar name)) rest in
+          return (ALet (name, CApp (ImmVar "&&", [ acc; cond ]), body)))
   in
   conjunction None tests
 
@@ -460,8 +511,9 @@ and materialize ctx shape k =
   | Tup shapes ->
     materialize_list ctx shapes (function
       | first :: second :: rest ->
-        let name = fresh_temp ctx in
-        ALet (name, CTuple (first, second, rest), k (ImmVar name))
+        let* name = fresh_temp ctx in
+        let* body = k (ImmVar name) in
+        return (ALet (name, CTuple (first, second, rest), body))
       | _ -> raise (Unsupported "a tuple must have at least two components"))
 
 and materialize_list ctx shapes k =
@@ -475,18 +527,25 @@ and materialize_list ctx shapes k =
 (* ---------- top level ---------- *)
 
 let convert_item ctx item =
-  ctx.used <- free_vars_item item;
+  let* () = set_used (free_vars_item item) in
   match item with
-  | SEval expr -> [ AEval (to_tail ctx empty_env expr) ]
+  | SEval expr ->
+    let* body = to_tail ctx empty_env expr in
+    return [ AEval body ]
   | SValue (NonRec, { vb_pat = PVar name; vb_expr }, []) ->
-    [ AValue (name, to_tail ctx empty_env vb_expr) ]
+    let* body = to_tail ctx empty_env vb_expr in
+    return [ AValue (name, body) ]
   | SValue (NonRec, { vb_pat = PAny | PConstant CUnit; vb_expr }, []) ->
-    [ AEval (to_tail ctx empty_env vb_expr) ]
+    let* body = to_tail ctx empty_env vb_expr in
+    return [ AEval body ]
   | SValue (NonRec, first, rest) ->
     let bindings = first :: rest in
-    let temps =
-      List.map
-        (fun { vb_expr; _ } -> fresh_temp ctx, to_tail ctx empty_env vb_expr)
+    let* temps =
+      map_m
+        (fun { vb_expr; _ } ->
+           let* body = to_tail ctx empty_env vb_expr in
+           let* temp = fresh_temp ctx in
+           return (temp, body))
         bindings
     in
     let project (temp, _) { vb_pat; _ } =
@@ -497,15 +556,23 @@ let convert_item ctx item =
           (EMatch (EIdent temp, { case_pat = vb_pat; case_expr = result }, []))
       in
       match vb_pat, SSet.elements (pattern_vars SSet.empty vb_pat) with
-      | PVar name, _ -> [ AValue (name, tail (CImm (ImmVar temp))) ]
-      | _, [] -> [ AEval (select (EConst CUnit)) ]
-      | _, vars -> List.map (fun var -> AValue (var, select (EIdent var))) vars
+      | PVar name, _ -> return [ AValue (name, tail (CImm (ImmVar temp))) ]
+      | _, [] ->
+        let* body = select (EConst CUnit) in
+        return [ AEval body ]
+      | _, vars ->
+        map_m
+          (fun var ->
+             let* body = select (EIdent var) in
+             return (AValue (var, body)))
+          vars
     in
-    List.map (fun (temp, body) -> AValue (temp, body)) temps
-    @ List.concat (List.map2 project temps bindings)
+    let* projected = map2_m project temps bindings in
+    return
+      (List.map (fun (temp, body) -> AValue (temp, body)) temps @ List.concat projected)
   | SValue (Rec, first, rest) ->
-    let _, bindings = bind_rec ctx empty_env ~rename:false (first :: rest) in
-    [ ARec bindings ]
+    let* _, bindings = bind_rec ctx empty_env ~rename:false (first :: rest) in
+    return [ ARec bindings ]
 ;;
 
 let all_names structure =
@@ -514,65 +581,72 @@ let all_names structure =
 
 (* ---------- renumbering of temporaries ---------- *)
 
-let renumber ctx program =
-  let taken = SSet.union ctx.all_names (SSet.diff ctx.generated ctx.temps) in
-  let names = Hashtbl.create 16 in
-  let counter = ref 0 in
-  let rec next () =
-    incr counter;
-    let name = "t" ^ Int.to_string !counter in
-    if SSet.mem name taken then next () else name
+(* Temporaries get the names t1, t2, ... in the order their binders appear in
+   the program. The first pass picks the new names, the second renames. *)
+let renumber ctx state program =
+  let taken = SSet.union ctx.all_names (SSet.diff state.generated state.temps) in
+  let rec next counter =
+    let name = "t" ^ Int.to_string counter in
+    if SSet.mem name taken then next (counter + 1) else name, counter
   in
-  let bind name =
-    if SSet.mem name ctx.temps
+  let bind (names, counter) name =
+    if SSet.mem name state.temps
     then (
-      let renamed = next () in
-      Hashtbl.replace names name renamed;
-      renamed)
-    else name
+      let renamed, counter = next (counter + 1) in
+      SMap.add name renamed names, counter)
+    else names, counter
   in
+  let rec bind_cexpr acc = function
+    | CImm _ | CApp _ | CTuple _ | CMatchFailure -> acc
+    | CIte (_, then_branch, else_branch) ->
+      bind_aexpr (bind_aexpr acc then_branch) else_branch
+    | CFun (params, body) -> bind_aexpr (List.fold_left bind acc params) body
+  and bind_aexpr acc = function
+    | ALet (name, value, body) -> bind_aexpr (bind_cexpr (bind acc name) value) body
+    | ALetTuple (slots, _, body) ->
+      let acc =
+        List.fold_left
+          (fun acc slot -> Option.fold ~none:acc ~some:(bind acc) slot)
+          acc
+          slots
+      in
+      bind_aexpr acc body
+    | ALetRec (bindings, body) -> bind_aexpr (bind_rec_bindings acc bindings) body
+    | ACExpr value -> bind_cexpr acc value
+  and bind_rec_bindings acc bindings =
+    let acc = List.fold_left (fun acc (name, _) -> bind acc name) acc bindings in
+    List.fold_left (fun acc (_, value) -> bind_cexpr acc value) acc bindings
+  in
+  let bind_item acc = function
+    | AValue (name, body) -> bind_aexpr (bind acc name) body
+    | ARec bindings -> bind_rec_bindings acc bindings
+    | AEval body -> bind_aexpr acc body
+  in
+  let names, _ = List.fold_left bind_item (SMap.empty, 0) program in
+  let rename name = Option.value (SMap.find_opt name names) ~default:name in
   let imm = function
-    | ImmVar name -> ImmVar (Option.value (Hashtbl.find_opt names name) ~default:name)
+    | ImmVar name -> ImmVar (rename name)
     | other -> other
   in
   let rec cexpr = function
     | CImm value -> CImm (imm value)
-    | CApp (fn, args) ->
-      let fn = imm fn in
-      CApp (fn, List.map imm args)
-    | CTuple (first, second, rest) ->
-      let first = imm first in
-      let second = imm second in
-      CTuple (first, second, List.map imm rest)
+    | CApp (fn, args) -> CApp (imm fn, List.map imm args)
+    | CTuple (first, second, rest) -> CTuple (imm first, imm second, List.map imm rest)
     | CIte (cond, then_branch, else_branch) ->
-      let cond = imm cond in
-      let then_branch = aexpr then_branch in
-      CIte (cond, then_branch, aexpr else_branch)
-    | CFun (params, body) ->
-      let params = List.map bind params in
-      CFun (params, aexpr body)
+      CIte (imm cond, aexpr then_branch, aexpr else_branch)
+    | CFun (params, body) -> CFun (List.map rename params, aexpr body)
     | CMatchFailure -> CMatchFailure
   and aexpr = function
-    | ALet (name, value, body) ->
-      let name = bind name in
-      let value = cexpr value in
-      ALet (name, value, aexpr body)
+    | ALet (name, value, body) -> ALet (rename name, cexpr value, aexpr body)
     | ALetTuple (slots, subject, body) ->
-      let subject = imm subject in
-      let slots = List.map (Option.map bind) slots in
-      ALetTuple (slots, subject, aexpr body)
-    | ALetRec (bindings, body) ->
-      let bindings = rec_bindings bindings in
-      ALetRec (bindings, aexpr body)
+      ALetTuple (List.map (Option.map rename) slots, imm subject, aexpr body)
+    | ALetRec (bindings, body) -> ALetRec (rec_bindings bindings, aexpr body)
     | ACExpr value -> ACExpr (cexpr value)
   and rec_bindings bindings =
-    let names = List.map (fun (name, _) -> bind name) bindings in
-    List.map2 (fun name (_, value) -> name, cexpr value) names bindings
+    List.map (fun (name, value) -> rename name, cexpr value) bindings
   in
   let item = function
-    | AValue (name, body) ->
-      let name = bind name in
-      AValue (name, aexpr body)
+    | AValue (name, body) -> AValue (rename name, aexpr body)
     | ARec bindings -> ARec (rec_bindings bindings)
     | AEval body -> AEval (aexpr body)
   in
@@ -581,15 +655,15 @@ let renumber ctx program =
 
 let convert structure =
   let ctx =
-    { all_names = all_names structure
-    ; rebound = union_map binders_item structure
-    ; generated = SSet.empty
-    ; temps = SSet.empty
-    ; counter = 0
-    ; used = SSet.empty
-    }
+    { all_names = all_names structure; rebound = union_map binders_item structure }
   in
-  match List.concat_map (convert_item ctx) structure with
-  | program -> Ok (renumber ctx (Anf_simplify.program ~is_prim:(is_prim ctx) program))
+  let state =
+    { generated = SSet.empty; temps = SSet.empty; counter = 0; used = SSet.empty }
+  in
+  match map_m (convert_item ctx) structure state with
   | exception Unsupported message -> Error message
+  | converted ->
+    let items, state = converted in
+    let program = Anf_simplify.program ~is_prim:(is_prim ctx) (List.concat items) in
+    Ok (renumber ctx state program)
 ;;
