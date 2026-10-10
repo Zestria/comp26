@@ -33,4 +33,5 @@
   shadow.src: 20
   siblings.src: 12
   tuple.src: 10
+  unary_minus.src: -2
   user_fresh.src: 8
