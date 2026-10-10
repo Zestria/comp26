@@ -8,20 +8,20 @@
 
 (** QCheck round-trip tests for BOTH MyLittleML parsers (Task 1).
 
-    Two generated properties check that printing a program with {!Parsing.Pp}
+    Two generated properties check that printing a program with {!Frontend.Pp}
     and parsing it back with either the top-down or the bottom-up parser
-    yields exactly the same {!Parsing.Ast.prog}.
+    yields exactly the same {!Frontend.Ast.prog}.
 
     The AST is mirrored in this module so that [ppx_deriving_qcheck] can
     attach [@gen] overrides (valid identifiers, bounded non-negative
     integers, non-empty [fun] parameter lists) without polluting the
-    production [Parsing.Ast] with test-only annotations.
+    production [Frontend.Ast] with test-only annotations.
 
     Targeted assertions cover the CPS factorial / fibonacci programs, the
     precedence ladder and a few error cases.  Sticky-mode demos live in a
     separate commit ({!Parse.opts}.{!Parse.sticky}). *)
 
-open Parsing
+open Frontend
 
 (* Generators ---------------------------------------------------------- *)
 
@@ -50,9 +50,9 @@ let nonempty_id_list_gen = QCheck.Gen.(list_size (int_range 1 4) id_gen)
     would overflow on huge numbers, so integers are small and non-negative. *)
 let int_gen = QCheck.Gen.int_bound 1000
 
-(* Generated AST (mirror of Parsing.Ast) ------------------------------- *)
+(* Generated AST (mirror of Frontend.Ast) ------------------------------- *)
 
-(** The [bind] record of {!Parsing.Ast} is inlined into the [Let] constructor
+(** The [bind] record of {!Frontend.Ast} is inlined into the [Let] constructor
     as a tuple: ppx_deriving_qcheck honours [@gen] on constructor arguments
     but silently ignores it on record fields, and identifiers must come from
     {!id_gen} to stay parsable. *)

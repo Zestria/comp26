@@ -20,7 +20,7 @@
     ~ms resolution, so the sizes are chosen to keep each run measurable
     while keeping the total wall-clock time in the low seconds. *)
 
-module Parse = Parsing.Parse
+module Parse = Frontend.Parse
 
 let default_iterations = 10
 

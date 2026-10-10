@@ -1,6 +1,6 @@
 (library
- (name parsing)
- (public_name MyLittleML.parsing)
+ (name frontend)
+ (public_name MyLittleML.frontend)
  (modules ast pp parser lexer parser_topdown parse)
  (libraries angstrom)
  (preprocess

@@ -17,13 +17,13 @@
     later tasks. *)
 
 type stop_after =
-  | Parsing
+  | Frontend
   | Anf
   | Closure
   | Lambda
 
 type opts =
-  { parser_kind : Parsing.Parse.parser_kind
+  { parser_kind : Frontend.Parse.parser_kind
   ; sticky : bool
   ; stop_after : stop_after
   ; output : string option
@@ -58,13 +58,13 @@ let fail_usage msg =
 
 let parse_parser_kind s =
   match s with
-  | "topdown" -> Parsing.Parse.Topdown
-  | "menhir" | "bottomup" -> Parsing.Parse.Bottomup
+  | "topdown" -> Frontend.Parse.Topdown
+  | "menhir" | "bottomup" -> Frontend.Parse.Bottomup
   | _ -> fail_usage ("unknown parser: " ^ s ^ " (expected 'topdown' or 'menhir')")
 ;;
 
 let parse_stop_after = function
-  | "parsing" -> Parsing
+  | "parsing" -> Frontend
   | "anf" -> Anf
   | "closure-conversion" -> Closure
   | "lambda-lifting" -> Lambda
@@ -72,7 +72,7 @@ let parse_stop_after = function
 ;;
 
 let parse_args argv =
-  let parser_kind = ref Parsing.Parse.Topdown in
+  let parser_kind = ref Frontend.Parse.Topdown in
   let sticky = ref false in
   let stop_after = ref Lambda in
   let output = ref None in
@@ -99,7 +99,7 @@ let parse_args argv =
       loop rest
     | "-o" :: [] -> fail_usage "option '-o' requires an argument"
     | ("--ast" | "--dump-ast") :: rest ->
-      stop_after := Parsing;
+      stop_after := Frontend;
       loop rest
     | "--help" :: _ ->
       print_string usage;
@@ -130,9 +130,9 @@ let read_input = function
 ;;
 
 let run opts source =
-  let popts = { Parsing.Parse.sticky = opts.sticky } in
+  let popts = { Frontend.Parse.sticky = opts.sticky } in
   let prog =
-    match Parsing.Parse.parse opts.parser_kind popts source with
+    match Frontend.Parse.parse opts.parser_kind popts source with
     | Ok prog -> prog
     | Error msg ->
       prerr_endline ("compiler: " ^ msg);
@@ -142,13 +142,13 @@ let run opts source =
     let prog = Middleend.Anf.anf_prog prog in
     let prog =
       match stage with
-      | Parsing -> assert false
+      | Frontend -> assert false
       | Anf -> prog
       | Closure | Lambda -> Middleend.Closure.convert_prog prog
     in
     let prog =
       match stage with
-      | Parsing -> assert false
+      | Frontend -> assert false
       | Lambda -> Middleend.Lambda_lift.lift_prog prog
       | Anf | Closure -> prog
     in
@@ -156,7 +156,7 @@ let run opts source =
   in
   let output =
     match opts.stop_after with
-    | Parsing -> Parsing.Ast.show_prog prog
+    | Frontend -> Frontend.Ast.show_prog prog
     | Anf -> show_anf Anf prog
     | Closure -> show_anf Closure prog
     | Lambda -> show_anf Lambda prog

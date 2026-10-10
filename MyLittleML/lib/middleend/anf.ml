@@ -13,7 +13,7 @@
     [aexp], not [cexp]: the ANF generator itself only ever puts cexp-shaped
     nodes there (see {!is_cexp_rhs}), while later passes (closure conversion)
     reuse the same type with richer right-hand sides. *)
-module A = Parsing.Ast
+module A = Frontend.Ast
 
 type rec_flag =
   | Rec

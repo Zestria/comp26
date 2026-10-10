@@ -1,7 +1,7 @@
 (library
  (name middleend)
  (public_name MyLittleML.middleend)
- (libraries parsing)
+ (libraries frontend)
  (preprocess
   (pps ppx_deriving.show))
  (instrumentation

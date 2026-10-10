@@ -9,12 +9,12 @@
 (** Reference evaluator for the MyLittleML middle-end (Task 2).
 
     {!eval_anf} covers the ANF, closure-converted and lifted programs (all
-    three share {!Anf.aprogram}); {!eval_src} handles source {!Parsing.Ast}
+    three share {!Anf.aprogram}); {!eval_src} handles source {!Frontend.Ast}
     programs.  [test_mid] checks that CPS factorial and fibonacci evaluate
     to the same integers on every stage.
 
     Semantics: call-by-value; applications are single-argument
-    ({!Parsing.Ast.App} is curried), multi-parameter functions build
+    ({!Frontend.Ast.App} is curried), multi-parameter functions build
     partial-application closures.  Top-level phrases thread one environment:
     declaration phrases extend it, expression phrases only read it.
 
@@ -25,7 +25,7 @@
     resolves seeds through the cell, so every use — including the wrapper
     closures closure conversion creates in the scope of the cell — sees the
     final value. *)
-module A = Parsing.Ast
+module A = Frontend.Ast
 open Anf
 
 exception Eval_error of string

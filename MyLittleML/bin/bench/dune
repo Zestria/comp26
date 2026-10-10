@@ -3,7 +3,7 @@
  (public_name MyLittleML-bench)
  (package MyLittleML)
  (modules main)
- (libraries parsing))
+ (libraries frontend))
 
 (cram
  (package MyLittleML)

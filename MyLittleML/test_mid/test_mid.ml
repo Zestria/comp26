@@ -20,7 +20,7 @@
     QCheck generators follow the [Test_qc] conventions: identifier pools and
     explicitly bounded sizes. *)
 
-open Parsing
+open Frontend
 open Middleend
 
 (* CPS programs (same as Test_qc) ------------------------------------------ *)
