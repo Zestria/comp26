@@ -101,8 +101,12 @@ val fold
   -> 'function_ term
   -> 'state
 
-(** Normalize a term satisfying [Lambda.validate], propagating atomic aliases
-    and avoiding unnecessary bindings for tail results.
+(** Normalize a term satisfying [Lambda.validate]. Propagate atomic aliases and
+    known immutable tuple fields, select constant boolean branches, avoid tail
+    result temporaries and remove unused nonrecursive allocations. Calls and
+    unknown projections remain eager even if their results are unused.
+    Recursive initialization safety must be checked before this transformation;
+    recursive initializers retain their scope and do not export value facts.
     Continue the supply used to build the input; return the supply for later passes. *)
 val of_lambda
   :  Id.supply

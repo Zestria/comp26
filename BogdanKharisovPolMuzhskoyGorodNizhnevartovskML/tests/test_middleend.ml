@@ -221,9 +221,11 @@ let closure_stage name source expected =
 ;;
 
 let minimal_environment =
-  let source = "fun x unused -> fun y -> x + y" in
+  let source =
+    "fun x unused -> let p = (x, unused) in fun y -> let (a, _) = p in a + y"
+  in
   QCheck.Test.make
-    ~name:"closure conversion captures exactly the used binding"
+    ~name:"closure conversion captures only the selected field of an eliminated tuple"
     ~count:1
     QCheck.unit
     (fun () ->
@@ -242,7 +244,7 @@ let minimal_environment =
        | _ ->
          fail
            source
-           "Expected one fresh environment slot for x, no capture of unused or (+)")
+           "Expected one fresh environment slot for x, no capture of p, unused or (+)")
 ;;
 
 let all_lifted =

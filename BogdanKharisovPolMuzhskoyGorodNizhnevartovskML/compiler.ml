@@ -17,7 +17,8 @@ type parser =
 type stage =
   | Parsing
   | Anf
-  | Middleend
+  | Cc
+  | Ll
 
 type command =
   | Run of parser * stage * string option * string option
@@ -32,7 +33,7 @@ let parse_arguments argv =
   let operator_extension = ref false in
   let input = ref None in
   let output = ref None in
-  let stage = ref Middleend in
+  let stage = ref Ll in
   let set_input path =
     match !input with
     | None -> input := Some path
@@ -46,13 +47,16 @@ let parse_arguments argv =
   let set_stop_after = function
     | "parsing" -> stage := Parsing
     | "anf" -> stage := Anf
-    | name -> raise (Arg.Bad ("Unknown stage: " ^ name ^ "; expected parsing or anf"))
+    | "cc" -> stage := Cc
+    | "ll" -> stage := Ll
+    | name ->
+      raise (Arg.Bad ("Unknown stage: " ^ name ^ "; expected parsing, anf, cc or ll"))
   in
   let options =
     [ "-parsing", Arg.String set_parsing, "NAME Use topdown (default) or menhir"
     ; ( "--stop-after"
       , Arg.String set_stop_after
-      , "STAGE Stop after parsing or anf (default: complete middleend)" )
+      , "STAGE Stop after parsing, anf, cc or ll (default: ll)" )
     ; ( "-o"
       , Arg.String (fun path -> output := Some path)
       , "FILE Write to FILE or - for stdout (default)" )
@@ -69,8 +73,8 @@ let parse_arguments argv =
       argv
       options
       set_input
-      "Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf] [-o FILE] \
-       [--operator-extension] [FILE]\n\
+      "Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o \
+       FILE] [--operator-extension] [FILE]\n\
        Without FILE, read standard input.";
     match !menhir, !operator_extension with
     | true, true -> Error "--operator-extension requires the Angstrom parser\n"
@@ -106,23 +110,19 @@ let run parser stage input output =
   let* program =
     Result.map_error (fun message -> "Parse error: " ^ message) (parse source)
   in
+  let middleend printer result =
+    Result.map
+      (fun program formatter -> printer formatter program)
+      (Result.map_error
+         (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
+         result)
+  in
   let* print_program =
     match stage with
     | Parsing -> Ok (fun formatter -> Frontend.Ast_print.program formatter program)
-    | Anf ->
-      let* program =
-        Result.map_error
-          (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
-          (Middleend.Pipeline.anf program)
-      in
-      Ok (fun formatter -> Middleend.Anf_print.program formatter program)
-    | Middleend ->
-      let* program =
-        Result.map_error
-          (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
-          (Middleend.Pipeline.compile program)
-      in
-      Ok (fun formatter -> Middleend.Lifted_print.program formatter program)
+    | Anf -> middleend Middleend.Anf_print.program (Middleend.Pipeline.anf program)
+    | Cc -> middleend Middleend.Closure_print.program (Middleend.Pipeline.cc program)
+    | Ll -> middleend Middleend.Lifted_print.program (Middleend.Pipeline.compile program)
   in
   let print channel =
     let formatter = Format.formatter_of_out_channel channel in

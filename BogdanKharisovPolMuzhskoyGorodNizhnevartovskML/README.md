@@ -27,8 +27,8 @@ comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorod
 ```
 
 - `-parsing topdown|menhir`: select the parser; defaults to topdown (Angstrom).
-- `--stop-after parsing|anf`: stop at the source AST or ANF. Without this option,
-  run the complete middleend and print lifted code with explicit closures.
+- `--stop-after parsing|anf|cc|ll`: stop at the source AST, ANF, closure conversion
+  or lambda lifting. The default is `ll`, the complete middleend.
 - `-o FILE`: write the selected representation to a file; `-o -` writes to stdout (the default).
 - `--operator-extension`: enable [operator declarations](#operator-declarations) (Angstrom only).
 - `FILE`: input file; omit it or use `-` to read stdin.
@@ -41,6 +41,7 @@ to stderr. Selecting `parsing` does not perform semantic checks.
 ```console
 comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- -parsing menhir -o program.ir program.ml
 comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- --stop-after anf -o program.anf program.ml
+comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- --stop-after cc -o program.cc program.ml
 ```
 
 ## Syntax

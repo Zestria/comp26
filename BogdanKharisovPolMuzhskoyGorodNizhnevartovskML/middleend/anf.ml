@@ -253,117 +253,217 @@ let sequence first second =
   | Tuple _ | Field _ | Function _ | Apply _ | If _ -> Sequence (first, second)
 ;;
 
+(* Remember aliases and immutable tuple fields without moving or copying
+   computations. Recursive initializers never publish facts. *)
+type approximation =
+  | Alias of atom
+  | Fields of atom list
+
+let remember environment id = function
+  | Atom value -> Id.Map.add id (Alias value) environment
+  | Tuple (a, b, rest) -> Id.Map.add id (Fields (a :: b :: rest)) environment
+  | Field _ | Function _ | Apply _ | If _ -> environment
+;;
+
+let resolve environment id =
+  match Id.Map.find_opt id environment with
+  | Some (Alias value) -> value
+  | Some (Fields _) | None -> Var id
+;;
+
+let project environment value index =
+  let field =
+    match value with
+    | Var id when index >= 0 ->
+      (match Id.Map.find_opt id environment with
+       | Some (Fields fields) -> List.nth_opt fields index
+       | Some (Alias _) | None -> None)
+    | Var _ | Constant _ | Primitive _ -> None
+  in
+  match field with
+  | Some value -> Atom value
+  | None -> Field (value, index)
+;;
+
+(* Visit uses before definitions and do not count
+   references in a discarded RHS. A set suffices: we do not inline computations.
+   Globally unique binding identities let us thread one set through branches
+   and function bodies without rescanning subtrees or merging free-variable sets.
+   Allocation alone is removable, but
+   calls may raise/diverge and an unknown projection may inspect a recursive
+   address before it is initialized. Keep both, even when their result is dead. *)
+let removable = function
+  | Atom _ | Tuple _ | Function _ -> true
+  | Field _ | Apply _ | If _ -> false
+;;
+
+let remove_unused expression =
+  let atom used = function
+    | Var id -> Id.Set.add id used
+    | Constant _ | Primitive _ -> used
+  in
+  let rec term used = function
+    | Return value ->
+      let used, value = computation used value in
+      used, Return value
+    | Let (id, value, body) ->
+      let used, body = term used body in
+      let needed = Id.Set.mem id used in
+      if (not needed) && removable value
+      then used, body
+      else (
+        let used, value = computation used value in
+        used, if needed then bind id value body else Sequence (value, body))
+    | Let_rec (id, value, body) ->
+      let used, body = term used body in
+      let used, value = term used value in
+      used, Let_rec (id, value, body)
+    | Sequence (first, second) ->
+      let used, second = term used second in
+      if removable first
+      then used, second
+      else (
+        let used, first = computation used first in
+        used, Sequence (first, second))
+  and computation used = function
+    | Atom value -> atom used value, Atom value
+    | (Tuple (a, b, rest) | Apply (a, b, rest)) as value ->
+      List.fold_left atom (atom (atom used a) b) rest, value
+    | Field (value, index) -> atom used value, Field (value, index)
+    | If (condition, yes, no) ->
+      let used, yes = term (atom used condition) yes in
+      let used, no = term used no in
+      used, If (condition, yes, no)
+    | Function definition ->
+      let used, body = term used definition.body in
+      used, Function { definition with body }
+  in
+  snd (term Id.Set.empty expression)
+;;
+
 let of_lambda supply expression =
-  let rec normalize aliases expression continuation supply =
+  (* The continuation inherits facts for bindings hoisted around it. Facts from
+     function bodies, unknown branches and recursive initializers stay local. *)
+  let rec normalize environment expression continuation supply =
     match expression with
-    | Lambda.Constant constant -> continuation (Atom (Constant constant)) supply
-    | Primitive primitive -> continuation (Atom (Primitive primitive)) supply
-    | Var id ->
-      let value = Option.value (Id.Map.find_opt id aliases) ~default:(Var id) in
-      continuation (Atom value) supply
+    | Lambda.Constant constant ->
+      continuation environment (Atom (Constant constant)) supply
+    | Primitive primitive -> continuation environment (Atom (Primitive primitive)) supply
+    | Var id -> continuation environment (Atom (resolve environment id)) supply
     | Tuple (a, b, rest) ->
       atoms
-        aliases
+        environment
         rest
-        (fun rest supply ->
+        (fun environment rest supply ->
            atom
-             aliases
+             environment
              b
-             (fun b supply ->
+             (fun environment b supply ->
                 atom
-                  aliases
+                  environment
                   a
-                  (fun a supply -> continuation (Tuple (a, b, rest)) supply)
+                  (fun environment a supply ->
+                     continuation environment (Tuple (a, b, rest)) supply)
                   supply)
              supply)
         supply
     | Field (value, index) ->
       atom
-        aliases
+        environment
         value
-        (fun value supply -> continuation (Field (value, index)) supply)
+        (fun environment value supply ->
+           continuation environment (project environment value index) supply)
         supply
     | Fun { parameter; parameters; body } ->
-      let* body, supply = normalize aliases body return supply in
-      continuation (Function { parameter; parameters; body }) supply
+      let* body, supply = normalize environment body return supply in
+      continuation environment (Function { parameter; parameters; body }) supply
     | Apply (f, a, rest) ->
       atoms
-        aliases
+        environment
         rest
-        (fun rest supply ->
+        (fun environment rest supply ->
            atom
-             aliases
+             environment
              a
-             (fun a supply ->
+             (fun environment a supply ->
                 atom
-                  aliases
+                  environment
                   f
-                  (fun f supply -> continuation (Apply (f, a, rest)) supply)
+                  (fun environment f supply ->
+                     continuation environment (Apply (f, a, rest)) supply)
                   supply)
              supply)
         supply
     | Let (id, value, body) ->
       normalize
-        aliases
+        environment
         value
-        (fun value supply ->
+        (fun environment value supply ->
+           let environment = remember environment id value in
            match value with
-           | Atom value ->
-             normalize (Id.Map.add id value aliases) body continuation supply
+           | Atom _ -> normalize environment body continuation supply
            | value ->
-             let* body, supply = normalize aliases body continuation supply in
+             let* body, supply = normalize environment body continuation supply in
              Ok (bind id value body, supply))
         supply
     | Let_rec (id, value, body) ->
-      let* value, supply = normalize aliases value return supply in
-      let* body, supply = normalize aliases body continuation supply in
+      let* value, supply = normalize environment value return supply in
+      let* body, supply = normalize environment body continuation supply in
       Ok (Let_rec (id, value, body), supply)
     | If (condition, yes, no) ->
       atom
-        aliases
+        environment
         condition
-        (fun condition supply ->
-           (* Apply the continuation once to the whole conditional. Distributing
+        (fun environment condition supply ->
+           match condition with
+           | Constant (Bool choice) ->
+             normalize environment (if choice then yes else no) continuation supply
+           | Constant _ | Var _ | Primitive _ ->
+             (* Apply the continuation once to the whole conditional. Distributing
            it into both branches would duplicate code and binding identities. *)
-           let* yes, supply = normalize aliases yes return supply in
-           let* no, supply = normalize aliases no return supply in
-           continuation (If (condition, yes, no)) supply)
+             let* yes, supply = normalize environment yes return supply in
+             let* no, supply = normalize environment no return supply in
+             continuation environment (If (condition, yes, no)) supply)
         supply
     | Sequence (first, second) ->
       normalize
-        aliases
+        environment
         first
-        (fun first supply ->
-           let* second, supply = normalize aliases second continuation supply in
+        (fun environment first supply ->
+           let* second, supply = normalize environment second continuation supply in
            Ok (sequence first second, supply))
         supply
-  and return value supply = Ok (Return value, supply)
-  and atom aliases expression continuation supply =
+  and return _ value supply = Ok (Return value, supply)
+  and atom environment expression continuation supply =
     normalize
-      aliases
+      environment
       expression
-      (fun value supply ->
+      (fun environment value supply ->
          match value with
-         | Atom value -> continuation value supply
+         | Atom value -> continuation environment value supply
          | value ->
            let* id, supply = Id.fresh supply "tmp" in
-           let* body, supply = continuation (Var id) supply in
+           let* body, supply =
+             continuation (remember environment id value) (Var id) supply
+           in
            Ok (bind id value body, supply))
       supply
-  and atoms aliases expressions continuation supply =
+  and atoms environment expressions continuation supply =
     match expressions with
-    | [] -> continuation [] supply
+    | [] -> continuation environment [] supply
     | expression :: rest ->
       atoms
-        aliases
+        environment
         rest
-        (fun rest supply ->
+        (fun environment rest supply ->
            atom
-             aliases
+             environment
              expression
-             (fun atom supply -> continuation (atom :: rest) supply)
+             (fun environment atom supply ->
+                continuation environment (atom :: rest) supply)
              supply)
         supply
   in
-  normalize Id.Map.empty expression return supply
+  let* result, supply = normalize Id.Map.empty expression return supply in
+  Ok (remove_unused result, supply)
 ;;

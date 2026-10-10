@@ -24,6 +24,12 @@ An empty program has no computations and returns unit.
   $ printf '' | ../compiler.exe --stop-after anf
   ()
 
+ANF eliminates known tuple projections and unreachable branches before printing.
+
+  $ printf 'let (a, b) = (40, 2);; if true then a + b else 1 / 0' | ../compiler.exe --stop-after anf
+  let _ = (+) 40 2 in
+  ()
+
 The last requested stage wins; parsing still accepts unresolved names.
 
   $ printf 'unknown' | ../compiler.exe --stop-after anf --stop-after parsing
@@ -104,10 +110,10 @@ Multiple files are rejected.
 Help succeeds without opening the input file.
 
   $ ../compiler.exe missing-input --help
-  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf] [-o FILE] [--operator-extension] [FILE]
+  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o FILE] [--operator-extension] [FILE]
   Without FILE, read standard input.
     -parsing NAME Use topdown (default) or menhir
-    --stop-after STAGE Stop after parsing or anf (default: complete middleend)
+    --stop-after STAGE Stop after parsing, anf, cc or ll (default: ll)
     -o FILE Write to FILE or - for stdout (default)
     --operator-extension  Enable operator declarations (Angstrom only)
     -  Read standard input
@@ -221,8 +227,16 @@ An unknown stage fails before opening input or output.
   [2]
   $ cat out
   $ head -n 1 err
-  ../compiler.exe: Unknown stage: unknown; expected parsing or anf.
+  ../compiler.exe: Unknown stage: unknown; expected parsing, anf, cc or ll.
   $ test ! -e absent-stage-result
+
+An unknown stage preserves an existing output file.
+
+  $ printf 'keep me\n' > preserved-stage-result
+  $ ../compiler.exe --stop-after unknown -o preserved-stage-result missing-input >out 2>err
+  [2]
+  $ cat preserved-stage-result
+  keep me
 
 The output option requires a filename.
 
@@ -285,6 +299,73 @@ Stopping after ANF retains nested functions and does not perform lifting.
   $ ../compiler.exe closure-input --stop-after anf
   let make_0 = fun x_1 -> fun y_2 -> (+) x_1 y_2 in
   let _ = make_0 40 2 in
+  ()
+
+Stopping after CC shows construction captures separately from fresh function slots.
+
+  $ ../compiler.exe -parsing topdown closure-input --stop-after cc -o -
+  let make_0 = closure [] (fun [] x_1 ->
+                 closure [x_1] (fun [x_2] y_3 -> (+) x_2 y_3)) in
+  let _ = make_0 40 2 in
+  ()
+
+Menhir also stops after CC and writes the nested code to a file.
+
+  $ ../compiler.exe -parsing menhir closure-input --stop-after cc -o cc-output
+  $ cat cc-output
+  let make_0 = closure [] (fun [] x_1 ->
+                 closure [x_1] (fun [x_2] y_3 -> (+) x_2 y_3)) in
+  let _ = make_0 40 2 in
+  ()
+
+Explicit LL with topdown and stdout is identical to the default full pipeline.
+
+  $ ../compiler.exe -parsing topdown closure-input --stop-after ll -o - > explicit-ll-output
+  $ cmp closure-output explicit-ll-output
+
+Explicit LL with Menhir and file output is also identical to the default pipeline.
+
+  $ ../compiler.exe -parsing menhir closure-input --stop-after ll -o explicit-ll-file
+  $ cmp closure-output explicit-ll-file
+
+A final CC option overrides an earlier LL option.
+
+  $ ../compiler.exe closure-input --stop-after ll --stop-after cc -o last-cc-output
+  $ cmp cc-output last-cc-output
+
+A final LL option overrides an earlier CC option.
+
+  $ ../compiler.exe closure-input --stop-after cc --stop-after ll -o last-ll-output
+  $ cmp closure-output last-ll-output
+
+Parsing can still override CC and omit semantic checks.
+
+  $ printf 'unknown' | ../compiler.exe --stop-after cc --stop-after parsing
+  [Evaluation (Var "unknown")]
+
+CC rejects unresolved names before creating an output file.
+
+  $ printf 'unknown' | ../compiler.exe --stop-after cc -o absent-cc-output >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: Unbound value unknown
+  $ test ! -e absent-cc-output
+
+CC checks recursive source patterns before normalization and preserves existing output.
+
+  $ printf 'keep me\n' > preserved-cc-output
+  $ printf 'let rec p = let (_, _) = p in (1, 2)' | ../compiler.exe -parsing menhir --stop-after cc -o preserved-cc-output >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: This kind of expression is not allowed on the right of let rec p
+  $ cat preserved-cc-output
+  keep me
+
+An empty program can stop after CC.
+
+  $ printf '' | ../compiler.exe --stop-after cc
   ()
 
 An empty program also passes through the full pipeline.

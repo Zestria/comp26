@@ -58,16 +58,31 @@ let normalize_program supply program =
   normalize supply lambda
 ;;
 
-let finish supply anf =
+let close supply anf =
   let* closed, supply = allocated (Closure_conversion.convert supply anf) in
   let* () = Result.map_error (fun e -> Closure_error e) (Closure.validate closed) in
+  Ok (closed, supply)
+;;
+
+let lift supply closed =
   let* lifted, supply = allocated (Lambda_lifting.lift supply closed) in
   let* () = Result.map_error (fun e -> Lifted_error e) (Lifted.validate lifted) in
   Ok (lifted, supply)
 ;;
 
+let finish supply anf =
+  let* closed, supply = close supply anf in
+  lift supply closed
+;;
+
 let run action = Result.map fst (action Id.initial)
 let anf program = run (fun supply -> normalize_program supply program)
+
+let cc program =
+  run (fun supply ->
+    let* anf, supply = normalize_program supply program in
+    close supply anf)
+;;
 
 let compile program =
   run (fun supply ->
