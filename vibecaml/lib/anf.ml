@@ -33,8 +33,8 @@ type program = item list
 let aimm value = ACExpr (CImmExpr value)
 let avar name = aimm (ImmId name)
 
-(* Правила скобок для операторов и отрицательных констант уже есть в Pprint.
-   Используем их и здесь, чтобы два принтера не расходились. *)
+(* Атом как выражение Ast: печатаем его через Pprint, чтобы операторы,
+   приоритеты и скобки выглядели так же, как в исходной программе. *)
 let expression_of_atom = function
   | ImmNum n -> Ast.Expr_constant (Ast.Const_int n)
   | ImmBool b -> Ast.Expr_constant (Ast.Const_bool b)
