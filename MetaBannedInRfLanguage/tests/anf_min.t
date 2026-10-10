@@ -157,3 +157,35 @@ let rec of a non-function is rejected
   $ ../driver/compiler.exe --stop-after anf bad_rec.ml
   compiler: the right-hand side of let rec must be a function
   [1]
+
+Printer: negative numbers, operators as values, match failure, top-level expressions
+
+  $ cat > print.ml <<EOF
+  > let neg x = x * -1;;
+  > let mul = ( * );;
+  > let first p = match p with
+  >   | (0, y) -> y;;
+  > let _ = neg (mul 2 3)
+  > EOF
+
+  $ ../driver/compiler.exe --stop-after anf print.ml
+  let neg x = x * (-1);;
+  let mul = ( * );;
+  let first p =
+    let (t1, y) = p in
+    let t2 = t1 = 0 in
+    if t2
+    then y
+    else assert false
+  ;;
+  let _ =
+    let t3 = mul 2 3 in
+    neg t3
+  ;;
+  $ ../driver/compiler.exe --stop-after anf print.ml > print_anf.ml
+
+The printed ANF is read back the same by both parsers
+
+  $ ../driver/compiler.exe -parsing topdown print_anf.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir print_anf.ml > menhir.txt
+  $ diff topdown.txt menhir.txt
