@@ -14,4 +14,16 @@ type t
 
 val create : taken:SSet.t -> t
 val create_from_program : Anf.program -> t
-val fresh : ?suffix:string -> t -> string -> string
+
+(** [fresh ~suffix t base] is a name [base ^ suffix ^ n] that is neither taken
+    nor generated before, and the generator that remembers it. *)
+val fresh : ?suffix:string -> t -> string -> string * t
+
+(** A computation that draws fresh names. *)
+type 'a gen = t -> 'a * t
+
+val return : 'a -> 'a gen
+val ( let* ) : 'a gen -> ('a -> 'b gen) -> 'b gen
+val name : ?suffix:string -> string -> string gen
+val map_list : ('a -> 'b gen) -> 'a list -> 'b list gen
+val run : t -> 'a gen -> 'a

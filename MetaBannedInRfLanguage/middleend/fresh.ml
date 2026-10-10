@@ -63,22 +63,44 @@ let program_idents program = List.fold_left idents_item SSet.empty program
 
 type t =
   { taken : SSet.t
-  ; mutable generated : SSet.t
-  ; mutable counter : int
+  ; generated : SSet.t
+  ; counter : int
   }
 
 let create ~taken = { taken; generated = SSet.empty; counter = 0 }
 let create_from_program program = create ~taken:(program_idents program)
 
 let fresh ?(suffix = "__f") t base =
-  let rec attempt () =
-    t.counter <- t.counter + 1;
-    let name = Printf.sprintf "%s%s%d" base suffix t.counter in
+  let rec attempt counter =
+    let name = Printf.sprintf "%s%s%d" base suffix counter in
     if SSet.mem name t.taken || SSet.mem name t.generated
-    then attempt ()
-    else (
-      t.generated <- SSet.add name t.generated;
-      name)
+    then attempt (counter + 1)
+    else name, { t with generated = SSet.add name t.generated; counter }
   in
-  attempt ()
+  attempt (t.counter + 1)
 ;;
+
+type 'a gen = t -> 'a * t
+
+let return value t = value, t
+
+let ( let* ) computation f t =
+  let value, t = computation t in
+  f value t
+;;
+
+let name ?suffix base t = fresh ?suffix t base
+
+let map_list f items t =
+  let reversed, t =
+    List.fold_left
+      (fun (acc, t) item ->
+         let value, t = f item t in
+         value :: acc, t)
+      ([], t)
+      items
+  in
+  List.rev reversed, t
+;;
+
+let run t computation = fst (computation t)

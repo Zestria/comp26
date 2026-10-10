@@ -7,52 +7,36 @@
 [@@@ocaml.text "/*"]
 
 open Anf
+module SMap = Map.Make (String)
+
+let bump counts name =
+  SMap.update name (fun count -> Some (Option.value count ~default:0 + 1)) counts
+;;
 
 let binder_counts program =
-  let counts : (string, int) Hashtbl.t = Hashtbl.create 64 in
-  let bump name =
-    let current = Option.value (Hashtbl.find_opt counts name) ~default:0 in
-    Hashtbl.replace counts name (current + 1)
+  let rec cexpr counts = function
+    | CImm _ | CApp _ | CTuple _ | CMatchFailure -> counts
+    | CFun (params, body) -> aexpr (List.fold_left bump counts params) body
+    | CIte (_, then_branch, else_branch) -> aexpr (aexpr counts then_branch) else_branch
+  and aexpr counts = function
+    | ACExpr expr -> cexpr counts expr
+    | ALet (name, value, body) -> aexpr (bump (cexpr counts value) name) body
+    | ALetTuple (names, _, body) ->
+      let counts =
+        List.fold_left
+          (fun counts name -> Option.fold ~none:counts ~some:(bump counts) name)
+          counts
+          names
+      in
+      aexpr counts body
+    | ALetRec (bindings, body) -> aexpr (List.fold_left binding counts bindings) body
+  and binding counts (name, value) = cexpr (bump counts name) value in
+  let item counts = function
+    | AValue (name, body) -> aexpr (bump counts name) body
+    | ARec bindings -> List.fold_left binding counts bindings
+    | AEval body -> aexpr counts body
   in
-  let rec cexpr = function
-    | CImm _ | CApp _ | CTuple _ | CMatchFailure -> ()
-    | CFun (params, body) ->
-      List.iter bump params;
-      aexpr body
-    | CIte (_, then_branch, else_branch) ->
-      aexpr then_branch;
-      aexpr else_branch
-  and aexpr = function
-    | ACExpr expr -> cexpr expr
-    | ALet (name, value, body) ->
-      cexpr value;
-      bump name;
-      aexpr body
-    | ALetTuple (names, subject, body) ->
-      List.iter (Option.iter bump) names;
-      aexpr body
-    | ALetRec (bindings, body) ->
-      List.iter
-        (fun (name, value) ->
-           bump name;
-           cexpr value)
-        bindings;
-      aexpr body
-  in
-  let item = function
-    | AValue (name, body) ->
-      bump name;
-      aexpr body
-    | ARec bindings ->
-      List.iter
-        (fun (name, value) ->
-           bump name;
-           cexpr value)
-        bindings
-    | AEval body -> aexpr body
-  in
-  List.iter item program;
-  counts
+  List.fold_left item SMap.empty program
 ;;
 
 (* ---------- simplification ----------
@@ -112,89 +96,95 @@ let simplify_item = function
   | AEval body -> AEval (simplify_aexpr body)
 ;;
 
-type ctx =
-  { gen : Fresh.t
-  ; counts : (string, int) Hashtbl.t
-  }
+let ( let* ) = Fresh.( let* )
+let return = Fresh.return
 
-let can_reuse ctx name = Option.value (Hashtbl.find_opt ctx.counts name) ~default:0 = 1
+type ctx = { counts : int SMap.t }
+
+let can_reuse ctx name = Option.value (SMap.find_opt name ctx.counts) ~default:0 = 1
 
 let rec hoist_aexpr ctx = function
   | ALet (name, CFun (params, body), cont) ->
-    let body', body_items = hoist_aexpr ctx body in
-    let cont', cont_items = hoist_aexpr ctx cont in
-    let lifted, binding =
+    let* body', body_items = hoist_aexpr ctx body in
+    let* cont', cont_items = hoist_aexpr ctx cont in
+    let* lifted, binding =
       if can_reuse ctx name
-      then name, cont'
-      else (
-        let fresh = Fresh.fresh ~suffix:"__ll" ctx.gen name in
-        fresh, ALet (name, CImm (ImmVar fresh), cont'))
+      then return (name, cont')
+      else
+        let* fresh = Fresh.name ~suffix:"__ll" name in
+        return (fresh, ALet (name, CImm (ImmVar fresh), cont'))
     in
-    binding, body_items @ [ AValue (lifted, ACExpr (CFun (params, body'))) ] @ cont_items
+    return
+      ( binding
+      , body_items @ [ AValue (lifted, ACExpr (CFun (params, body'))) ] @ cont_items )
   | ALet (name, value, cont) ->
-    let value', value_items = hoist_cexpr ctx value in
-    let cont', cont_items = hoist_aexpr ctx cont in
-    ALet (name, value', cont'), value_items @ cont_items
+    let* value', value_items = hoist_cexpr ctx value in
+    let* cont', cont_items = hoist_aexpr ctx cont in
+    return (ALet (name, value', cont'), value_items @ cont_items)
   | ACExpr (CFun (params, body)) ->
-    let body', body_items = hoist_aexpr ctx body in
-    let fresh = Fresh.fresh ~suffix:"__ll" ctx.gen "f" in
-    ( ACExpr (CImm (ImmVar fresh))
-    , body_items @ [ AValue (fresh, ACExpr (CFun (params, body'))) ] )
+    let* body', body_items = hoist_aexpr ctx body in
+    let* fresh = Fresh.name ~suffix:"__ll" "f" in
+    return
+      ( ACExpr (CImm (ImmVar fresh))
+      , body_items @ [ AValue (fresh, ACExpr (CFun (params, body'))) ] )
   | ACExpr value ->
-    let value', value_items = hoist_cexpr ctx value in
-    ACExpr value', value_items
+    let* value', value_items = hoist_cexpr ctx value in
+    return (ACExpr value', value_items)
   | ALetTuple (names, subject, cont) ->
-    let cont', cont_items = hoist_aexpr ctx cont in
-    ALetTuple (names, subject, cont'), cont_items
+    let* cont', cont_items = hoist_aexpr ctx cont in
+    return (ALetTuple (names, subject, cont'), cont_items)
   | ALetRec (bindings, cont) ->
-    let bindings', body_items = hoist_bindings ctx bindings in
-    let cont', cont_items = hoist_aexpr ctx cont in
-    ALetRec (bindings', cont'), body_items @ cont_items
+    let* bindings', body_items = hoist_bindings ctx bindings in
+    let* cont', cont_items = hoist_aexpr ctx cont in
+    return (ALetRec (bindings', cont'), body_items @ cont_items)
 
 and hoist_cexpr ctx = function
-  | (CImm _ | CApp _ | CTuple _ | CMatchFailure) as value -> value, []
   | CIte (cond, then_branch, else_branch) ->
-    let then_branch', then_items = hoist_aexpr ctx then_branch in
-    let else_branch', else_items = hoist_aexpr ctx else_branch in
-    CIte (cond, then_branch', else_branch'), then_items @ else_items
-  | CFun _ ->
-    (* Unreachable: lambdas are processed by hoist_aexpr. *)
-    assert false
+    let* then_branch', then_items = hoist_aexpr ctx then_branch in
+    let* else_branch', else_items = hoist_aexpr ctx else_branch in
+    return (CIte (cond, then_branch', else_branch'), then_items @ else_items)
+  | (CImm _ | CApp _ | CTuple _ | CMatchFailure | CFun _) as value ->
+    (* A lambda never gets here: [hoist_aexpr] and [hoist_bindings] lift it
+       first, and ANF never puts a lambda in any other cexpr position. *)
+    return (value, [])
 
 (* Don't touch the group, just hoist what's inside its bodies. *)
 and hoist_bindings ctx bindings =
-  let rec loop acc_bindings acc_items = function
-    | [] -> List.rev acc_bindings, acc_items
-    | (name, value) :: rest ->
-      (match value with
-       | CFun (params, body) ->
-         let body', body_items = hoist_aexpr ctx body in
-         loop ((name, CFun (params, body')) :: acc_bindings) (acc_items @ body_items) rest
-       | _ ->
-         let value', value_items = hoist_cexpr ctx value in
-         loop ((name, value') :: acc_bindings) (acc_items @ value_items) rest)
+  let hoist_binding (name, value) =
+    match value with
+    | CFun (params, body) ->
+      let* body', items = hoist_aexpr ctx body in
+      return ((name, CFun (params, body')), items)
+    | _ ->
+      let* value', items = hoist_cexpr ctx value in
+      return ((name, value'), items)
   in
-  loop [] [] bindings
+  let* hoisted = Fresh.map_list hoist_binding bindings in
+  return (List.map fst hoisted, List.concat_map snd hoisted)
 ;;
 
 let hoist_item ctx = function
   | AValue (name, ACExpr (CFun (params, body))) ->
-    let body', items = hoist_aexpr ctx body in
-    items @ [ AValue (name, ACExpr (CFun (params, body'))) ]
+    let* body', items = hoist_aexpr ctx body in
+    return (items @ [ AValue (name, ACExpr (CFun (params, body'))) ])
   | AValue (name, body) ->
-    let body', items = hoist_aexpr ctx body in
-    items @ [ AValue (name, body') ]
+    let* body', items = hoist_aexpr ctx body in
+    return (items @ [ AValue (name, body') ])
   | ARec bindings ->
-    let bindings', items = hoist_bindings ctx bindings in
-    items @ [ ARec bindings' ]
+    let* bindings', items = hoist_bindings ctx bindings in
+    return (items @ [ ARec bindings' ])
   | AEval body ->
-    let body', items = hoist_aexpr ctx body in
-    items @ [ AEval body' ]
+    let* body', items = hoist_aexpr ctx body in
+    return (items @ [ AEval body' ])
 ;;
 
 let program program =
   let program = List.map simplify_item program in
-  let gen = Fresh.create_from_program program in
-  let ctx = { gen; counts = binder_counts program } in
-  List.concat_map (hoist_item ctx) program
+  let ctx = { counts = binder_counts program } in
+  let hoisted =
+    Fresh.run
+      (Fresh.create_from_program program)
+      (Fresh.map_list (hoist_item ctx) program)
+  in
+  List.concat hoisted
 ;;
