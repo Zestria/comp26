@@ -21,6 +21,7 @@
   branch.src: 0
   builtin_shadow.src: 5
   capture.src: 12
+  curried.src: 66654151415
   deep.src: 6
   discarded.src: 5
   effects.src: 21343

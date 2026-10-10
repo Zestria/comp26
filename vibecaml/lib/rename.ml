@@ -67,7 +67,12 @@ let rec rename_expr used env = function
     let first, env, used = rename_pattern used env first in
     let rest, env, used = rename_patterns used env rest in
     let body, used = rename_expr used env body in
-    Expr_fun (first, rest, body), used
+    (* Тело уже переименовано и склеено, поэтому одного шага хватает на цепочку
+       любой длины. Между fun нет вычислений, так что склейка безопасна. *)
+    (match body with
+     | Expr_fun (inner, inner_rest, inner_body) ->
+       Expr_fun (first, rest @ (inner :: inner_rest), inner_body), used
+     | _ -> Expr_fun (first, rest, body), used)
   | Expr_app (f, a) ->
     let f, used = rename_expr used env f in
     let a, used = rename_expr used env a in

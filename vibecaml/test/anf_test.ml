@@ -63,6 +63,26 @@ let call_sizes name program =
 
 let simplified source = Anf_simplify.simplify (normalized source)
 
+let unwrap = function
+  | Ok value -> value
+  | Error message -> fail message
+;;
+
+(* Полный конвейер middleend: rename, closure conversion, lambda lifting, ANF. *)
+let through_middleend source =
+  Fresh.reset ();
+  unwrap (Rd_parser.parse_structure Config.default_extensions source)
+  |> Rename.rename
+  |> unwrap
+  |> Closure_conv.convert
+  |> unwrap
+  |> Lambda_lift.lift
+  |> unwrap
+  |> Anf_conv.convert
+  |> unwrap
+  |> Anf_simplify.simplify
+;;
+
 let () =
   let program =
     normalized "let f a b = a + b\nlet apply k x y = k x y\nlet main = f 1 2"
@@ -196,5 +216,11 @@ let () =
     ; "let rec _ = fun recursive_arg -> recursive_arg"
     ];
   require (normalized "" = []) "пустая программа не поддерживается";
+  let program =
+    through_middleend "let mk a = fun b -> fun c -> a + b + c\nlet main = mk 1 2 3"
+  in
+  require
+    (List.filter (fun (name, _) -> name = "mk") (call_sizes "main" program) = [ "mk", 3 ])
+    "вложенные fun не склеены: вызов mk не получил все три аргумента";
   print_endline "ANF: структура, арность, условия, паттерны и уменьшение — OK"
 ;;
