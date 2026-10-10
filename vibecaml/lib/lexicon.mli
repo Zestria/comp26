@@ -27,6 +27,8 @@ val binary_operators : (string list * associativity) list
 val operators : string list
 
 (** Имена, приходящие из окружения исполнения: операторы, [~-] и [print_int].
+    [~-] --- внутреннее имя унарного минуса: парсеры строят его из [-e], а
+    написать [~-] в исходнике нельзя (ADR 0001).
     Rename не переименовывает их, closure conversion считает их глобальными.
     Список один на оба прохода, чтобы они не разошлись. *)
 val builtins : string list

@@ -63,6 +63,26 @@ let call_sizes name program =
 
 let simplified source = Anf_simplify.simplify (normalized source)
 
+let unwrap = function
+  | Ok value -> value
+  | Error message -> fail message
+;;
+
+(* Полный конвейер middleend: rename, closure conversion, lambda lifting, ANF. *)
+let through_middleend source =
+  Fresh.reset ();
+  unwrap (Rd_parser.parse_structure Config.default_extensions source)
+  |> Rename.rename
+  |> unwrap
+  |> Closure_conv.convert
+  |> unwrap
+  |> Lambda_lift.lift
+  |> unwrap
+  |> Anf_conv.convert
+  |> unwrap
+  |> Anf_simplify.simplify
+;;
+
 let () =
   let program =
     normalized "let f a b = a + b\nlet apply k x y = k x y\nlet main = f 1 2"
@@ -154,6 +174,27 @@ let () =
   require
     (List.mem ("print_int", 1) (call_sizes "f" program))
     "потерян вызов с побочным эффектом";
+  let program = normalized "let f x = let unused = (x, x) in let (a, b) = (x, 1) in a" in
+  let smaller = Anf_simplify.simplify program in
+  require
+    (Anf.count_lets smaller < Anf.count_lets program)
+    "неиспользуемый кортеж или поле не удалены";
+  let count predicate =
+    List.length (List.filter predicate (computations (body "f" smaller)))
+  in
+  require
+    (count (function
+       | CTuple _ -> true
+       | _ -> false)
+     = 1)
+    "неиспользуемый кортеж сохранился";
+  require
+    (count (function
+       | CField _ -> true
+       | _ -> false)
+     = 1)
+    "неиспользуемое поле сохранилось";
+  require (Anf_simplify.simplify smaller = smaller) "уменьшение не идемпотентно";
   let aliases =
     [ ( Ast.Non_recursive
       , [ ( "f"
@@ -175,5 +216,11 @@ let () =
     ; "let rec _ = fun recursive_arg -> recursive_arg"
     ];
   require (normalized "" = []) "пустая программа не поддерживается";
+  let program =
+    through_middleend "let mk a = fun b -> fun c -> a + b + c\nlet main = mk 1 2 3"
+  in
+  require
+    (List.filter (fun (name, _) -> name = "mk") (call_sizes "main" program) = [ "mk", 3 ])
+    "вложенные fun не склеены: вызов mk не получил все три аргумента";
   print_endline "ANF: структура, арность, условия, паттерны и уменьшение — OK"
 ;;

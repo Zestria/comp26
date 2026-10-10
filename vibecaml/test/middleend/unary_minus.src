@@ -1,0 +1,3 @@
+let neg x = -x
+let f x = x + 1
+let () = print_int (neg 3 + -f 4 - -(2 * 3))
