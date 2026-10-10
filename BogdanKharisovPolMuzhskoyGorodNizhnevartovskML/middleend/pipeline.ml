@@ -8,12 +8,14 @@
 
 type error =
   | Source_error of Lower.error
+  | Recursive_error of Recursive_check.error
   | Invariant_error of string * Lambda.invariant_error
   | Identifier_error of Id.error
 
 let error_to_string = function
   | Identifier_error error -> Id.error_to_string error
   | Source_error error -> Lower.error_to_string error
+  | Recursive_error error -> Recursive_check.error_to_string error
   | Invariant_error (stage, error) ->
     let detail = Lambda.invariant_error_to_string error in
     "Internal invariant failure after " ^ stage ^ ": " ^ detail
@@ -28,8 +30,9 @@ let source_error = function
 
 let allocated result = Result.map_error (fun error -> Identifier_error error) result
 
-let source lower supply source =
+let source lower check supply source =
   let* lambda, supply = Result.map_error source_error (lower supply source) in
+  let* () = Result.map_error (fun e -> Recursive_error e) (check source) in
   let* () =
     Result.map_error (fun e -> Invariant_error ("lowering", e)) (Lambda.validate lambda)
   in
@@ -45,7 +48,7 @@ let normalize supply lambda =
 ;;
 
 let normalize_program supply program =
-  let* lambda, supply = source Lower.program supply program in
+  let* lambda, supply = source Lower.program Recursive_check.program supply program in
   normalize supply lambda
 ;;
 

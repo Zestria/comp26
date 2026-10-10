@@ -8,6 +8,7 @@
 
 type error =
   | Source_error of Lower.error
+  | Recursive_error of Recursive_check.error
   | Invariant_error of string * Lambda.invariant_error
   | Identifier_error of Id.error
 

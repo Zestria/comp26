@@ -30,6 +30,12 @@
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend middleend_test_support qcheck))
 
+(test
+ (name test_recursive_values)
+ (modules test_recursive_values)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))
+
 (library
  (name frontend_expect_tests)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
