@@ -49,13 +49,11 @@ let check name source expected shape =
   QCheck.Test.make ~name ~count:1 QCheck.unit (fun () ->
     let program = compile source in
     let _ = equal source expected (observe source Anf_eval.lifted program) in
-    if shape program
-    then true
-    else
-      fail
-        source
-        ("Unexpected optimized structure:\n"
-         ^ Format.asprintf "%a" Lifted_print.program program))
+    shape program
+    || fail
+         source
+         ("Unexpected optimized structure:\n"
+          ^ Format.asprintf "%a" Lifted_print.program program))
 ;;
 
 let no_value_closures program =
@@ -250,9 +248,8 @@ let sites name same =
         (fun (d : Lifted.function_definition) -> Id.equal d.code code)
         program.functions
     in
-    if definition.environment = [] = same
-    then true
-    else fail name "All incoming capture identities must agree before specializing a slot")
+    definition.environment = [] = same
+    || fail name "All incoming capture identities must agree before specializing a slot")
 ;;
 
 let invalid name make expected =
@@ -345,9 +342,8 @@ let unknown_cycle =
         (fun (definition : Lifted.function_definition) -> Id.equal definition.code code)
         program.functions
     in
-    if definition.environment <> []
-    then true
-    else fail name "An unresolved incoming capture must make the shared slot unknown")
+    definition.environment <> []
+    || fail name "An unresolved incoming capture must make the shared slot unknown")
 ;;
 
 let generated_helpers =
@@ -372,9 +368,8 @@ let generated_helpers =
            (string_of_int (input + depth))
            (observe source Anf_eval.lifted program)
        in
-       if no_value_closures program
-       then true
-       else fail source "A closed known helper must not remain in any value environment")
+       no_value_closures program
+       || fail source "A closed known helper must not remain in any value environment")
 ;;
 
 let generated_open_helpers =
@@ -407,9 +402,8 @@ let generated_open_helpers =
            (string_of_int (captured + captured + 1 + argument + argument))
            (observe source Anf_eval.lifted program)
        in
-       if retains_environment program
-       then true
-       else fail source "Transitive calls cannot discard the environment supplying x")
+       retains_environment program
+       || fail source "Transitive calls cannot discard the environment supplying x")
 ;;
 
 let generated_capture_paths =
@@ -443,9 +437,8 @@ let generated_capture_paths =
        in
        let program = compile source in
        let _ = equal source "42" (observe source Anf_eval.lifted program) in
-       if environments_empty program && (counts program).direct > 0
-       then true
-       else fail source "The known closed inc should not remain in any capture slot")
+       (environments_empty program && (counts program).direct > 0)
+       || fail source "The known closed inc should not remain in any capture slot")
 ;;
 
 let () =

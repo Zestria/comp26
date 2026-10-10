@@ -132,7 +132,8 @@ let rec free : type a. a expression -> Keys.t = function
 
 let rec measure : type a. a expression -> int = function
   | Integer n -> 1 + abs n
-  | Boolean b -> if b then 2 else 1
+  | Boolean true -> 2
+  | Boolean false -> 1
   | Unit_value | Variable _ -> 1
   | Tuple (a, b) -> 1 + measure a + measure b
   | Apply (a, b) -> 1 + measure a + measure b
@@ -250,13 +251,11 @@ exception Outside_budget
 let rec lookup : type a. a variable -> stored list -> a value * bool =
   fun variable -> function
   | [] -> invalid_arg "typed test term: free variable"
-  | Value (bound, value, shadowed) :: rest ->
-    if bound.key <> variable.key
-    then lookup variable rest
-    else (
-      match equal_type variable.typ bound.typ with
-      | Some Equal -> value, shadowed
-      | None -> invalid_arg "typed test term: inconsistent variable type")
+  | Value (bound, _, _) :: rest when bound.key <> variable.key -> lookup variable rest
+  | Value (bound, value, shadowed) :: _ ->
+    (match equal_type variable.typ bound.typ with
+     | Some Equal -> value, shadowed
+     | None -> invalid_arg "typed test term: inconsistent variable type")
 ;;
 
 let bounded n =
