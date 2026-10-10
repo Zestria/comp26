@@ -1,0 +1,2 @@
+(rule
+ (copy driver/compiler.exe compiler.exe))
