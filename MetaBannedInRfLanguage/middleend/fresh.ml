@@ -1,7 +1,14 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Migunova Anastasia *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Anf
 module SSet = Set.Make (String)
 
-(** All identifiers that occur in the program, binders and uses alike. *)
 let rec idents_imm acc = function
   | ImmVar name -> SSet.add name acc
   | ImmInt _ | ImmBool _ | ImmUnit -> acc
@@ -42,7 +49,6 @@ and idents_aexpr acc = function
     idents_aexpr acc body
 ;;
 
-(** All identifiers of a single item, binders and uses alike. *)
 let idents_item acc = function
   | AValue (name, body) -> idents_aexpr (SSet.add name acc) body
   | ARec bindings ->
@@ -61,14 +67,9 @@ type t =
   ; mutable counter : int
   }
 
-(** Create a generator from the set of all identifiers in the program. *)
 let create ~taken = { taken; generated = SSet.empty; counter = 0 }
-
-(** Create a generator directly from an ANF program. *)
 let create_from_program program = create ~taken:(program_idents program)
 
-(** Fresh name based on [base].  The [suffix] keeps names from different
-    passes apart; the result is not in [taken] and not generated before. *)
 let fresh ?(suffix = "__f") t base =
   let rec attempt () =
     t.counter <- t.counter + 1;
@@ -81,7 +82,3 @@ let fresh ?(suffix = "__f") t base =
   in
   attempt ()
 ;;
-
-(* Альфа-преобразование в этом модуле не живёт: переименование биндеров
-   выполняет [Anf_conv].  TODO(Анастасия): если понадобится отдельный проход
-   альфа-конверсии, добавь его сюда -- контракт уточнишь сама. *)
