@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-module Ast = Frontend.Common
-module Lexer = Frontend.Lexer
+module Ast = SchonfinkelML_frontend.Common
+module Lexer = SchonfinkelML_frontend.Lexer
 
 let ( let* ) = Result.bind
 

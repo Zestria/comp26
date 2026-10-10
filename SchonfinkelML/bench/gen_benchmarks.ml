@@ -1,7 +1,7 @@
 module Gen = QCheck.Gen
 open Ast_gen
 open Arg
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 
 type config =
   { mutable height : int
