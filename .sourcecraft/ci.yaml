@@ -81,23 +81,20 @@ workflows:
               - echo "Build..."
               - opam exec -- sh .sourcecraft/dune.sh build
 
-              #- echo "Pinning Zanuda..."
-              #- /usr/bin/time -f "%U"  opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
-              #- opam exec -- dune b @check
-              #- opam exec -- zanuda -dir . -ordjsonl results.json -osarif sarif.json
-              #- cat results.json
-              #- opam exec -- dune exec ./validate.exe -- 1.json
-              #- opam exec -- dune exec ./validate.exe -- sarif.json
-              #- cp -v sarif.json $SOURCECRAFT_WORKSPACE/result.sarif
+              - echo "Pinning Zanuda..."
+              - /usr/bin/time -f "%U" opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
+              - .sourcecraft/dune.sh zanuda
+              - ls -l results.sarif
+              - .sourcecraft/dune.sh stats > STATS.md
 
           - name: scan-result-uploader
             image:
               name: sourcecraft/scan-result-uploader:0.6.0
             script:
               - ls -l $SOURCECRAFT_WORKSPACE
-              # - pwd
+              - pwd
               # - cp handcrafted.json result.sarif -v
-              # - cat result.sarif
-              # - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
-              # - /app/bin/scan-result-uploader
-        # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
+              - cat result.sarif
+              - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
+              - /app/bin/scan-result-uploader
+              # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader

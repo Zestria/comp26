@@ -32,19 +32,28 @@ if [ -z "$COMPILER_NAME" ]; then
     echo "error: could not resolve compiler (got empty name)" >&2
     exit 1
 fi
-echo "compiler = $COMPILER_NAME"
 
 cd "$WORKSPACE"
 
 case "$CMD" in
     pin)
+        echo "compiler = $COMPILER_NAME"
         opam pin add "$COMPILER_NAME" . --no-action --yes
         ;;
     deps)
+        echo "compiler = $COMPILER_NAME"
         opam install "$COMPILER_NAME" --deps-only --with-test --with-doc --yes
         ;;
     build)
+        echo "compiler = $COMPILER_NAME"
         /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @check @runtest @install
+        ;;
+    zanuda)
+        echo "compiler = $COMPILER_NAME"
+        opam exec -- zanuda -dir "$COMPILER_NAME" -osarif results.sarif
+        ;;
+    stats)
+        LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats
         ;;
     *)
         usage

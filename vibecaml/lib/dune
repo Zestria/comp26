@@ -2,14 +2,21 @@
  (name vibecaml)
  (modules
   ast
+  anf
+  anf_conv
+  anf_simplify
+  closure_conv
   config
+  fresh
+  lambda_lift
   parser_intf
   pprint
   menhir_parser
   menhir_lexer
   lexicon
   menhir_frontend
-  rd_parser)
+  rd_parser
+  rename)
  (modules_without_implementation parser_intf)
  ; Лексер и парсер бросают исключения; наружу торчит только Menhir_frontend,
  ; который переводит их в result. Lexicon --- общая кухня двух парсеров.
