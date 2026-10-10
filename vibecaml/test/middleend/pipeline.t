@@ -28,7 +28,10 @@
   fack.src: 120
   fibk.src: 55
   groups.src: 8
+  local_fack.src: 120
+  local_fibk.src: 55
   local_group.src: 11
+  local_mutual.src: 110
   mutual.src: 1
   operator.src: 7
   shadow.src: 20
