@@ -35,4 +35,4 @@
  (libraries MMML.frontend MMML.middleend)
  (inline_tests)
  (preprocess
-  (pps ppx_expect_nobase)))
+  (pps ppx_expect)))
