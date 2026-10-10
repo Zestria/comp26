@@ -107,13 +107,13 @@ let rec convert ctx naming = function
       StringSet.diff (fv { ctx with subst = [] } body) (StringSet.of_list params)
       |> StringSet.elements
     in
-    if fvs = []
-    then naming, build_abstr params body
-    else (
-      let clo, naming = Names.gensym naming ~prefix:"clo_" () in
-      let extended = build_abstr (fvs @ params) body in
-      let wrapper = apply_names (Ident clo) fvs in
-      naming, Let (NotRecursive, clo, extended, wrapper))
+    (match fvs with
+     | [] -> naming, build_abstr params body
+     | _ :: _ ->
+       let clo, naming = Names.gensym naming ~prefix:"clo_" () in
+       let extended = build_abstr (fvs @ params) body in
+       let wrapper = apply_names (Ident clo) fvs in
+       naming, Let (NotRecursive, clo, extended, wrapper))
   | Let (NotRecursive, x, e1, e2) ->
     let naming, e1 = convert ctx naming e1 in
     let naming, e2 = convert ctx naming e2 in
