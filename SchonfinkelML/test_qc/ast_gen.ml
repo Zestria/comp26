@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 module Gen = QCheck.Gen
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 
 let binop_ops = [ "+"; "-"; "*"; "/"; "<"; ">"; "=" ]
 

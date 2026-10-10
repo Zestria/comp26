@@ -12,7 +12,7 @@
     Every check is a [let%test], so the runner is what reports a failure and
     the predicates below only have to answer yes or no. *)
 
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 module P = Top_down.Parser
 module Operators = Top_down.Operators
 

@@ -6,14 +6,14 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend.Config
+open SchonfinkelML_frontend.Config
 
 let write_output path expr =
   let oc = open_out path in
   Fun.protect
     ~finally:(fun () -> close_out oc)
     (fun () ->
-       output_string oc (Frontend.Common.string_of_expr expr);
+       output_string oc (SchonfinkelML_frontend.Common.string_of_expr expr);
        output_char oc '\n')
 ;;
 
