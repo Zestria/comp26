@@ -11,6 +11,12 @@ doc: "https://url/to/documentation"
 depends: [
   "ocaml"
   "dune" {>= "3.24"}
+  "base"
+  "menhir" {>= "20180523"}
+  "benchmark"
+  "angstrom" {= "0.16.0"}
+  "qcheck"
+  "ppx_deriving"
   "odoc" {with-doc}
 ]
 build: [
