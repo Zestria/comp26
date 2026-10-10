@@ -17,21 +17,22 @@ let atom environment = function
   | Var id -> variable environment id
 ;;
 
-let rec term function_ environment = function
-  | Anf.Return value -> computation function_ environment value
+let rec term function_ callee environment = function
+  | Anf.Return value -> computation function_ callee environment value
   | Let (id, rhs, body) ->
-    let* value = computation function_ environment rhs in
-    term function_ (Id.Map.add id value environment) body
+    let* value = computation function_ callee environment rhs in
+    term function_ callee (Id.Map.add id value environment) body
   | Let_rec (id, rhs, body) ->
     let* value =
-      recursive (fun address -> term function_ (Id.Map.add id address environment) rhs)
+      recursive (fun address ->
+        term function_ callee (Id.Map.add id address environment) rhs)
     in
-    term function_ (Id.Map.add id value environment) body
+    term function_ callee (Id.Map.add id value environment) body
   | Sequence (first, second) ->
-    let* _ = computation function_ environment first in
-    term function_ environment second
+    let* _ = computation function_ callee environment first in
+    term function_ callee environment second
 
-and computation function_ environment = function
+and computation function_ callee environment = function
   | Anf.Atom value -> atom environment value
   | Tuple (a, b, rest) ->
     let* values = map (atom environment) (a :: b :: rest) in
@@ -41,12 +42,11 @@ and computation function_ environment = function
     field value index
   | Apply (f, a, rest) ->
     let* arguments = map (atom environment) (a :: rest) in
-    let* f = atom environment f in
-    apply_arguments f arguments
+    callee environment f arguments
   | If (condition, yes, no) ->
     let* condition = atom environment condition in
     let* condition = boolean condition in
-    term function_ environment (if condition then yes else no)
+    term function_ callee environment (if condition then yes else no)
   | Function definition -> function_ environment definition
 ;;
 
@@ -66,15 +66,20 @@ let environment outer slots captures =
   bind_values (Capture_arity (List.length slots, List.length captures)) slots captures
 ;;
 
+let generic environment target arguments =
+  let* target = atom environment target in
+  apply_arguments target arguments
+;;
+
 let closed expression =
   let rec function_ outer (definition : Closure.t) =
     let* local = environment outer definition.environment definition.captures in
     Eval_value.function_
       local
       (definition.parameter :: definition.parameters)
-      (fun local -> term function_ local definition.body)
+      (fun local -> term function_ generic local definition.body)
   in
-  Eval_value.observe (fun () -> term function_ Id.Map.empty expression)
+  Eval_value.observe (fun () -> term function_ generic Id.Map.empty expression)
 ;;
 
 let lifted (program : Lifted.program) =
@@ -96,7 +101,20 @@ let lifted (program : Lifted.program) =
     Eval_value.function_
       local
       (definition.parameter :: definition.parameters)
-      (fun local -> term function_ local definition.body)
+      (fun local -> term function_ callee local definition.body)
+  and callee outer target arguments =
+    match target with
+    | Lifted.Indirect value -> generic outer value arguments
+    | Direct code ->
+      let* definition = definition code in
+      let parameters = definition.parameter :: definition.parameters in
+      let* local =
+        bind_values
+          (Call_arity (List.length parameters, List.length arguments))
+          parameters
+          arguments
+      in
+      term function_ callee local definition.body
   in
-  Eval_value.observe (fun () -> term function_ Id.Map.empty program.body)
+  Eval_value.observe (fun () -> term function_ callee Id.Map.empty program.body)
 ;;

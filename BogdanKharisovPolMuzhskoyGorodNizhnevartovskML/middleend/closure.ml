@@ -17,7 +17,7 @@ type t =
   ; captures : Anf.atom list
   }
 
-and expression = t Anf.term
+and expression = (t, Anf.atom) Anf.term
 
 type error =
   | Binding of Lambda.invariant_error
@@ -35,6 +35,9 @@ let error_to_string = function
 let validate expression =
   let ( let* ) = Result.bind in
   let binding_error error = Binding error in
+  let callee scope value ~arity =
+    Result.map_error binding_error (Anf.Scope.callee scope value ~arity)
+  in
   let rec function_ declared outer definition =
     let expected = List.length definition.environment in
     let actual = List.length definition.captures in
@@ -52,8 +55,8 @@ let validate expression =
              Id.Set.empty
              (definition.environment @ (definition.parameter :: definition.parameters)))
       in
-      Anf.Scope.term ~error:binding_error function_ declared local definition.body
+      Anf.Scope.term ~error:binding_error ~callee function_ declared local definition.body
   in
   Anf.Scope.run (fun declared ->
-    Anf.Scope.term ~error:binding_error function_ declared Id.Set.empty expression)
+    Anf.Scope.term ~error:binding_error ~callee function_ declared Id.Set.empty expression)
 ;;

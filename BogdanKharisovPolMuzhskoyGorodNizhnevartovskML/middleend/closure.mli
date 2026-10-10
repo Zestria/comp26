@@ -16,7 +16,7 @@ type t =
   ; captures : Anf.atom list
   }
 
-and expression = t Anf.term
+and expression = (t, Anf.atom) Anf.term
 
 type error =
   | Binding of Lambda.invariant_error

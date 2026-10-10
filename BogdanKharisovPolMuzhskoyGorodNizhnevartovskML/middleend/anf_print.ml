@@ -8,10 +8,10 @@
 
 open Format
 
-type 'function_ printers =
+type ('function_, 'callee) printers =
   { identifier : formatter -> Id.t -> unit
   ; atom : formatter -> Anf.atom -> unit
-  ; term : formatter -> 'function_ Anf.term -> unit
+  ; term : formatter -> ('function_, 'callee) Anf.term -> unit
   }
 
 let separated separator print =
@@ -53,9 +53,11 @@ module Names = struct
   let find state id = Id.Map.find id state.names
 end
 
-let names ~function_ = Anf.fold ~atom:Names.atom ~binder:Names.add ~function_
+let names ~callee ~function_ =
+  Anf.fold ~callee ~atom:Names.atom ~binder:Names.add ~function_
+;;
 
-let make names print_function =
+let make names ~callee:print_callee print_function =
   let identifier formatter id = pp_print_string formatter (Names.find names id) in
   let atom formatter = function
     | Anf.Constant (Int literal) ->
@@ -68,6 +70,7 @@ let make names print_function =
     | Var id -> identifier formatter id
     | Primitive primitive -> fprintf formatter "(%s)" (Primitive.name primitive)
   in
+  let callee = print_callee identifier atom in
   let rec term formatter = function
     | Anf.Return computation -> value formatter computation
     | Let (id, computation, body) ->
@@ -99,7 +102,7 @@ let make names print_function =
     | Field (tuple, index) -> fprintf formatter "field[%d] %a" index atom tuple
     | Function definition -> print_function identifier atom term formatter definition
     | Apply (f, a, rest) ->
-      fprintf formatter "@[<hov>%a %a@]" atom f (separated "" atom) (a :: rest)
+      fprintf formatter "@[<hov>%a %a@]" callee f (separated "" atom) (a :: rest)
     | If (condition, yes, no) ->
       fprintf
         formatter
@@ -115,14 +118,18 @@ let make names print_function =
 ;;
 
 let expression formatter expression =
+  let callee_names state value ~arity:_ = Names.atom state value in
   let rec function_names state (definition : Anf.function_definition) =
     let state = Names.add_all state (definition.parameter :: definition.parameters) in
-    names ~function_:function_names state definition.body
+    names ~callee:callee_names ~function_:function_names state definition.body
   in
-  let names = names ~function_:function_names Names.empty expression in
+  let names =
+    names ~callee:callee_names ~function_:function_names Names.empty expression
+  in
   let printers =
     make
       names
+      ~callee:(fun _identifier atom -> atom)
       (fun identifier _atom term formatter (definition : Anf.function_definition) ->
          fprintf
            formatter

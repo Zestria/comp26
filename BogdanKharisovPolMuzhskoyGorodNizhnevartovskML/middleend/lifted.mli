@@ -12,7 +12,13 @@ type closure =
   ; captures : Anf.atom list
   }
 
-type expression = closure Anf.term
+(** Direct calls name closed code and supply exactly its declared arity.
+    Partial and overapplications still use an ordinary function value. *)
+type callee =
+  | Indirect of Anf.atom
+  | Direct of Id.t
+
+type expression = (closure, callee) Anf.term
 
 type function_definition =
   { code : Id.t
@@ -32,10 +38,13 @@ type error =
   | Duplicate_code of Id.t
   | Unknown_code of Id.t
   | Capture_count of Id.t * int * int
+  | Direct_environment of Id.t
+  | Call_arity of Id.t * int * int
 
 val error_to_string : error -> string
 
 (** Check unique code labels and binding identities, lexical scope, field
-    indices, and capture counts. Each code body sees only its own environment
-    slots and parameters; it cannot use bindings from the program body. *)
+    indices, capture counts and the direct-call contract. Each code body sees
+    only its own environment slots and parameters; it cannot use bindings from
+    the program body. *)
 val validate : program -> (unit, error) result

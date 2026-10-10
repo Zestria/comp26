@@ -9,7 +9,7 @@
 type analyzed_function =
   { parameter : Id.t
   ; parameters : Id.t list
-  ; body : analyzed_function Anf.term
+  ; body : (analyzed_function, Anf.atom) Anf.term
   ; free : Id.Set.t
   }
 
@@ -69,6 +69,7 @@ let convert supply expression =
   let ( let* ) = Result.bind in
   let rec close names supply expression =
     Anf.map_accum_result
+      ~callee:(fun value ~arity:_ -> rename names value)
       ~atom:(rename names)
       ~function_:(function_ names)
       supply

@@ -9,7 +9,12 @@
 let lift supply expression =
   let ( let* ) = Result.bind in
   let rec term state expression =
-    Anf.map_accum_result ~atom:Fun.id ~function_ state expression
+    Anf.map_accum_result
+      ~callee:(fun value ~arity:_ -> Lifted.Indirect value)
+      ~atom:Fun.id
+      ~function_
+      state
+      expression
   and function_ state (closure : Closure.t) =
     let* (supply, definitions), body = term state closure.body in
     let* code, supply = Id.fresh supply "code" in

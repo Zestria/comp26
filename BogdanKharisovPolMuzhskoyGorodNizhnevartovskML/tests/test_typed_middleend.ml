@@ -48,6 +48,14 @@ let check_every_pass parse input =
   let lifted, _ = allocated source (Lambda_lifting.lift supply closed) in
   valid source "Lifted invariant" Lifted.error_to_string Lifted.validate lifted;
   compare "Lambda_lifting" Anf_eval.lifted lifted;
+  let specialized = Known_functions.optimize lifted in
+  valid
+    source
+    "Known-functions invariant"
+    Lifted.error_to_string
+    Lifted.validate
+    specialized;
+  compare "Known_functions" Anf_eval.lifted specialized;
   true
 ;;
 
@@ -94,12 +102,13 @@ let mutant input =
     | Anf.Primitive Primitive.Subtract -> Anf.Primitive Primitive.Add
     | atom -> atom
   in
+  let callee value ~arity:_ = atom value in
   let rec function_ (definition : Anf.function_definition) =
-    { definition with body = Anf.map ~atom ~function_ definition.body }
+    { definition with body = Anf.map ~atom ~callee ~function_ definition.body }
   in
   let lambda, supply = lower_source Frontend.Parser.parse_expression source in
   let anf, _ = allocated source (Anf.of_lambda supply lambda) in
-  let changed = Anf.map ~atom ~function_ anf in
+  let changed = Anf.map ~atom ~callee ~function_ anf in
   observe source Lambda_eval.observe (Anf.to_lambda changed)
 ;;
 

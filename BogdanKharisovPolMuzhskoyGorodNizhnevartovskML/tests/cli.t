@@ -405,6 +405,5 @@ The operator extension also reaches the full middleend with its declared arity.
   code code_0 [] a_1 b_2 c_3 =
     let tmp_4 = (+) a_1 b_2 in
     (+) tmp_4 c_3
-  let v_5 = closure code_0 [] in
-  let _ = v_5 1 2 3 in
+  let _ = direct code_0 1 2 3 in
   ()

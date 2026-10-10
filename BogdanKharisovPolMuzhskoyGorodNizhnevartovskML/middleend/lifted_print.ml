@@ -13,7 +13,12 @@ let program formatter (program : Lifted.program) =
     let names = Anf_print.Names.add names closure.code in
     List.fold_left Anf_print.Names.atom names closure.captures
   in
-  let term_names = Anf_print.names ~function_:closure_names in
+  let callee_names names value ~arity:_ =
+    match value with
+    | Lifted.Indirect value -> Anf_print.Names.atom names value
+    | Direct code -> Anf_print.Names.add names code
+  in
+  let term_names = Anf_print.names ~callee:callee_names ~function_:closure_names in
   let definition_names names (definition : Lifted.function_definition) =
     let names = Anf_print.Names.add names definition.code in
     let names = Anf_print.Names.add_all names definition.environment in
@@ -27,6 +32,9 @@ let program formatter (program : Lifted.program) =
   let printers =
     Anf_print.make
       names
+      ~callee:(fun identifier atom formatter -> function
+         | Lifted.Indirect value -> atom formatter value
+         | Direct code -> fprintf formatter "direct %a" identifier code)
       (fun identifier atom _term formatter (closure : Lifted.closure) ->
          fprintf
            formatter

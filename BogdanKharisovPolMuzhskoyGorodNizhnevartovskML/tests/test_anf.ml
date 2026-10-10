@@ -533,6 +533,7 @@ let checked_traversal_error =
        match
          Anf.map_accum_result
            ~atom:Fun.id
+           ~callee:(fun atom ~arity:_ -> atom)
            ~function_:(fun () (definition : Anf.function_definition) ->
              Error definition.parameter)
            ()

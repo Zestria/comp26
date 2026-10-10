@@ -67,6 +67,8 @@ let close supply anf =
 let lift supply closed =
   let* lifted, supply = allocated (Lambda_lifting.lift supply closed) in
   let* () = Result.map_error (fun e -> Lifted_error e) (Lifted.validate lifted) in
+  let lifted = Known_functions.optimize lifted in
+  let* () = Result.map_error (fun e -> Lifted_error e) (Lifted.validate lifted) in
   Ok (lifted, supply)
 ;;
 

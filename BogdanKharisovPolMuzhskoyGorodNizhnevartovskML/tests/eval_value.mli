@@ -28,6 +28,7 @@ type invariant_error =
   | Unbound_variable of Middleend.Id.t
   | Unknown_code of Middleend.Id.t
   | Capture_arity of int * int
+  | Call_arity of int * int
 
 type error =
   | Runtime of runtime_error

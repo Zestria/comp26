@@ -11,27 +11,29 @@ type atom =
   | Var of Id.t
   | Primitive of Primitive.t
 
-type 'function_ computation =
+(* Stages share ordinary computations. Their function payload and callee types
+   determine which function values and calls can be represented at each stage. *)
+type ('function_, 'callee) computation =
   | Atom of atom
   | Tuple of atom * atom * atom list
   | Field of atom * int
   | Function of 'function_
-  | Apply of atom * atom * atom list
-  | If of atom * 'function_ term * 'function_ term
+  | Apply of 'callee * atom * atom list
+  | If of atom * ('function_, 'callee) term * ('function_, 'callee) term
 
-and 'function_ term =
-  | Return of 'function_ computation
-  | Let of Id.t * 'function_ computation * 'function_ term
-  | Let_rec of Id.t * 'function_ term * 'function_ term
-  | Sequence of 'function_ computation * 'function_ term
+and ('function_, 'callee) term =
+  | Return of ('function_, 'callee) computation
+  | Let of Id.t * ('function_, 'callee) computation * ('function_, 'callee) term
+  | Let_rec of Id.t * ('function_, 'callee) term * ('function_, 'callee) term
+  | Sequence of ('function_, 'callee) computation * ('function_, 'callee) term
 
 type function_definition =
   { parameter : Id.t
   ; parameters : Id.t list
-  ; body : function_definition term
+  ; body : (function_definition, atom) term
   }
 
-type expression = function_definition term
+type expression = (function_definition, atom) term
 type program = expression
 
 let atom_to_lambda = function
@@ -40,6 +42,8 @@ let atom_to_lambda = function
   | Primitive p -> Lambda.Primitive p
 ;;
 
+(** Embedding into the more general language for independent execution of
+    normalized terms in tests. *)
 let rec to_lambda = function
   | Return value -> computation_to_lambda value
   | Let (id, value, body) -> Lambda.Let (id, computation_to_lambda value, to_lambda body)
@@ -85,6 +89,8 @@ module Scope = struct
     | Var _ | Constant _ | Primitive _ -> Ok ()
   ;;
 
+  let callee scope value ~arity:_ = atom scope value
+
   let rec atoms scope = function
     | [] -> Ok ()
     | value :: rest ->
@@ -92,21 +98,21 @@ module Scope = struct
       atoms scope rest
   ;;
 
-  let rec term ~error function_ declared scope = function
-    | Return value -> computation ~error function_ declared scope value
+  let rec term ~error ~callee function_ declared scope = function
+    | Return value -> computation ~error ~callee function_ declared scope value
     | Let (id, value, body) ->
       let* declared, inner = Result.map_error error (bind declared scope id) in
-      let* declared = computation ~error function_ declared scope value in
-      term ~error function_ declared inner body
+      let* declared = computation ~error ~callee function_ declared scope value in
+      term ~error ~callee function_ declared inner body
     | Let_rec (id, value, body) ->
       let* declared, inner = Result.map_error error (bind declared scope id) in
-      let* declared = term ~error function_ declared inner value in
-      term ~error function_ declared inner body
+      let* declared = term ~error ~callee function_ declared inner value in
+      term ~error ~callee function_ declared inner body
     | Sequence (first, second) ->
-      let* declared = computation ~error function_ declared scope first in
-      term ~error function_ declared scope second
+      let* declared = computation ~error ~callee function_ declared scope first in
+      term ~error ~callee function_ declared scope second
 
-  and computation ~error function_ declared scope = function
+  and computation ~error ~callee function_ declared scope = function
     | Atom value ->
       let* () = Result.map_error error (atom scope value) in
       Ok declared
@@ -118,12 +124,13 @@ module Scope = struct
       let* () = Result.map_error error (atom scope value) in
       Ok declared
     | Apply (f, a, rest) ->
-      let* () = Result.map_error error (atoms scope (f :: a :: rest)) in
+      let* () = callee scope f ~arity:(1 + List.length rest) in
+      let* () = Result.map_error error (atoms scope (a :: rest)) in
       Ok declared
     | If (condition, yes, no) ->
       let* () = Result.map_error error (atom scope condition) in
-      let* declared = term ~error function_ declared scope yes in
-      term ~error function_ declared scope no
+      let* declared = term ~error ~callee function_ declared scope yes in
+      term ~error ~callee function_ declared scope no
     | Function definition -> function_ declared scope definition
   ;;
 
@@ -134,32 +141,44 @@ let validate expression =
   let ( let* ) = Result.bind in
   let rec function_ declared scope { parameter; parameters; body } =
     let* declared, scope = Scope.bind_all declared scope (parameter :: parameters) in
-    Scope.term ~error:Fun.id function_ declared scope body
+    Scope.term ~error:Fun.id ~callee:Scope.callee function_ declared scope body
   in
   Scope.run (fun declared ->
-    Scope.term ~error:Fun.id function_ declared Id.Set.empty expression)
+    Scope.term
+      ~error:Fun.id
+      ~callee:Scope.callee
+      function_
+      declared
+      Id.Set.empty
+      expression)
 ;;
 
 let ( let* ) = Result.bind
 
-let rec map_accum_result ~atom ~function_ state = function
+let rec map_accum_result ~atom ~callee ~function_ state = function
   | Return value ->
-    let* state, value = map_computation_accum_result ~atom ~function_ state value in
+    let* state, value =
+      map_computation_accum_result ~atom ~callee ~function_ state value
+    in
     Ok (state, Return value)
   | Let (id, value, body) ->
-    let* state, value = map_computation_accum_result ~atom ~function_ state value in
-    let* state, body = map_accum_result ~atom ~function_ state body in
+    let* state, value =
+      map_computation_accum_result ~atom ~callee ~function_ state value
+    in
+    let* state, body = map_accum_result ~atom ~callee ~function_ state body in
     Ok (state, Let (id, value, body))
   | Let_rec (id, value, body) ->
-    let* state, value = map_accum_result ~atom ~function_ state value in
-    let* state, body = map_accum_result ~atom ~function_ state body in
+    let* state, value = map_accum_result ~atom ~callee ~function_ state value in
+    let* state, body = map_accum_result ~atom ~callee ~function_ state body in
     Ok (state, Let_rec (id, value, body))
   | Sequence (first, second) ->
-    let* state, first = map_computation_accum_result ~atom ~function_ state first in
-    let* state, second = map_accum_result ~atom ~function_ state second in
+    let* state, first =
+      map_computation_accum_result ~atom ~callee ~function_ state first
+    in
+    let* state, second = map_accum_result ~atom ~callee ~function_ state second in
     Ok (state, Sequence (first, second))
 
-and map_computation_accum_result ~atom ~function_ state = function
+and map_computation_accum_result ~atom ~callee ~function_ state = function
   | Atom value ->
     let value = atom value in
     Ok (state, Atom value)
@@ -172,14 +191,14 @@ and map_computation_accum_result ~atom ~function_ state = function
     let value = atom value in
     Ok (state, Field (value, index))
   | Apply (f, a, rest) ->
-    let f = atom f in
+    let f = callee f ~arity:(1 + List.length rest) in
     let a = atom a in
     let rest = List.map atom rest in
     Ok (state, Apply (f, a, rest))
   | If (condition, yes, no) ->
     let condition = atom condition in
-    let* state, yes = map_accum_result ~atom ~function_ state yes in
-    let* state, no = map_accum_result ~atom ~function_ state no in
+    let* state, yes = map_accum_result ~atom ~callee ~function_ state yes in
+    let* state, no = map_accum_result ~atom ~callee ~function_ state no in
     Ok (state, If (condition, yes, no))
   | Function definition ->
     let* state, definition = function_ state definition in
@@ -189,10 +208,11 @@ and map_computation_accum_result ~atom ~function_ state = function
 (* The ordinary traversal has no error-producing callback. *)
 type no_error = |
 
-let map_accum ~atom ~function_ state expression =
+let map_accum ~atom ~callee ~function_ state expression =
   let result : (_, no_error) result =
     map_accum_result
       ~atom
+      ~callee
       ~function_:(fun state value -> Ok (function_ state value))
       state
       expression
@@ -202,10 +222,11 @@ let map_accum ~atom ~function_ state expression =
   | Error impossible -> .
 ;;
 
-let map ~atom ~function_ expression =
+let map ~atom ~callee ~function_ expression =
   let _, expression =
     map_accum
       ~atom
+      ~callee
       ~function_:(fun () definition ->
         let definition = function_ definition in
         (), definition)
@@ -215,30 +236,33 @@ let map ~atom ~function_ expression =
   expression
 ;;
 
-let rec fold ~atom ~binder ~function_ state = function
-  | Return value -> fold_computation ~atom ~binder ~function_ state value
+let rec fold ~atom ~callee ~binder ~function_ state = function
+  | Return value -> fold_computation ~atom ~callee ~binder ~function_ state value
   | Let (id, value, body) ->
     let state = binder state id in
-    let state = fold_computation ~atom ~binder ~function_ state value in
-    fold ~atom ~binder ~function_ state body
+    let state = fold_computation ~atom ~callee ~binder ~function_ state value in
+    fold ~atom ~callee ~binder ~function_ state body
   | Let_rec (id, value, body) ->
     let state = binder state id in
-    let state = fold ~atom ~binder ~function_ state value in
-    fold ~atom ~binder ~function_ state body
+    let state = fold ~atom ~callee ~binder ~function_ state value in
+    fold ~atom ~callee ~binder ~function_ state body
   | Sequence (first, second) ->
-    let state = fold_computation ~atom ~binder ~function_ state first in
-    fold ~atom ~binder ~function_ state second
+    let state = fold_computation ~atom ~callee ~binder ~function_ state first in
+    fold ~atom ~callee ~binder ~function_ state second
 
-and fold_computation ~atom ~binder ~function_ state = function
+and fold_computation ~atom ~callee ~binder ~function_ state = function
   | Atom value | Field (value, _) -> atom state value
-  | Tuple (a, b, rest) | Apply (a, b, rest) ->
+  | Apply (f, a, rest) ->
+    let state = callee state f ~arity:(1 + List.length rest) in
+    List.fold_left atom (atom state a) rest
+  | Tuple (a, b, rest) ->
     let state = atom state a in
     let state = atom state b in
     List.fold_left atom state rest
   | If (condition, yes, no) ->
     let state = atom state condition in
-    let state = fold ~atom ~binder ~function_ state yes in
-    fold ~atom ~binder ~function_ state no
+    let state = fold ~atom ~callee ~binder ~function_ state yes in
+    fold ~atom ~callee ~binder ~function_ state no
   | Function definition -> function_ state definition
 ;;
 
@@ -297,7 +321,7 @@ let removable = function
   | Field _ | Apply _ | If _ -> false
 ;;
 
-let remove_unused expression =
+let remove_unused ~callee ~function_ expression =
   let atom used = function
     | Var id -> Id.Set.add id used
     | Constant _ | Primitive _ -> used
@@ -316,8 +340,11 @@ let remove_unused expression =
         used, if needed then bind id value body else Sequence (value, body))
     | Let_rec (id, value, body) ->
       let used, body = term used body in
-      let used, value = term used value in
-      used, Let_rec (id, value, body)
+      (match value with
+       | Return (Function _) when not (Id.Set.mem id used) -> used, body
+       | _ ->
+         let used, value = term used value in
+         used, Let_rec (id, value, body))
     | Sequence (first, second) ->
       let used, second = term used second in
       if removable first
@@ -327,16 +354,19 @@ let remove_unused expression =
         used, Sequence (first, second))
   and computation used = function
     | Atom value -> atom used value, Atom value
-    | (Tuple (a, b, rest) | Apply (a, b, rest)) as value ->
+    | Tuple (a, b, rest) as value ->
       List.fold_left atom (atom (atom used a) b) rest, value
+    | Apply (f, a, rest) as value ->
+      let used = callee used f ~arity:(1 + List.length rest) in
+      List.fold_left atom (atom used a) rest, value
     | Field (value, index) -> atom used value, Field (value, index)
     | If (condition, yes, no) ->
       let used, yes = term (atom used condition) yes in
       let used, no = term used no in
       used, If (condition, yes, no)
     | Function definition ->
-      let used, body = term used definition.body in
-      used, Function { definition with body }
+      let used, definition = function_ term used definition in
+      used, Function definition
   in
   snd (term Id.Set.empty expression)
 ;;
@@ -465,5 +495,15 @@ let of_lambda supply expression =
         supply
   in
   let* result, supply = normalize Id.Map.empty expression return supply in
-  Ok (remove_unused result, supply)
+  Ok
+    ( remove_unused
+        ~callee:(fun used value ~arity:_ ->
+          match value with
+          | Var id -> Id.Set.add id used
+          | Constant _ | Primitive _ -> used)
+        ~function_:(fun term used definition ->
+          let used, body = term used definition.body in
+          used, { definition with body })
+        result
+    , supply )
 ;;

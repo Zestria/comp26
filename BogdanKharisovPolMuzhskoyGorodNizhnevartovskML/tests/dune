@@ -62,3 +62,9 @@
  (modules test_typed_middleend typed_terms)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend middleend_test_support qcheck))
+
+(test
+ (name test_known_functions)
+ (modules test_known_functions)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))

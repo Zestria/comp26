@@ -31,6 +31,7 @@ type invariant_error =
   | Unbound_variable of Id.t
   | Unknown_code of Id.t
   | Capture_arity of int * int
+  | Call_arity of int * int
 
 type error =
   | Runtime of runtime_error
@@ -81,6 +82,8 @@ let invariant_error_to_string = function
   | Unknown_code id -> "Unknown code " ^ Id.name id
   | Capture_arity (expected, actual) ->
     Printf.sprintf "Expected %d captures, found %d" expected actual
+  | Call_arity (expected, actual) ->
+    Printf.sprintf "Expected %d direct-call arguments, found %d" expected actual
 ;;
 
 let error_to_string = function

@@ -654,9 +654,11 @@ let continued_supplies =
          then fail source (stage ^ " returned a supply that reuses an output identity");
          true)
   in
+  let callee ids _ ~arity:_ = ids in
   let rec anf_ids ids expression =
     Anf.fold
       ~atom:(fun ids _ -> ids)
+      ~callee
       ~binder:(fun ids id -> id :: ids)
       ~function_:(fun ids (definition : Anf.function_definition) ->
         anf_ids ((definition.parameter :: definition.parameters) @ ids) definition.body)
@@ -666,6 +668,7 @@ let continued_supplies =
   let rec closed_ids ids expression =
     Anf.fold
       ~atom:(fun ids _ -> ids)
+      ~callee
       ~binder:(fun ids id -> id :: ids)
       ~function_:(fun ids (closure : Closure.t) ->
         closed_ids
@@ -678,6 +681,7 @@ let continued_supplies =
     let term_ids =
       Anf.fold
         ~atom:(fun ids _ -> ids)
+        ~callee
         ~binder:(fun ids id -> id :: ids)
         ~function_:(fun ids _ -> ids)
     in
@@ -755,12 +759,58 @@ let interpreter_errors =
   ]
 ;;
 
+let direct_interpreter_error name parameters arguments expected actual =
+  interpreter_error
+    name
+    (fun () ->
+       let definition, supply = code_definition Id.initial "identity" in
+       let extra, _ = fresh supply "second" in
+       let definition =
+         { definition with parameters = (if parameters then [ extra ] else []) }
+       in
+       Anf_eval.lifted
+         { functions = [ definition ]
+         ; body = Return (Apply (Direct definition.code, Constant Unit, arguments))
+         })
+    (function
+      | Eval_value.Invalid_ir (Call_arity (e, a)) -> e = expected && a = actual
+      | _ -> false)
+    "a direct-call arity error"
+;;
+
+let direct_interpreter_errors =
+  [ direct_interpreter_error
+      "a direct interpreter call rejects too few arguments"
+      true
+      []
+      2
+      1
+  ; direct_interpreter_error
+      "a direct interpreter call rejects too many arguments"
+      false
+      [ Constant Unit ]
+      1
+      2
+  ; interpreter_error
+      "a direct interpreter call reports absent code"
+      (fun () ->
+         let code, _ = fresh Id.initial "missing" in
+         Anf_eval.lifted
+           { functions = []; body = Return (Apply (Direct code, Constant Unit, [])) })
+      (function
+        | Eval_value.Invalid_ir (Unknown_code id) -> Id.name id = "missing"
+        | _ -> false)
+      "an unknown-code error"
+  ]
+;;
+
 let () =
   run_tests
     (behaviors
      @ builtin_operations
      @ invariants
      @ interpreter_errors
+     @ direct_interpreter_errors
      @ closure_invariants
      @ lifted_boundaries
      @ structural_comparisons
