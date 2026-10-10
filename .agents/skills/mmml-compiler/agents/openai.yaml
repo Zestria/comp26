@@ -1,4 +1,0 @@
-#interface:
-  display_name: "Компилятор MMML на OCaml"
-  short_description: "Разработка MMML с лекциями, ANF и тестами"
-  default_prompt: "Используй $mmml-compiler для разработки текущего компилятора MMML."
