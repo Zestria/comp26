@@ -10,42 +10,56 @@ open Ast
 
 exception Convert_error of string
 
-let dedup xs =
-  List.fold_left (fun acc x -> if List.mem x acc then acc else x :: acc) [] xs
+module Names = Set.Make (String)
+
+let names_of_patterns patterns =
+  Names.of_list (List.concat_map Ast.pattern_names patterns)
 ;;
 
-let diff xs ys = List.filter (fun x -> not (List.mem x ys)) xs
-let union xs ys = dedup (xs @ ys)
+let names_of_bindings bindings =
+  names_of_patterns (List.map (fun b -> b.binding_pattern) bindings)
+;;
 
 (* Синоним оставлен для кода, который на него уже ссылается. *)
 let pattern_vars = Ast.pattern_names
 
-let rec collect bound = function
-  | Expr_constant _ -> []
-  | Expr_ident name when List.mem name bound -> []
-  | Expr_ident name -> [ name ]
+(* diff и union работают со списками для совместимости с вызывающим кодом,
+   внутри --- через множества. diff сохраняет порядок xs, union сортирует. *)
+let diff xs ys =
+  let ys = Names.of_list ys in
+  List.filter (fun x -> not (Names.mem x ys)) xs
+;;
+
+let union xs ys = Names.elements (Names.union (Names.of_list xs) (Names.of_list ys))
+
+let rec free bound = function
+  | Expr_constant _ -> Names.empty
+  | Expr_ident name when Names.mem name bound -> Names.empty
+  | Expr_ident name -> Names.singleton name
   | Expr_let (Recursive, _, _, _) ->
     raise
       (Convert_error "Closure conversion: поддерживается только `let rec` верхнего уровня")
   | Expr_let (Non_recursive, first, rest, body) ->
     let bindings = first :: rest in
-    let bound' =
-      bound @ List.concat_map (fun b -> pattern_vars b.binding_pattern) bindings
-    in
-    union
-      (List.concat_map (fun b -> collect bound b.binding_expression) bindings)
-      (collect bound' body)
+    let bound' = Names.union bound (names_of_bindings bindings) in
+    List.fold_left
+      (fun acc b -> Names.union acc (free bound b.binding_expression))
+      (free bound' body)
+      bindings
   | Expr_fun (first, rest, body) ->
-    collect (bound @ List.concat_map pattern_vars (first :: rest)) body
-  | Expr_app (f, a) -> union (collect bound f) (collect bound a)
+    free (Names.union bound (names_of_patterns (first :: rest))) body
+  | Expr_app (f, a) -> Names.union (free bound f) (free bound a)
   | Expr_if (c, t, e) ->
-    union (collect bound c) (union (collect bound t) (collect bound e))
+    Names.union (free bound c) (Names.union (free bound t) (free bound e))
   | Expr_tuple (e1, e2, es) ->
     List.fold_left
-      union
-      (union (collect bound e1) (collect bound e2))
-      (List.map (collect bound) es)
+      (fun acc e -> Names.union acc (free bound e))
+      Names.empty
+      (e1 :: e2 :: es)
 ;;
+
+(* Свободные имена выражения, отсортированные и без дублей. *)
+let collect bound expr = Names.elements (free (Names.of_list bound) expr)
 
 (* После rename все связанные имена различны. Поэтому имя свободной
    переменной не может совпасть с внутренним связыванием: заменяем только
@@ -74,8 +88,8 @@ let rec transform env expr =
   match expr with
   | (Expr_constant _ | Expr_ident _) as expr -> expr
   | Expr_fun (p, ps, e) ->
-    let params = List.concat_map pattern_vars (p :: ps) in
-    let captures = diff (List.sort_uniq String.compare (collect params e)) env in
+    let params = names_of_patterns (p :: ps) in
+    let captures = Names.elements (Names.diff (free params e) env) in
     (match captures with
      | [] -> Expr_fun (p, ps, transform env e)
      | _ ->
@@ -122,20 +136,21 @@ let rec convert_structure env = function
   | [] -> []
   | Structure_value (flag, first, rest) :: items ->
     let bindings = first :: rest in
-    let bounded = List.concat_map (fun b -> pattern_vars b.binding_pattern) bindings in
+    let bounded = names_of_bindings bindings in
     let env' =
       match flag with
       | Non_recursive -> env
-      | Recursive -> bounded @ env
+      | Recursive -> Names.union bounded env
     in
     let bindings' = List.map (convert_binding env') bindings in
     (match bindings' with
      | first' :: rest' ->
-       Structure_value (flag, first', rest') :: convert_structure (bounded @ env) items
+       Structure_value (flag, first', rest')
+       :: convert_structure (Names.union bounded env) items
      | [] -> raise (Convert_error "Closure conversion: нарушен инвариант"))
 ;;
 
 let convert structure =
-  try Ok (convert_structure Lexicon.builtins structure) with
+  try Ok (convert_structure (Names.of_list Lexicon.builtins) structure) with
   | Convert_error message -> Error message
 ;;
