@@ -1,7 +1,0 @@
-(test
- (name test_qc)
- (package MyLittleML)
- (modules test_qc)
- (libraries qcheck frontend)
- (preprocess
-  (pps ppx_deriving_qcheck ppx_deriving.show)))
