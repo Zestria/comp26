@@ -66,7 +66,7 @@ and gen_expression_branches n : Ast.expression Gen.t =
       ; Gen.map (fun id -> Ast.EIdent id) gen_ident
       ; Gen.map2
           (fun p body -> Ast.EFun (p, body))
-          (gen_pattern 0)
+          (gen_pattern 2)
           (gen_expression (pred n))
       ; Gen.map2 (fun f arg -> Ast.EApply (f, arg)) half half
       ; Gen.map3
@@ -97,13 +97,13 @@ and gen_expression_branches n : Ast.expression Gen.t =
 and gen_value_binding n : Ast.value_binding Gen.t =
   Gen.map2
     (fun vb_pat vb_expr -> { Ast.vb_pat; vb_expr })
-    (gen_pattern 0)
+    (gen_pattern 2)
     (gen_expression n)
 
 and gen_case n : Ast.case Gen.t =
   Gen.map2
     (fun case_pat case_expr -> { Ast.case_pat; case_expr })
-    (gen_pattern 0)
+    (gen_pattern 2)
     (gen_expression n)
 ;;
 
