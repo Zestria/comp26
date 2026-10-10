@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Deterministic, capture-free normalization with fresh state per call.
     Application evaluates the function, argument, then the unary call.
     Function bodies and conditional branches retain their evaluation boundary.

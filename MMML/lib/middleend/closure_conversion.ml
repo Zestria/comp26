@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 module Names = Set.Make (String)
 module Scope = Map.Make (String)
 
@@ -5,6 +13,7 @@ type problem =
   | Unbound_identifier of string
   | Recursive_wildcard
   | Recursive_rhs_not_lambda of string
+  | Missing_recursive_code of string
 
 type error =
   { path : string list
@@ -63,6 +72,9 @@ let rec parameters reversed = function
   | body -> List.rev reversed, body
 ;;
 
+(* The local name supply reserves every emitted name across recursive calls, avoiding collisions with input names and other generated binders. *)
+[@@@zanuda "-mutability_check"]
+
 let fresh_supply ~externals definitions =
   let used = ref (Names.of_list externals) in
   let reserve name = used := Names.add name !used in
@@ -107,6 +119,8 @@ let fresh_supply ~externals definitions =
     find ()
 ;;
 
+[@@@zanuda "+mutability_check"]
+
 let convert ~externals definitions =
   let fresh = fresh_supply ~externals definitions in
   let rec expression scope path = function
@@ -134,9 +148,9 @@ let convert ~externals definitions =
       let* name, raw, code, captures = recursive scope ("let.rhs" :: path) pattern rhs in
       let* body = expression (bind_pattern scope pattern) ("let.body" :: path) body in
       let body =
-        if captures = []
-        then body
-        else
+        match captures with
+        | [] -> body
+        | _ :: _ ->
           Ast.Let_in
             ( Ast.Nonrecursive
             , Ast.PVariable name
@@ -151,7 +165,7 @@ let convert ~externals definitions =
       let* raw, code, captures = closure scope path (Some name) parameter body in
       (match raw with
        | Some raw -> Ok (name, raw, code, captures)
-       | None -> assert false)
+       | None -> fail path (Missing_recursive_code name))
     | Ast.PVariable name, _ -> fail path (Recursive_rhs_not_lambda name)
   and closure scope path self parameter body =
     let params, body = parameters [ parameter ] body in
@@ -174,29 +188,31 @@ let convert ~externals definitions =
            layout
              rest
              (Scope.add name (Value (Ast.Variable formal)) inner)
-             (Ast.PVariable formal :: reversed_formals)
+             (formal :: reversed_formals)
              (captured :: reversed_values))
     in
     let* inner, formals, captures = layout (Names.elements names) Scope.empty [] [] in
     let raw =
-      Option.map (fun name -> if captures = [] then name else fresh "code") self
+      Option.map
+        (fun name ->
+           match captures with
+           | [] -> name
+           | _ :: _ -> fresh "code")
+        self
     in
     let inner =
       match self, raw with
       | Some name, Some raw ->
-        let args =
-          List.map
-            (function
-              | Ast.PVariable name -> Ast.Variable name
-              | Ast.PWildcard -> assert false)
-            formals
-        in
+        let args = List.map (fun name -> Ast.Variable name) formals in
         Scope.add name (Value (Ast.application (Ast.Variable raw) args)) inner
       | _ -> inner
     in
     let inner = List.fold_left bind_pattern inner params in
     let* body = expression inner ("lambda.body" :: path) body in
-    Ok (raw, Ast.function_ (formals @ params) body, captures)
+    Ok
+      ( raw
+      , Ast.function_ (List.map (fun name -> Ast.PVariable name) formals @ params) body
+      , captures )
   in
   let initial_scope =
     List.fold_left
@@ -216,16 +232,16 @@ let convert ~externals definitions =
         | Ast.Recursive ->
           let* name, raw, code, captures = recursive scope path pattern rhs in
           let definition = Ast.Definition (Ast.Recursive, Ast.PVariable raw, code) in
-          if captures = []
-          then Ok [ definition ]
-          else
-            Ok
-              [ definition
-              ; Ast.Definition
-                  ( Ast.Nonrecursive
-                  , Ast.PVariable name
-                  , Ast.application (Ast.Variable raw) captures )
-              ]
+          (match captures with
+           | [] -> Ok [ definition ]
+           | _ :: _ ->
+             Ok
+               [ definition
+               ; Ast.Definition
+                   ( Ast.Nonrecursive
+                   , Ast.PVariable name
+                   , Ast.application (Ast.Variable raw) captures )
+               ])
       in
       loop (index + 1) (bind_pattern scope pattern) (List.rev_append items reversed) rest
   in
@@ -240,4 +256,6 @@ let pp_error formatter { path; problem } =
     Format.pp_print_string formatter "recursive binding requires a function name"
   | Recursive_rhs_not_lambda name ->
     Format.fprintf formatter "recursive binding %S requires a lambda RHS" name
+  | Missing_recursive_code name ->
+    Format.fprintf formatter "recursive binding %S has no generated code name" name
 ;;

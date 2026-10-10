@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Test-only AST oracle, independent of the converter. Uses callee-before-argument evaluation;
     this does not specify a machine ABI or the whole MiniML runtime. *)
 

@@ -6,10 +6,12 @@
 
 [@@@ocaml.text "/*"]
 
+exception Parse_error of Error_monad.error
+
 let parse source =
   match Topdown_parser.parse_program source with
   | Ok program -> program
-  | Error error -> failwith (Error_monad.show_error error)
+  | Error error -> raise (Parse_error error)
 ;;
 
 let show source =

@@ -1,7 +1,16 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 type problem =
   | Unbound_identifier of string
   | Recursive_wildcard
   | Recursive_rhs_not_lambda of string
+  | Missing_recursive_code of string
 
 type error =
   { path : string list
