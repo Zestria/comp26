@@ -31,7 +31,7 @@ let pp_comma_separated pp_element =
   pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_element
 ;;
 
-let pp_pattern ppf = function
+let rec pp_pattern ppf = function
   | PAny -> fprintf ppf "_"
   | PVar name -> pp_ident ppf name
   | PConstant constant -> fprintf ppf "%a" pp_constant constant
