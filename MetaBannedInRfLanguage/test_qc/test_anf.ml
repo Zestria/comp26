@@ -41,7 +41,7 @@ let same_bound_values names ast_env anf_env =
 
 let anf_preserves_semantics structure =
   match Anf_conv.convert structure with
-  | Error _ -> true
+  | Error message -> QCheck.Test.fail_reportf "Anf_conv rejected the program: %s" message
   | Ok program ->
     (match Ast_interp.eval_structure structure, Anf_interp.eval_program program with
      | Ok ast_env, Ok anf_env ->
@@ -62,7 +62,7 @@ let test_anf_preserves_semantics =
 
 let pipeline_preserves_semantics structure =
   match Anf_conv.convert structure with
-  | Error _ -> true
+  | Error message -> QCheck.Test.fail_reportf "Anf_conv rejected the program: %s" message
   | Ok program ->
     let program = Closure_conversion.program program in
     let program = Lambda_lifting.program program in
