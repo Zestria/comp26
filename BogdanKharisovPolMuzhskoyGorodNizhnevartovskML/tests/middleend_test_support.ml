@@ -9,6 +9,7 @@
 open Frontend
 open Middleend
 module Lambda_eval = Lambda_eval
+module Anf_eval = Anf_eval
 module Eval_value = Eval_value
 
 let fail source message = QCheck.Test.fail_reportf "Input: %s\n%s" source message

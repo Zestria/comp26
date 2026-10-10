@@ -7,6 +7,7 @@
 [@@@ocaml.text "/*"]
 
 module Lambda_eval = Lambda_eval
+module Anf_eval = Anf_eval
 module Eval_value = Eval_value
 
 val fail : string -> string -> 'a

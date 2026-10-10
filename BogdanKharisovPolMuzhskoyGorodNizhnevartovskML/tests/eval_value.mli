@@ -26,6 +26,8 @@ type invariant_error =
   | Field_out_of_bounds of int * int
   | Incompatible_comparison of kind * kind
   | Unbound_variable of Middleend.Id.t
+  | Unknown_code of Middleend.Id.t
+  | Capture_arity of int * int
 
 type error =
   | Runtime of runtime_error

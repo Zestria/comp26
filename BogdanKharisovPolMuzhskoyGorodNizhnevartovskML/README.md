@@ -2,7 +2,7 @@
 
 Compiler for a subset of OCaml.
 
-Implemented stages: parsing and ANF.
+Implemented stages: parsing, ANF, closure conversion and lambda lifting.
 
 Two parsers produce the same AST:
 
@@ -15,25 +15,33 @@ Two parsers produce the same AST:
 comp26 $ opam install ./BogdanKharisovPolMuzhskoyGorodNizhnevartovskML.opam --deps-only --with-test
 comp26 $ dune build -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
 comp26 $ dune test -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
+comp26 $ dune build BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/middleend/middleend.cma
+comp26 $ zanuda -dir BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
 ```
 
 ## Run
 
 ```console
-comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe
+comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- --stop-after parsing
 [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 ```
 
 - `-parsing topdown|menhir`: select the parser; defaults to topdown (Angstrom).
-- `--stop-after parsing|anf`: print the source AST (default) or ANF.
+- `--stop-after parsing|anf`: stop at the source AST or ANF. Without this option,
+  run the complete middleend and print lifted code with explicit closures.
 - `-o FILE`: write the selected representation to a file; `-o -` writes to stdout (the default).
 - `--operator-extension`: enable [operator declarations](#operator-declarations) (Angstrom only).
 - `FILE`: input file; omit it or use `-` to read stdin.
 
 When parser, stage or output options are repeated, the last value takes effect.
 Input is read and transformed before the output file is opened. A parse or
-lowering error leaves an existing output file unchanged. Diagnostics are written
+middleend error leaves an existing output file unchanged. Diagnostics are written
 to stderr. Selecting `parsing` does not perform semantic checks.
+
+```console
+comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- -parsing menhir -o program.ir program.ml
+comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- --stop-after anf -o program.anf program.ml
+```
 
 ## Syntax
 

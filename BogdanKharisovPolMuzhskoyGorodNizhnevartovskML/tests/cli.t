@@ -1,6 +1,6 @@
-Standard input uses Angstrom by default.
+The parsing stage uses Angstrom by default.
 
-  $ printf '1\n' | ../compiler.exe
+  $ printf '1\n' | ../compiler.exe --stop-after parsing
   [Evaluation (Int "1")]
 
 ANF output contains normalized computations and evaluates the structure to unit.
@@ -51,23 +51,23 @@ Menhir reads a file containing definitions and evaluations.
   $ cat > input <<'EOF'
   > let x = 1;; x + 2
   > EOF
-  $ ../compiler.exe -parsing menhir input
+  $ ../compiler.exe --stop-after parsing -parsing menhir input
   [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 
 Explicit Angstrom selection and explicit standard input.
 
-  $ ../compiler.exe -parsing topdown - < input
+  $ ../compiler.exe --stop-after parsing -parsing topdown - < input
   [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 
 Empty input is an empty program.
 
-  $ printf '' | ../compiler.exe
+  $ printf '' | ../compiler.exe --stop-after parsing
   []
 
 An option-like filename can follow --.
 
   $ cp input ./-input
-  $ ../compiler.exe -- -input
+  $ ../compiler.exe --stop-after parsing -- -input
   [Definition (PVar "x" = Int "1"); Evaluation (Apply (Var "+", [Var "x"; Int "2"]))]
 
 A Menhir parse error goes to stderr with exit code 1.
@@ -107,7 +107,7 @@ Help succeeds without opening the input file.
   Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf] [-o FILE] [--operator-extension] [FILE]
   Without FILE, read standard input.
     -parsing NAME Use topdown (default) or menhir
-    --stop-after STAGE Stop after parsing (default) or anf
+    --stop-after STAGE Stop after parsing or anf (default: complete middleend)
     -o FILE Write to FILE or - for stdout (default)
     --operator-extension  Enable operator declarations (Angstrom only)
     -  Read standard input
@@ -117,14 +117,14 @@ Help succeeds without opening the input file.
 
 Operator declarations require the extension flag to affect parsing.
 
-  $ printf 'infixr 6 (+);; a + b + c' | ../compiler.exe --operator-extension
+  $ printf 'infixr 6 (+);; a + b + c' | ../compiler.exe --stop-after parsing --operator-extension
   [Evaluation (Apply (Var "+", [Var "a"; Apply (Var "+", [Var "b"; Var "c"])]))]
-  $ printf 'infixr 6 (+);; a + b + c' | ../compiler.exe
+  $ printf 'infixr 6 (+);; a + b + c' | ../compiler.exe --stop-after parsing
   [Evaluation (Apply (Var "infixr", [Int "6"; Var "+"])); Evaluation (Apply (Var "+", [Apply (Var "+", [Var "a"; Var "b"]); Var "c"]))]
 
 The extension supports prefix arities beyond two.
 
-  $ printf 'prefix 3 (%%%%);; %%%% a b c' | ../compiler.exe --operator-extension
+  $ printf 'prefix 3 (%%%%);; %%%% a b c' | ../compiler.exe --stop-after parsing --operator-extension
   [Evaluation (Apply (Var "%%", [Var "a"; Var "b"; Var "c"]))]
 
 Menhir rejects the extension option before opening the input file.
@@ -137,7 +137,7 @@ Menhir rejects the extension option before opening the input file.
 
 Topdown selection overrides a preceding Menhir selection.
 
-  $ printf 'prefix 3 (%%%%);; %%%% a b c' | ../compiler.exe -parsing menhir -parsing topdown --operator-extension
+  $ printf 'prefix 3 (%%%%);; %%%% a b c' | ../compiler.exe --stop-after parsing -parsing menhir -parsing topdown --operator-extension
   [Evaluation (Apply (Var "%%", [Var "a"; Var "b"; Var "c"]))]
 
 A later Menhir selection overrides a preceding topdown selection.
@@ -153,13 +153,13 @@ The parsing stage preserves syntactically valid input without type checking.
 
 Explicit stdout output.
 
-  $ printf '1' | ../compiler.exe -o -
+  $ printf '1' | ../compiler.exe --stop-after parsing -o -
   [Evaluation (Int "1")]
 
 File output replaces existing contents, accepts spaces, and leaves stdout empty.
 
   $ printf 'old contents that must be replaced\n' > 'result ast'
-  $ printf '1' | ../compiler.exe -o 'result ast'
+  $ printf '1' | ../compiler.exe --stop-after parsing -o 'result ast'
   $ cat 'result ast'
   [Evaluation (Int "1")]
 
@@ -172,13 +172,13 @@ An empty program is still written to the output file.
 Input is read before an output with the same path is opened.
 
   $ printf '1' > same-path
-  $ ../compiler.exe -o same-path same-path
+  $ ../compiler.exe --stop-after parsing -o same-path same-path
   $ cat same-path
   [Evaluation (Int "1")]
 
 Only the last output option takes effect.
 
-  $ printf '1' | ../compiler.exe -o unused-result -o -
+  $ printf '1' | ../compiler.exe --stop-after parsing -o unused-result -o -
   [Evaluation (Int "1")]
   $ test ! -e unused-result
 
@@ -255,3 +255,75 @@ Option order does not bypass the parser restriction.
   $ cat out
   $ cat err
   --operator-extension requires the Angstrom parser
+
+Without --stop-after, nested code is lifted and closure captures are explicit.
+
+  $ printf 'let make x = fun y -> x + y;; make 40 2' > closure-input
+  $ ../compiler.exe closure-input | sed '/^$/d'
+  code code_0 [x_1] y_2 =
+    (+) x_1 y_2
+  code code_3 [] x_4 =
+    closure code_0 [x_4]
+  let make_5 = closure code_3 [] in
+  let _ = make_5 40 2 in
+  ()
+
+Menhir also runs the full pipeline and writes lifted code to a file.
+
+  $ ../compiler.exe -parsing menhir closure-input -o closure-output
+  $ sed '/^$/d' closure-output
+  code code_0 [x_1] y_2 =
+    (+) x_1 y_2
+  code code_3 [] x_4 =
+    closure code_0 [x_4]
+  let make_5 = closure code_3 [] in
+  let _ = make_5 40 2 in
+  ()
+
+Stopping after ANF retains nested functions and does not perform lifting.
+
+  $ ../compiler.exe closure-input --stop-after anf
+  let make_0 = fun x_1 -> fun y_2 -> (+) x_1 y_2 in
+  let _ = make_0 40 2 in
+  ()
+
+An empty program also passes through the full pipeline.
+
+  $ printf '' | ../compiler.exe
+  ()
+
+A recursive tuple captures its own address without inspecting it during construction.
+
+  $ printf 'let rec p = (42, fun () -> let (n, _) = p in n)' | ../compiler.exe | sed '/^$/d'
+  code code_0 [p_1] arg_2 =
+    field[0] p_1
+  let rec p_3 = (let tmp_4 = closure code_0 [p_3] in
+                 (42, tmp_4)) in
+  ()
+
+An unsafe recursive initializer is rejected before replacing the output.
+
+  $ printf 'keep me\n' > preserved-rec-output
+  $ printf 'let rec x = x + 1' | ../compiler.exe -o preserved-rec-output >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: This kind of expression is not allowed on the right of let rec x
+  $ cat preserved-rec-output
+  keep me
+
+An unsafe initializer also does not create an absent output file.
+
+  $ printf 'let rec x = x' | ../compiler.exe -parsing menhir -o absent-rec-output >out 2>err
+  [1]
+  $ test ! -e absent-rec-output
+
+The operator extension also reaches the full middleend with its declared arity.
+
+  $ printf 'prefix 3 (%%%%);; let (%%%%) a b c = a + b + c;; %%%% 1 2 3' | ../compiler.exe --operator-extension | sed '/^$/d'
+  code code_0 [] a_1 b_2 c_3 =
+    let tmp_4 = (+) a_1 b_2 in
+    (+) tmp_4 c_3
+  let v_5 = closure code_0 [] in
+  let _ = v_5 1 2 3 in
+  ()

@@ -108,13 +108,10 @@ let generated_accepts name make_source =
   QCheck.Test.make ~name ~count:500 recursive_inputs (fun input ->
     let source, expected = make_source input in
     let ast = parsed Parser.parse_expression source in
-    (match Recursive_check.expression ast with
-     | Error error -> fail source (Recursive_check.error_to_string error)
-     | Ok () -> ());
-    let term, supply = lower_with_supply Id.initial source in
-    let term, _ = allocated source (Anf.of_lambda supply term) in
-    let term = Anf.to_lambda term in
-    equal source (string_of_int expected) (observe source Lambda_eval.observe term))
+    match Pipeline.compile_expression ast with
+    | Error error -> fail source (Pipeline.error_to_string error)
+    | Ok program ->
+      equal source (string_of_int expected) (observe source Anf_eval.lifted program))
 ;;
 
 let generated_rejects name make_source =

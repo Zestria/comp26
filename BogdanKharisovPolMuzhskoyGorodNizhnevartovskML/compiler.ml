@@ -17,6 +17,7 @@ type parser =
 type stage =
   | Parsing
   | Anf
+  | Middleend
 
 type command =
   | Run of parser * stage * string option * string option
@@ -31,7 +32,7 @@ let parse_arguments argv =
   let operator_extension = ref false in
   let input = ref None in
   let output = ref None in
-  let stage = ref Parsing in
+  let stage = ref Middleend in
   let set_input path =
     match !input with
     | None -> input := Some path
@@ -51,7 +52,7 @@ let parse_arguments argv =
     [ "-parsing", Arg.String set_parsing, "NAME Use topdown (default) or menhir"
     ; ( "--stop-after"
       , Arg.String set_stop_after
-      , "STAGE Stop after parsing (default) or anf" )
+      , "STAGE Stop after parsing or anf (default: complete middleend)" )
     ; ( "-o"
       , Arg.String (fun path -> output := Some path)
       , "FILE Write to FILE or - for stdout (default)" )
@@ -115,6 +116,13 @@ let run parser stage input output =
           (Middleend.Pipeline.anf program)
       in
       Ok (fun formatter -> Middleend.Anf_print.program formatter program)
+    | Middleend ->
+      let* program =
+        Result.map_error
+          (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
+          (Middleend.Pipeline.compile program)
+      in
+      Ok (fun formatter -> Middleend.Lifted_print.program formatter program)
   in
   let print channel =
     let formatter = Format.formatter_of_out_channel channel in

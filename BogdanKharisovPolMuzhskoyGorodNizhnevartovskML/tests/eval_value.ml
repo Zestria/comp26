@@ -29,6 +29,8 @@ type invariant_error =
   | Field_out_of_bounds of int * int
   | Incompatible_comparison of kind * kind
   | Unbound_variable of Id.t
+  | Unknown_code of Id.t
+  | Capture_arity of int * int
 
 type error =
   | Runtime of runtime_error
@@ -76,6 +78,9 @@ let invariant_error_to_string = function
   | Incompatible_comparison (a, b) ->
     Printf.sprintf "Cannot compare %s with %s" (kind_to_string a) (kind_to_string b)
   | Unbound_variable id -> "Unbound variable " ^ Id.name id
+  | Unknown_code id -> "Unknown code " ^ Id.name id
+  | Capture_arity (expected, actual) ->
+    Printf.sprintf "Expected %d captures, found %d" expected actual
 ;;
 
 let error_to_string = function

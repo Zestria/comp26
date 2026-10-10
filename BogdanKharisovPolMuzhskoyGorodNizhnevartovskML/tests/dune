@@ -20,7 +20,7 @@
 
 (library
  (name middleend_test_support)
- (modules middleend_test_support lambda_eval eval_value)
+ (modules middleend_test_support lambda_eval eval_value anf_eval)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend qcheck))
 
@@ -33,6 +33,12 @@
 (test
  (name test_recursive_values)
  (modules test_recursive_values)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))
+
+(test
+ (name test_middleend)
+ (modules test_middleend)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend middleend_test_support qcheck))
 
