@@ -38,14 +38,14 @@ let rec closed_expr env = function
 
 let check_invariant source =
   let converted = converted_of_string source in
-  if closed_expr [] converted
-  then true
-  else (
+  let res = closed_expr [] converted in
+  if not res
+  then
     Format.eprintf
       "Closure invariant violated for:\n%s\n\nResult:\n%s\n"
       source
       (string_of_expr converted);
-    false)
+  res
 ;;
 
 (* ----------------------------------------------------------------- *)
@@ -53,12 +53,9 @@ let check_invariant source =
 (* ----------------------------------------------------------------- *)
 
 let string_contains haystack needle =
-  let nh = String.length haystack and nn = String.length needle in
-  let rec go i =
-    if i + nn > nh then false
-    else if String.sub haystack i nn = needle then true
-    else go (i + 1)
-  in
+  let nh = String.length haystack
+  and nn = String.length needle in
+  let rec go i = i + nn <= nh && (String.sub haystack i nn = needle || go (i + 1)) in
   nn = 0 || go 0
 ;;
 
@@ -88,7 +85,8 @@ let%expect_test "closed lambda is left alone" =
 
 let%expect_test "captured variable becomes a leading parameter" =
   print_converted "let a = 1 in let f = fun x -> x + a in f 5";
-  [%expect {|
+  [%expect
+    {|
     let a = 1 in
       let f = let clo_1 = fun a -> fun x -> x + a in (clo_1 a) in (f 5)
     |}]
@@ -96,7 +94,8 @@ let%expect_test "captured variable becomes a leading parameter" =
 
 let%expect_test "multiple captures keep a deterministic order" =
   print_converted "let a = 1 in let b = 2 in let f = fun x -> x + a + b in f 3";
-  [%expect {|
+  [%expect
+    {|
     let a = 1 in
       let b = 2 in
         let f = let clo_1 = fun a -> fun b -> fun x -> x + a + b in ((clo_1 a) b)
@@ -112,7 +111,8 @@ let%expect_test "bare lambda in expression position" =
 let%expect_test "recursive function with captured variable" =
   print_converted
     "let n = 10 in let rec loop i = if i > n then 0 else i + loop (i + 1) in loop 1";
-  [%expect {|
+  [%expect
+    {|
     let n = 10 in
       let rec loop = fun n -> fun i -> if i > n then 0 else i + ((loop n) i + 1)
         in let clo_1 = (loop n) in (clo_1 1)
@@ -121,7 +121,8 @@ let%expect_test "recursive function with captured variable" =
 
 let%expect_test "closure with captures used as a value" =
   print_converted "let a = 1 in let f = fun x -> x + a in let g = f in g 5";
-  [%expect {|
+  [%expect
+    {|
     let a = 1 in
       let f = let clo_1 = fun a -> fun x -> x + a in (clo_1 a) in
         let g = f in (g 5)
@@ -130,7 +131,8 @@ let%expect_test "closure with captures used as a value" =
 
 let%expect_test "fresh names do not collide with source names" =
   print_converted "let f_clo0 = 42 in let a = 1 in let f = fun x -> x + a in f 5";
-  [%expect {|
+  [%expect
+    {|
     let f_clo0 = 42 in
       let a = 1 in
         let f = let clo_1 = fun a -> fun x -> x + a in (clo_1 a) in (f 5)
@@ -149,7 +151,8 @@ fact 5 (fun x -> x)
 
 let%expect_test "cps factorial" =
   print_converted cps_fact;
-  [%expect {|
+  [%expect
+    {|
     let rec fact =
       fun n -> fun k -> if n = 0 then (k 1) else
                           ((fact n - 1) (let clo_1 =
@@ -172,7 +175,8 @@ fib 6 (fun x -> x)
 
 let%expect_test "cps fibonacci" =
   print_converted cps_fib;
-  [%expect {|
+  [%expect
+    {|
     let rec fib =
       fun n -> fun k -> if n < 2 then (k n) else
                           ((fib n - 1) (let clo_2 =
@@ -212,8 +216,8 @@ let%test "closed lambda invariant holds on all basic examples" =
 
 let%test "closed lambda invariant holds on nested functions" =
   check_invariant
-    "let a = 1 in let outer = fun x -> \
-     let inner = fun y -> x + y + a in inner 3 in outer 5"
+    "let a = 1 in let outer = fun x -> let inner = fun y -> x + y + a in inner 3 in \
+     outer 5"
 ;;
 
 let%test "closed lambda invariant holds on shadowed names" =
@@ -267,8 +271,8 @@ let cases =
   ; "let x = 1 in let f = fun x -> x + 1 in f 5"
   ; "let f = fun x -> x + 1 in let f = fun y -> y + 2 in f 5"
   ; "let a = 1 in let f = fun a -> a + 1 in f 5"
-  ; "let a = 1 in let outer = fun x -> \
-     let inner = fun y -> x + y + a in inner 3 in outer 5"
+  ; "let a = 1 in let outer = fun x -> let inner = fun y -> x + y + a in inner 3 in \
+     outer 5"
   ; "let n = 10 in let rec loop i = if i > n then 0 else i + loop (i + 1) in loop 1"
   ; cps_fact
   ; cps_fib
@@ -285,4 +289,3 @@ let%test "conversion is deterministic" =
 ;;
 
 let%test "invariant holds on all example cases" = List.for_all check_invariant cases
-;;
