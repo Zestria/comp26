@@ -63,23 +63,94 @@ type parse_mode =
   | Program
   | Expression
 
-let print_result printer = function
-  | Ok value -> Format.printf "%a@." printer value
-  | Error error ->
-    Format.eprintf "%a@." Error_monad.pp_error error;
-    exit 1
+type stage =
+  | Parsing
+  | Anf
+
+type parser =
+  | Topdown
+  | Menhir
+
+type diagnostic =
+  | Frontend_error of Error_monad.error
+  | Anf_error of Middleend.Normalize.error
+
+let parse_program = function
+  | Topdown -> Topdown_parser.parse_program
+  | Menhir -> Parser_menhir.parse_program
 ;;
 
-let parse mode channel =
-  let lexbuf = Lexing.from_channel channel in
-  match mode with
-  | Program -> print_result Ast.pp_program (Parser_menhir.parse_program_lexbuf lexbuf)
-  | Expression -> print_result Ast.pp_expr (Parser_menhir.parse_expression_lexbuf lexbuf)
+let parse_expression = function
+  | Topdown -> Topdown_parser.parse_expression
+  | Menhir -> Parser_menhir.parse_expression
 ;;
+
+let render printer value = Format.asprintf "@[<v>%a@]@." printer value
+
+let compile parser mode stage source =
+  let ( let* ) = Result.bind in
+  let frontend result = Result.map_error (fun error -> Frontend_error error) result in
+  match mode with
+  | Expression ->
+    let* expression = frontend (parse_expression parser source) in
+    Ok (render Ast.pp_expr expression)
+  | Program ->
+    let* program = frontend (parse_program parser source) in
+    (match stage with
+     | Parsing -> Ok (render Ast.pp_program program)
+     | Anf ->
+       let* program =
+         Result.map_error
+           (fun error -> Anf_error error)
+           (Middleend.Normalize.program program)
+       in
+       Ok (render Middleend.Pretty_printer.pp_program program))
+;;
+
+let pp_diagnostic fmt = function
+  | Frontend_error error -> Error_monad.pp_error fmt error
+  | Anf_error error -> Middleend.Normalize.pp_error fmt error
+;;
+
+let read_source = function
+  | None -> In_channel.input_all stdin
+  | Some path ->
+    let channel = open_in_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr channel)
+      (fun () -> In_channel.input_all channel)
+;;
+
+let write_output destination output =
+  match destination with
+  | "-" ->
+    output_string stdout output;
+    flush stdout
+  | path ->
+    let channel = open_out_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_out_noerr channel)
+      (fun () ->
+         output_string channel output;
+         close_out channel)
+;;
+
+let usage =
+  "compiler.exe [--stop-after parsing|anf] [-parsing topdown|menhir] [-o file|-] [file]\n\
+   Defaults: ANF, Menhir, stdout. With options and no file, read stdin.\n\
+   With no arguments, generate the legacy LLVM demo in out.ll."
+;;
+
+(* Arg callbacks collect settings before validation and processing starts;
+   these references belong to this CLI invocation. *)
+[@@@zanuda "-mutability_check"]
 
 let () =
   let mode = ref None in
+  let stage = ref None in
+  let parser = ref Menhir in
   let input_file = ref None in
+  let output_file = ref "-" in
   let select_mode selected =
     match !mode with
     | Some current when current <> selected ->
@@ -92,29 +163,54 @@ let () =
     | Some _ -> raise (Arg.Bad "expected at most one input file")
   in
   let options =
-    [ "--parse", Arg.Unit (fun () -> select_mode Program), " Parse a MiniML program"
+    [ ( "--stop-after"
+      , Arg.Symbol
+          ( [ "parsing"; "anf" ]
+          , fun value -> stage := Some (if value = "parsing" then Parsing else Anf) )
+      , " Stop after parsing or ANF (default: anf)" )
+    ; ( "-parsing"
+      , Arg.Symbol
+          ( [ "topdown"; "menhir" ]
+          , fun value -> parser := if value = "topdown" then Topdown else Menhir )
+      , " Choose a parser (default: menhir)" )
+    ; ( "-o"
+      , Arg.Set_string output_file
+      , "FILE Write the result to FILE; '-' means stdout (default: -)" )
+    ; "--parse", Arg.Unit (fun () -> select_mode Program), " Print a program AST"
     ; ( "--parse-expression"
       , Arg.Unit (fun () -> select_mode Expression)
-      , " Parse a MiniML expression" )
+      , " Print an expression AST" )
     ]
   in
-  Arg.parse options set_input_file "compiler.exe [--parse | --parse-expression] [file]";
-  match !mode, !input_file with
-  | None, None -> llvm_demo ()
-  | None, Some _ ->
-    Format.eprintf "an input file requires --parse or --parse-expression@.";
+  try
+    Arg.parse_argv Sys.argv options set_input_file usage;
+    let selected_stage =
+      match !mode, !stage with
+      | Some _, Some Anf ->
+        raise (Arg.Bad "--parse and --parse-expression conflict with --stop-after anf")
+      | Some _, (None | Some Parsing) -> Parsing
+      | None, Some stage -> stage
+      | None, None -> Anf
+    in
+    if Array.length Sys.argv = 1
+    then llvm_demo ()
+    else (
+      let source = read_source !input_file in
+      match
+        compile !parser (Option.value ~default:Program !mode) selected_stage source
+      with
+      | Ok output -> write_output !output_file output
+      | Error error ->
+        Format.eprintf "%a@." pp_diagnostic error;
+        exit 1)
+  with
+  | Arg.Bad message ->
+    Format.eprintf "%s@." message;
     exit 2
-  | Some mode, input_file ->
-    (try
-       match input_file with
-       | None -> parse mode stdin
-       | Some path ->
-         let channel = open_in_bin path in
-         Fun.protect
-           ~finally:(fun () -> close_in_noerr channel)
-           (fun () -> parse mode channel)
-     with
-     | Sys_error message ->
-       Format.eprintf "%s@." message;
-       exit 1)
+  | Arg.Help message ->
+    print_string message;
+    flush stdout
+  | Sys_error message ->
+    Format.eprintf "%s@." message;
+    exit 1
 ;;
