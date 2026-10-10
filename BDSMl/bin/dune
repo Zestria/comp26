@@ -14,5 +14,16 @@
 (cram
  (package BDSMl)
  (deps
+  cli_input.ml
+  closure_input.ml
+  fac_cps.ml
+  fib_cps.ml
+  nested_functions.ml
+  shadowing.ml
+  short_circuit.ml
+  if_argument.ml
+  recursive_capture.ml
+  evaluation_order.ml
+  check_stages.sh
   runtime.c
   %{exe:../compiler.exe}))

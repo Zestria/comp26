@@ -196,7 +196,11 @@ and precedence = function
   | Mult | Div -> 50
 
 and parse_binary config min_precedence tokens =
-  let* left, tokens = parse_unary config tokens in
+  let* left, tokens =
+    match step tokens with
+    | Cons ((TLet | TIF | TFun), _) -> parse_expr config tokens
+    | _ -> parse_unary config tokens
+  in
   let rec loop left tokens =
     match step tokens with
     | Cons (token, rest) ->
@@ -278,21 +282,27 @@ let parse_structure_item config tokens =
 ;;
 
 let rec parse_items config tokens =
-  let* item, ts = parse_structure_item config tokens in
-  match step ts with
-  | Cons (TEOF, _) -> Ok [ item ]
-  | Cons (TSemisemi, rest) ->
-    (match step rest with
+  match step tokens with
+  | Cons (TEOF, _) -> Ok []
+  | Cons (TSemisemi, rest) -> parse_items config rest
+  | Cons _ ->
+    let* item, ts = parse_structure_item config tokens in
+    (match step ts with
      | Cons (TEOF, _) -> Ok [ item ]
-     | Cons _ ->
+     | Cons (TSemisemi, rest) ->
        let* items = parse_items config rest in
        Ok (item :: items)
+     | Cons (TLet, _) ->
+       let* items = parse_items config ts in
+       Ok (item :: items)
+     | Cons (t, _) ->
+       Error
+         (`parse_error
+             (Printf.sprintf
+                "expected ';;' before next item, got '%s'"
+                (token_to_string t)))
      | Nil -> Error (`parse_error "unexpected end of input")
      | LexError e -> Error (e :> [> error ]))
-  | Cons (t, _) ->
-    Error
-      (`parse_error
-          (Printf.sprintf "expected ';;' before next item, got '%s'" (token_to_string t)))
   | Nil -> Error (`parse_error "unexpected end of input")
   | LexError e -> Error (e :> [> error ])
 ;;

@@ -28,8 +28,8 @@ let case ~name src expected =
 ;;
 
 let empty_and_whitespace_tests =
-  [ case ~name:"empty" "" "Error: unexpected token '<eof>'"
-  ; case ~name:"whitespace" "   \t\n  \n" "Error: unexpected token '<eof>'"
+  [ case ~name:"empty" "" "Ok []"
+  ; case ~name:"whitespace" "   \t\n  \n" "Ok []"
   ]
 ;;
 
