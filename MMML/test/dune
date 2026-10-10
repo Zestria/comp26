@@ -87,3 +87,12 @@
  (package MMML)
  (modules closure_usage_example)
  (libraries MMML.frontend MMML.middleend closure_test_support))
+
+(library
+ (name lambda_lifting_test)
+ (package MMML)
+ (modules lambda_lifting_test)
+ (libraries MMML.frontend MMML.middleend)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))

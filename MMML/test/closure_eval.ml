@@ -1,3 +1,14 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
+(* Fuel and effect traces are shared by interpreter closures and must survive runtime errors, so the test oracle keeps them in local references. *)
+[@@@zanuda "-mutability_check"]
+
 type runtime_error =
   | Division_by_zero
   | Unbound_name of string

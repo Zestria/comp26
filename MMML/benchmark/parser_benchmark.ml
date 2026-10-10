@@ -33,7 +33,7 @@ let run_repeatedly repetitions operation =
   let rec loop remaining =
     if remaining > 0
     then (
-      operation () |> Sys.opaque_identity |> ignore;
+      let _result = Sys.opaque_identity (operation ()) in
       loop (remaining - 1))
   in
   loop repetitions

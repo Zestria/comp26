@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Anf
 module Env = Map.Make (String)
 
@@ -33,6 +41,9 @@ let hint = function
   | Ast.PWildcard -> "_"
   | Ast.PVariable name -> name
 ;;
+
+(* The local stamp supply is shared by CPS continuations so every generated binder gets a unique identifier within this normalization run. *)
+[@@@zanuda "-mutability_check"]
 
 let worker () =
   let next = ref 0 in
@@ -71,12 +82,11 @@ let worker () =
         let no = tail env no in
         k (If (condition, yes, no)))
     | Ast.Let_in (Ast.Nonrecursive, pattern, rhs, body) ->
-      go env rhs (fun rhs ->
-        match rhs with
+      go env rhs (function
         | Value ((Constant _ | Local _ | Builtin _) as value) ->
           go (bind_pattern env pattern value) body k
-        | Value (External _)
-        | Apply _ | Unary_primitive _ | Binary_primitive _ | Lambda _ | If _ ->
+        | ( Value (External _)
+          | Apply _ | Unary_primitive _ | Binary_primitive _ | Lambda _ | If _ ) as rhs ->
           let id = fresh (hint pattern) in
           let continuation = go (bind_pattern env pattern (Local id)) body k in
           Let (id, rhs, continuation))
@@ -138,6 +148,8 @@ let worker () =
   in
   tail, definition
 ;;
+
+[@@@zanuda "+mutability_check"]
 
 let expression ?(bindings = default_bindings) input =
   let tail, _ = worker () in

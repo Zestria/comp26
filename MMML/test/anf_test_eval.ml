@@ -1,3 +1,14 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
+(* Fuel and effect traces are shared by all interpreter closures and survive runtime errors. Recursive environment cells tie the knot for function values. *)
+[@@@zanuda "-mutability_check"]
+
 (** Independent test oracles. Source evaluation never invokes Normalize or
     traverses ANF. Both evaluators share only values and primitive semantics. *)
 open Middleend
@@ -69,7 +80,7 @@ let primitive state name args =
      | "<=" -> boolean (left <= right)
      | ">" -> boolean (left > right)
      | ">=" -> boolean (left >= right)
-     | _ -> assert false)
+     | _ -> raise (Stop (Runtime ("invalid primitive: " ^ name))))
   | ("=" | "<>"), [ Scalar left; Scalar right ] ->
     boolean (if name = "=" then left = right else left <> right)
   | ("&&" | "||"), [ left; right ] ->

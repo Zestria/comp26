@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Independent closed-group check. It follows lexical scopes directly and
     shares no free-variable or substitution code with the converter. *)
 module Scope = Map.Make (String)
@@ -17,9 +25,9 @@ let rec params reversed = function
 let check ~externals definitions =
   let rec expr scope = function
     | Ast.Constant _ -> ()
-    | Ast.Variable name ->
-      if not (Scope.mem name scope)
-      then raise (Invalid ("unbound in closed group: " ^ name))
+    | Ast.Variable name when not (Scope.mem name scope) ->
+      raise (Invalid ("unbound in closed group: " ^ name))
+    | Ast.Variable _ -> ()
     | Ast.Lambda (p, body) -> group scope None p body
     | Ast.Application (fn, arg) ->
       expr scope fn;
@@ -51,13 +59,14 @@ let check ~externals definitions =
     List.fold_left (fun scope name -> Scope.add name true scope) Scope.empty externals
   in
   try
-    ignore
-      (List.fold_left
-         (fun scope (Ast.Definition (flag, p, rhs)) ->
-            binding scope flag p rhs;
-            bind scope p)
-         initial
-         definitions);
+    let (_ : bool Scope.t) =
+      List.fold_left
+        (fun scope (Ast.Definition (flag, p, rhs)) ->
+           binding scope flag p rhs;
+           bind scope p)
+        initial
+        definitions
+    in
     Ok ()
   with
   | Invalid error -> Error error

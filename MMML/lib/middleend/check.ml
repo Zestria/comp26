@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Anf
 
 type error =
@@ -10,6 +18,9 @@ module Names = Set.Make (String)
 
 exception Invalid of error
 
+(* The visited binder set is shared by sibling branches to detect duplicate stamps across the entire input, separately from lexical scope. *)
+[@@@zanuda "-mutability_check"]
+
 let run ~externals action =
   let seen = ref Ids.empty in
   let externals = Names.of_list externals in
@@ -19,9 +30,10 @@ let run ~externals action =
   in
   let immediate scope = function
     | Constant _ | Builtin _ -> ()
-    | Local id -> if not (Ids.mem id.stamp scope) then raise (Invalid (Unbound_local id))
-    | External name ->
-      if not (Names.mem name externals) then raise (Invalid (Unbound_external name))
+    | Local id when not (Ids.mem id.stamp scope) -> raise (Invalid (Unbound_local id))
+    | External name when not (Names.mem name externals) ->
+      raise (Invalid (Unbound_external name))
+    | Local _ | External _ -> ()
   in
   let rec term scope = function
     | Result rhs -> compound scope rhs
@@ -68,10 +80,14 @@ let run ~externals action =
   | Invalid error -> Error error
 ;;
 
+[@@@zanuda "+mutability_check"]
+
 let term ~externals input = run ~externals (fun check _ -> check Ids.empty input)
 
 let program ~externals input =
-  run ~externals (fun _ definition -> ignore (List.fold_left definition Ids.empty input))
+  run ~externals (fun _ definition ->
+    let (_ : Ids.t) = List.fold_left definition Ids.empty input in
+    ())
 ;;
 
 let pp_error fmt = function
