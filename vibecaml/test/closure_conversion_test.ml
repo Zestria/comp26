@@ -74,7 +74,14 @@ let check_closed program =
       let parameters = List.concat_map pattern_names (first :: rest) in
       assert (free (parameters @ globals) body = []);
       expression globals body
-    | Expr_let (_, first, rest, body) ->
+    | Expr_let (flag, first, rest, body) ->
+      (* Имена локальной рекурсивной группы после lambda lifting станут
+         глобальными, поэтому после CC они могут быть свободны в fun. *)
+      let globals =
+        match flag with
+        | Recursive -> binding_names (first :: rest) @ globals
+        | Non_recursive -> globals
+      in
       List.iter
         (fun binding -> expression globals binding.binding_expression)
         (first :: rest);
@@ -137,6 +144,12 @@ let () =
     ; "let (+) a b = a - b let (&&) x y = x || y"
     ; "let lifted__1 = 5 let make x = fun x -> x + lifted__1"
     ; "let use print_int = fun n -> print_int n"
+    ; "let f x = let rec g y = x + y in g 1"
+    ; "let fac n = let rec helper n k = if n <= 1 then k 1 else helper (n - 1) (fun r -> \
+       k (r * n)) in helper n (fun x -> x)"
+    ; "let check s n = let rec even k = if k = 0 then true else odd (k - s) and odd k = \
+       if k = 0 then false else even (k - s) in even n"
+    ; "let outer a = let rec f x = let rec g y = a + x + y in g x in f 1"
     ]
   in
   List.iter
@@ -163,8 +176,7 @@ let () =
     unwrap (Rename.rename (parse "let (+) a b = a - b let result = 9 + 2"))
   in
   assert (not (String.contains (Pprint.string_of_structure operator) '+'));
-  (* Рекурсивную группу переименование понимает, но ограничение задания
-     проверяется именно на границе closure conversion. *)
-  let local = unwrap (Rename.rename (parse "let f x = let rec g y = x + y in g 1")) in
+  (* В локальном let rec справа допускается только функция. *)
+  let local = unwrap (Rename.rename (parse "let f x = let rec y = x in y")) in
   assert (Result.is_error (Closure_conv.convert local))
 ;;

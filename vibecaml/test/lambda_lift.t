@@ -86,15 +86,16 @@ CPS-факториал после closure conversion: анонимная фун�
   90
   90
 
-Локальный `let rec` не поддерживается closure conversion по договорённости #10.
+Локальный `let rec` выносится отдельной группой перед объявлением, захваты
+группы становятся первыми параметрами каждой её функции.
 
   $ cat > local_rec.ml <<'ML'
   > let f n = let rec loop i = if i > n then 0 else loop (i + 1) in loop 0
   > ML
 
   $ vibecamlc --stop-after ll local_rec.ml
-  vibecaml: Closure conversion: поддерживается только `let rec` верхнего уровня
-  [1]
+  let rec loop capture__1 i = if i > capture__1 then 0 else loop capture__1 (i + 1)
+  let f n = loop n 0
 
 В `let rec` верхнего уровня справа должна стоять функция: иначе после выноса
 в группе окажется не функция, а OCaml такое не принимает.

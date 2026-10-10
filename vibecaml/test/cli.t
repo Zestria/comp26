@@ -67,6 +67,12 @@
   vibecaml: 1:5: синтаксическая ошибка у "="
   [1]
 
+Локальный `let rec` поддерживается только для функций.
+
+  $ echo 'let y = let rec x = 1 in x' | vibecamlc
+  vibecaml: Closure conversion: в let rec справа должна стоять функция
+  [1]
+
 Несуществующий файл.
 
   $ vibecamlc missing.ml
