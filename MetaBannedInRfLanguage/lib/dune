@@ -13,6 +13,6 @@
   menhir_lexer
   menhir_grammar
   menhir_parser)
- (libraries base angstrom)
+ (libraries base angstrom menhirLib)
  (preprocess
   (pps ppx_deriving.show)))

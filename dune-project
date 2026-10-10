@@ -162,6 +162,7 @@
   dune
   base
   menhir
+  menhirLib
   benchmark
   (angstrom
    (= "0.16.0"))
