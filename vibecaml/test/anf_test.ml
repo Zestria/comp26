@@ -154,6 +154,27 @@ let () =
   require
     (List.mem ("print_int", 1) (call_sizes "f" program))
     "потерян вызов с побочным эффектом";
+  let program = normalized "let f x = let unused = (x, x) in let (a, b) = (x, 1) in a" in
+  let smaller = Anf_simplify.simplify program in
+  require
+    (Anf.count_lets smaller < Anf.count_lets program)
+    "неиспользуемый кортеж или поле не удалены";
+  let count predicate =
+    List.length (List.filter predicate (computations (body "f" smaller)))
+  in
+  require
+    (count (function
+       | CTuple _ -> true
+       | _ -> false)
+     = 1)
+    "неиспользуемый кортеж сохранился";
+  require
+    (count (function
+       | CField _ -> true
+       | _ -> false)
+     = 1)
+    "неиспользуемое поле сохранилось";
+  require (Anf_simplify.simplify smaller = smaller) "уменьшение не идемпотентно";
   let aliases =
     [ ( Ast.Non_recursive
       , [ ( "f"
