@@ -17,18 +17,13 @@ let dedup xs =
 let diff xs ys = List.filter (fun x -> not (List.mem x ys)) xs
 let union xs ys = dedup (xs @ ys)
 
-let rec pattern_vars pat =
-  match pat with
-  | Pat_wildcard -> []
-  | Pat_var id -> [ id ]
-  | Pat_constant _ -> []
-  | Pat_tuple (p1, p2, ps) ->
-    dedup (pattern_vars p1 @ pattern_vars p2 @ List.concat_map pattern_vars ps)
-;;
+(* Синоним оставлен для кода, который на него уже ссылается. *)
+let pattern_vars = Ast.pattern_names
 
 let rec collect bound = function
   | Expr_constant _ -> []
-  | Expr_ident name -> if List.mem name bound then [] else [ name ]
+  | Expr_ident name when List.mem name bound -> []
+  | Expr_ident name -> [ name ]
   | Expr_let (Recursive, _, _, _) ->
     raise
       (Convert_error "Closure conversion: поддерживается только `let rec` верхнего уровня")
@@ -114,10 +109,6 @@ let rec transform env expr =
     Expr_tuple (transform env fst, transform env snd, List.map (transform env) rest)
 ;;
 
-let binding_names bindings =
-  List.concat_map (fun binding -> pattern_vars binding.binding_pattern) bindings
-;;
-
 let convert_binding env binding =
   match binding.binding_pattern, binding.binding_expression with
   | Pat_var _, Expr_fun (parameter, parameters, body) ->
@@ -131,7 +122,7 @@ let rec convert_structure env = function
   | [] -> []
   | Structure_value (flag, first, rest) :: items ->
     let bindings = first :: rest in
-    let bounded = binding_names bindings in
+    let bounded = List.concat_map (fun b -> pattern_vars b.binding_pattern) bindings in
     let env' =
       match flag with
       | Non_recursive -> env

@@ -31,13 +31,6 @@ let info environment name =
   | None -> unknown
 ;;
 
-let rec pattern_names = function
-  | Pat_var name -> [ name ]
-  | Pat_tuple (first, second, rest) ->
-    List.concat_map pattern_names (first :: second :: rest)
-  | Pat_wildcard | Pat_constant _ -> []
-;;
-
 let hide_patterns environment patterns =
   List.map (fun name -> name, unknown) (List.concat_map pattern_names patterns)
   @ environment
