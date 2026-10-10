@@ -11,6 +11,8 @@ open Ast_gen
 open Arg
 open SchonfinkelML_frontend.Common
 
+[@@@zanuda "-mutability_check"] (* For Config lib *)
+
 type config =
   { mutable height : int
   ; mutable seed : int

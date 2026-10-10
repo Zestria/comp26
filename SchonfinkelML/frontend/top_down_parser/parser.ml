@@ -6,6 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
+[@@@zanuda "-mutability_check"] (* Because of ocamllex usage *)
+
 module Ast = SchonfinkelML_frontend.Common
 module Lexer = SchonfinkelML_frontend.Lexer
 
