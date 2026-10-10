@@ -1,20 +1,24 @@
 (test
  (name lexer_tests)
+ (package BDSMl)
  (modules lexer_tests)
  (libraries BDSMl.frontend alcotest))
 
 (test
  (name parser_LL_tests)
+ (package BDSMl)
  (modules parser_LL_tests)
  (libraries BDSMl.frontend alcotest))
 
 (test
  (name parser_LR_tests)
+ (package BDSMl)
  (modules parser_LR_tests)
  (libraries BDSMl.frontend qcheck))
 
 (test
  (name qcheck_test)
+ (package BDSMl)
  (modules qcheck_test)
  (libraries BDSMl.frontend qcheck))
 

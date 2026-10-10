@@ -1,0 +1,17 @@
+(library
+ (name MMML_LL)
+ (public_name MMML.LL)
+ (modules LL)
+ (wrapped false)
+ (libraries
+  llvm
+  llvm.analysis
+  llvm.executionengine
+  ;
+  )
+ (instrumentation
+  (backend bisect_ppx_ng)))
+
+(cram
+ (package MMML)
+ (deps ../compiler.exe runtime.c))

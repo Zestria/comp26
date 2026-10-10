@@ -1,0 +1,14 @@
+(cram
+ (package MyLittleML)
+ (applies_to NewGVNtricky)
+ (deps NewGVNtricky.ll)
+ (enabled_if false)) ; TODO: codegeneration in next tasks
+
+(executable
+ (public_name compiler)
+ (package MyLittleML)
+ (name compiler)
+ (modules compiler)
+ (libraries LL parsing)
+ (instrumentation
+  (backend bisect_ppx_ng)))
