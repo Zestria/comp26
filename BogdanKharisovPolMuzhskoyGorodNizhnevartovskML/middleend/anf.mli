@@ -123,9 +123,10 @@ val remove_unused
   -> ('function_, 'callee) term
 
 (** Normalize a term satisfying [Lambda.validate]. Propagate atomic aliases and
-    known immutable tuple fields, select constant boolean branches, avoid tail
+    known immutable tuple fields, fold proven-total constant primitives through
+    [Primitive_simplify], select constant boolean branches, avoid tail
     result temporaries and remove unused allocations, including syntactic recursive
-    functions with no uses outside their initializer. Calls and
+    functions with no uses outside their initializer. Remaining calls and
     unknown projections remain eager even if their results are unused.
     Recursive initialization safety must be checked before this transformation;
     recursive initializers retain their scope and do not export value facts.

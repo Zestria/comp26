@@ -68,3 +68,9 @@
  (modules test_known_functions)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend middleend_test_support qcheck))
+
+(test
+ (name test_primitive_simplify)
+ (modules test_primitive_simplify)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))

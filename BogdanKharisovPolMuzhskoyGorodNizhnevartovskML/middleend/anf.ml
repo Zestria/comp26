@@ -309,6 +309,23 @@ let project environment value index =
   | None -> Field (value, index)
 ;;
 
+let application f a rest =
+  let rec constants = function
+    | [] -> Some []
+    | Constant value :: rest -> Option.map (fun rest -> value :: rest) (constants rest)
+    | Var _ :: _ | Primitive _ :: _ -> None
+  in
+  let folded =
+    match f with
+    | Primitive primitive ->
+      Option.bind (constants (a :: rest)) (Primitive_simplify.apply primitive)
+    | Constant _ | Var _ -> None
+  in
+  match folded with
+  | Some value -> Atom (Constant value)
+  | None -> Apply (f, a, rest)
+;;
+
 (* Visit uses before definitions and do not count
    references in a discarded RHS. A set suffices: we do not inline computations.
    Globally unique binding identities let us thread one set through branches
@@ -420,7 +437,7 @@ let of_lambda supply expression =
                   environment
                   f
                   (fun environment f supply ->
-                     continuation environment (Apply (f, a, rest)) supply)
+                     continuation environment (application f a rest) supply)
                   supply)
              supply)
         supply
