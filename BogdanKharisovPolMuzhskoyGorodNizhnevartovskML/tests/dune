@@ -56,3 +56,9 @@
  (modules test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress test_operator_extension_properties test_support)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend qcheck))
+
+(test
+ (name test_typed_middleend)
+ (modules test_typed_middleend typed_terms)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))
