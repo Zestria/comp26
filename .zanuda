@@ -1,1 +1,3 @@
 ignore BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/grammar.ml
+ignore vibecaml/lib/menhir_parser.ml
+ignore vibecaml/lib/menhir_parser.mli
