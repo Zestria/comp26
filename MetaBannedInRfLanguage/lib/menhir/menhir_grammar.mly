@@ -7,6 +7,10 @@
 
 [@@@ocaml.text "/*"]
 
+(* This header is copied into the generated parser, so the attribute below
+   switches off zanuda lints for code that menhir writes, not us. *)
+[@@@zanuda "-propose_function"]
+
 open Ast
 
 let apply_binop op left right = EApply (EApply (EIdent op, left), right)
