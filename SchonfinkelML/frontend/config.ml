@@ -6,6 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
+[@@@zanuda "-mutability_check"] (* Config is required to use with assignment '<-' *)
+
 type parser_kind =
   | Top_down
   | Bottom_up

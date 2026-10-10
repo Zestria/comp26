@@ -6,6 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
+[@@@zanuda "-mutability_check"] (* Mutability is required for Config lib *)
+
 open SchonfinkelML_frontend.Common
 open SchonfinkelML_frontend.Config
 

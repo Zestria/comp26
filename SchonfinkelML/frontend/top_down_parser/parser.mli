@@ -6,6 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
+[@@@zanuda "-mutability_check"]
+
 (** Top-down (recursive descent) parser over the token stream produced by [SchonfinkelML_frontend.Lexer].
 
     Operators are described by an [Operators.t], so their arity, associativity and
