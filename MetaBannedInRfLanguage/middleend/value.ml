@@ -11,7 +11,9 @@ type value =
   | VBool of bool
   | VUnit
   | VTuple of value * value * value list
-  | VClosure of (value list -> (value, string) result)
+  (** Takes the arguments and the remaining fuel, returns the result and the
+      fuel left after the call. *)
+  | VClosure of (value list -> int -> (value * int, string) result)
 
 let rec equal a b =
   match a, b with
@@ -32,7 +34,7 @@ let rec to_string = function
   | VBool b -> Bool.to_string b
   | VUnit -> "()"
   | VTuple (a, b, rest) ->
-    "(" ^ String.concat ", " (List.map to_string (a :: b :: rest)) ^ ")"
+    Printf.sprintf "(%s)" (String.concat ", " (List.map to_string (a :: b :: rest)))
   | VClosure _ -> "<closure>"
 ;;
 

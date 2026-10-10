@@ -11,7 +11,9 @@ type value =
   | VBool of bool
   | VUnit
   | VTuple of value * value * value list
-  | VClosure of (value list -> (value, string) result)
+  (** Takes the arguments and the remaining fuel, returns the result and the
+      fuel left after the call. *)
+  | VClosure of (value list -> int -> (value * int, string) result)
 
 val equal : value -> value -> bool
 val to_string : value -> string
