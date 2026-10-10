@@ -138,7 +138,7 @@ and convert_rec ctx bindings =
       then [ name, CFun (params, value_body') ]
       else (
         let helper = Fresh.fresh ~suffix:"__cc" ctx.gen name in
-        [ name, CFun (params, ACExpr (CApp (ImmVar helper, imm_vars caps)))
+        [ name, CFun (params, ACExpr (CApp (ImmVar helper, imm_vars (caps @ params))))
         ; helper, CFun (caps @ params, value_body')
         ])
     | _ -> [ name, cc_cexpr ctx_body value ]
