@@ -9,7 +9,6 @@
 open BDSMl_frontend
 open BDSMl_frontend.Ast
 open Anf_ast
-
 module Names = Set.Make (String)
 
 let rec source_names names = function
@@ -50,9 +49,6 @@ let flatten_app (e : Ast.expr) : Ast.expr * Ast.expr list =
   go e []
 ;;
 
-(** Отделяет параметры функции от тела:
-    [Abs (p1, Abs (p2, body))] ~> [([p1; p2], body)].
-    Для не-функции возвращает [([], e)]. *)
 let split_params (e : Ast.expr) : Ast.pattern list * Ast.expr =
   let rec go acc e =
     match e with
@@ -62,8 +58,6 @@ let split_params (e : Ast.expr) : Ast.pattern list * Ast.expr =
   go [] e
 ;;
 
-(** Переводит [e] и передаёт в [k] атом с его результатом.
-    Если [e] не атом, заводит для него новое имя через [Fresh]. *)
 let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
   match e with
   | Ast.Int n -> k (ImmInt n)
@@ -77,8 +71,6 @@ let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
         let name = fresh_anf () in
         ALet (Ast.PVar name, ce, k (ImmId name)))
 
-(** OCaml вычисляет аргументы приложения справа налево. Порядок атомов в
-    списке остаётся исходным, а вычисления выполняются с конца списка. *)
 and to_imm_list (es : Ast.expr list) (k : immexpr list -> aexpr) : aexpr =
   match es with
   | [] -> k []
@@ -94,8 +86,7 @@ and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
   | Ast.UnOp (op, e1) -> to_imm e1 (fun a -> k (CUnOp (op, a)))
   | Ast.App _ ->
     let f, args = flatten_app e in
-    to_imm_list args (fun args_imm ->
-      to_imm f (fun f_imm -> k (CApp (f_imm, args_imm))))
+    to_imm_list args (fun args_imm -> to_imm f (fun f_imm -> k (CApp (f_imm, args_imm))))
   | Ast.If (c, e1, e2) ->
     to_imm c (fun c_imm -> k (CIf (c_imm, to_aexpr e1, to_aexpr e2)))
   | Ast.Let (Rec, _, _, _) ->
@@ -103,7 +94,6 @@ and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
   | Ast.Let (NonRec, p, e1, e2) -> to_cexpr e1 (fun ce -> ALet (p, ce, to_cexpr e2 k))
   | Ast.Abs _ -> failwith "to_cexpr: лямбда должна быть убрана до ANF"
 
-(** Переводит [e] целиком: [to_cexpr e (fun c -> ACExpr c)]. *)
 and to_aexpr (e : Ast.expr) : aexpr = to_cexpr e (fun ce -> ACExpr ce)
 
 let substitute_imm name replacement = function
@@ -139,7 +129,9 @@ and substitute_cexpr name replacement = function
   | CImm imm -> CImm (substitute_imm name replacement imm)
   | CBinOp (operator, left, right) ->
     CBinOp
-      (operator, substitute_imm name replacement left, substitute_imm name replacement right)
+      ( operator
+      , substitute_imm name replacement left
+      , substitute_imm name replacement right )
   | CUnOp (operator, operand) -> CUnOp (operator, substitute_imm name replacement operand)
   | CApp (function_, arguments) ->
     CApp
@@ -159,16 +151,15 @@ let rec compact_aexpr = function
     let body = compact_aexpr body in
     (match pattern, expression, body with
      | PVar name, CImm replacement, _
-       when (match replacement with
-             | ImmId source -> not (bound_in_aexpr source body)
-             | ImmInt _ | ImmBool _ | ImmUnit -> true) ->
+       when match replacement with
+            | ImmId source -> not (bound_in_aexpr source body)
+            | ImmInt _ | ImmBool _ | ImmUnit -> true ->
        compact_aexpr (substitute_aexpr name replacement body)
      | PUnderscore, CImm _, _ | PUnit, CImm ImmUnit, _ -> body
      | ( PVar name
        , CApp (function_, arguments)
        , ACExpr (CApp (ImmId applied, more_arguments)) )
-       when name = applied ->
-       ACExpr (CApp (function_, arguments @ more_arguments))
+       when name = applied -> ACExpr (CApp (function_, arguments @ more_arguments))
      | PVar name, expression, ACExpr (CImm (ImmId result)) when name = result ->
        ACExpr expression
      | _ -> ALet (pattern, expression, body))
@@ -179,7 +170,6 @@ and compact_cexpr = function
   | expression -> expression
 ;;
 
-(** Переводит одно определение верхнего уровня. *)
 let anf_decl (item : Ast.structure_item) : decl =
   match item with
   | StrEval e -> AEval (compact_aexpr (to_aexpr e))
@@ -188,17 +178,16 @@ let anf_decl (item : Ast.structure_item) : decl =
     ADecl (r, p, params, compact_aexpr (to_aexpr body))
 ;;
 
-(** Переводит всю программу. Не забыть [Fresh.reset ()] в начале. *)
 let anf (program : Ast.program) : aprogram =
   Fresh.reset ();
-  reserved :=
-    List.fold_left
-      (fun names -> function
-        | StrEval expression -> source_names names expression
-        | StrLet (_, pattern, expression) ->
-          source_names (pattern_name names pattern) expression)
-      Names.empty
-      program;
+  reserved
+  := List.fold_left
+       (fun names -> function
+          | StrEval expression -> source_names names expression
+          | StrLet (_, pattern, expression) ->
+            source_names (pattern_name names pattern) expression)
+       Names.empty
+       program;
   let rec go prog acc =
     match prog with
     | p :: tl -> go tl (anf_decl p :: acc)

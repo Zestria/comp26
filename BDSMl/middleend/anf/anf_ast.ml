@@ -20,9 +20,6 @@ type cexpr =
   | CUnOp of Ast.unop * immexpr
   | CApp of immexpr * immexpr list (* f a1 ... an *)
   | CIf of immexpr * aexpr * aexpr
-  (** Условие --- атом: [if f x then ...] превращается в
-          [let t = f x in if t then ...]. Ветки остаются [aexpr], их
-          вычисления нельзя выносить наружу. *)
 
 and aexpr =
   | ALet of Ast.pattern * cexpr * aexpr
@@ -31,7 +28,6 @@ and aexpr =
 
 type decl =
   | ADecl of Ast.rec_flag * Ast.pattern * Ast.pattern list * aexpr
-  (** [let [rec] name p1 ... pn = body]; для значения список параметров пуст. *)
   | AEval of aexpr
 
 type aprogram = decl list
