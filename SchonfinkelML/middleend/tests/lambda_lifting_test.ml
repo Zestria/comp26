@@ -85,7 +85,7 @@ let%expect_test "curried chain is lifted as a whole" =
   print_lifted "let a = 1 in let f = fun x -> fun y -> x + y + a in f 1 2";
   [%expect
     {|
-    let lift1 = fun a -> fun x -> fun y -> x + y + a in
+    let lift1 = fun a -> fun x -> fun y -> (x + y) + a in
       let a = 1 in let f = (lift1 a) in ((f 1) 2)
     |}]
 ;;
@@ -124,7 +124,7 @@ let%expect_test "nested recursive function is floated to the front" =
      f 3";
   [%expect
     {|
-    let rec g = fun i -> if i = 0 then 0 else (g i - 1) in
+    let rec g = fun i -> if i = 0 then 0 else (g (i - 1)) in
       let rec f = fun n -> (g n) in (f 3)
     |}]
 ;;
@@ -142,10 +142,11 @@ let%expect_test "cps factorial" =
   print_lifted cps_fact;
   [%expect
     {|
-    let lift1 = fun k -> fun n -> fun acc -> (k n * acc) in
+    let lift1 = fun k -> fun n -> fun acc -> (k (n * acc)) in
       let lift2 = fun x -> x in
         let rec fact =
-          fun n -> fun k -> if n = 0 then (k 1) else ((fact n - 1) ((lift1 k) n))
+          fun n -> fun k -> if n = 0 then (k 1) else
+                              ((fact (n - 1)) ((lift1 k) n))
           in ((fact 5) lift2)
     |}]
 ;;
@@ -154,13 +155,13 @@ let%expect_test "cps fibonacci" =
   print_lifted cps_fib;
   [%expect
     {|
-    let lift1 = fun k -> fun x -> fun y -> (k x + y) in
+    let lift1 = fun k -> fun x -> fun y -> (k (x + y)) in
       let lift2 =
-        fun fib -> fun k -> fun n -> fun x -> ((fib n - 2) ((lift1 k) x)) in
+        fun fib -> fun k -> fun n -> fun x -> ((fib (n - 2)) ((lift1 k) x)) in
         let lift3 = fun x_1 -> x_1 in
           let rec fib =
             fun n -> fun k -> if n < 2 then (k n) else
-                                ((fib n - 1) (((lift2 fib) k) n))
+                                ((fib (n - 1)) (((lift2 fib) k) n))
             in ((fib 6) lift3)
     |}]
 ;;
