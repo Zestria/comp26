@@ -170,8 +170,7 @@ and compact_cexpr = function
   | expression -> expression
 ;;
 
-let anf_decl (item : Ast.structure_item) : decl =
-  match item with
+let anf_decl : Ast.structure_item -> decl = function
   | StrEval e -> AEval (compact_aexpr (to_aexpr e))
   | StrLet (r, p, e) ->
     let params, body = split_params e in

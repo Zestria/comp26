@@ -16,13 +16,17 @@ type dataset =
 
 let parse_ll source =
   match LL_parser.Parser.parse_string_LL source with
-  | Ok ast -> ignore (Sys.opaque_identity ast)
+  | Ok ast ->
+    let (_ : Ast.program) = Sys.opaque_identity ast in
+    ()
   | Error _ -> failwith "the recursive-descent parser rejected a benchmark input"
 ;;
 
 let parse_lr source =
   match Parse.parse source with
-  | Ok ast -> ignore (Sys.opaque_identity ast)
+  | Ok ast ->
+    let (_ : Ast.program) = Sys.opaque_identity ast in
+    ()
   | Error message -> failwith ("the Menhir parser rejected a benchmark input: " ^ message)
 ;;
 

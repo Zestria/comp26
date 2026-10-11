@@ -15,8 +15,7 @@ let bound_name = function
   | PUnit | PUnderscore -> None
 ;;
 
-let rec all_names expression =
-  match expression with
+let rec all_names = function
   | Unit | Int _ | Bool _ -> Names.empty
   | Var name -> Names.singleton name
   | BinOp (_, left, right) | App (left, right) ->

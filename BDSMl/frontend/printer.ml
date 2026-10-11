@@ -73,8 +73,7 @@ let rec print_expr_ast : Ast.expr -> string = function
   | Bool b -> Printf.sprintf "Bool %b" b
 ;;
 
-let rec print_expr (expr : Ast.expr) : string =
-  match expr with
+let rec print_expr : Ast.expr -> string = function
   | Int x -> string_of_int x
   | Var x -> x
   | BinOp (op, e1, e2) ->
