@@ -90,3 +90,9 @@ let%expect_test "if expression" =
     (elet "foo" (eif (eeq (Ident "x") (Ident "y")) (Ident "x") (Ident "y")) (econsti 3));
   [%expect {| let foo = let v1 = x = y in if v1 then x else y in 3 |}]
 ;;
+
+let%expect_test "slides num 9" =
+  print_anf
+    (eadd (eadd (econsti 1) (eif (Ident "x") (Ident "y") (Ident "z"))) (econsti 2));
+  [%expect {| let v1 = if x then y else z in let v2 = 1 + v1 in v2 + 2 |}]
+;;
