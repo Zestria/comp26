@@ -139,6 +139,7 @@ let rec pp_expr ppf = function
 and pp_atom_like ppf e =
   match e with
   | Abstr _ | If _ | Let _ -> Format.fprintf ppf "(%a)" pp_expr e
+  | App (App (Ident op, _), _) when is_binop op -> Format.fprintf ppf "(%a)" pp_expr e
   | Ident _ | Const _ | App _ -> pp_expr ppf e
 ;;
 
