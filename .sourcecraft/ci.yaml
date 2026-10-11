@@ -90,6 +90,8 @@ workflows:
           - name: scan-result-uploader
             image:
               name: sourcecraft/scan-result-uploader:0.6.0
+            env:
+              ZANUDA_HACK_SARIF_PREFIX: "/sourcecraft/workspace/"
             script:
               - ls -l $SOURCECRAFT_WORKSPACE
               - pwd
