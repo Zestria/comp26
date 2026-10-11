@@ -98,8 +98,9 @@ let%expect_test "multiple captures keep a deterministic order" =
     {|
     let a = 1 in
       let b = 2 in
-        let f = let clo_1 = fun a -> fun b -> fun x -> x + a + b in ((clo_1 a) b)
-          in (f 3)
+        let f =
+          let clo_1 = fun a -> fun b -> fun x -> (x + a) + b in ((clo_1 a) b) in
+          (f 3)
     |}]
 ;;
 
@@ -114,8 +115,9 @@ let%expect_test "recursive function with captured variable" =
   [%expect
     {|
     let n = 10 in
-      let rec loop = fun n -> fun i -> if i > n then 0 else i + ((loop n) i + 1)
-        in let clo_1 = (loop n) in (clo_1 1)
+      let rec loop =
+        fun n -> fun i -> if i > n then 0 else i + ((loop n) (i + 1)) in
+        let clo_1 = (loop n) in (clo_1 1)
     |}]
 ;;
 
@@ -155,10 +157,10 @@ let%expect_test "cps factorial" =
     {|
     let rec fact =
       fun n -> fun k -> if n = 0 then (k 1) else
-                          ((fact n - 1) (let clo_1 =
-                                           fun k -> fun n -> fun acc -> (k
-                                                                        n * acc)
-                                           in ((clo_1 k) n)))
+                          ((fact (n - 1)) (let clo_1 =
+                                             fun k -> fun n -> fun acc ->
+                                                                 (k (n * acc))
+                                             in ((clo_1 k) n)))
       in ((fact 5) (fun x -> x))
     |}]
 ;;
@@ -179,20 +181,20 @@ let%expect_test "cps fibonacci" =
     {|
     let rec fib =
       fun n -> fun k -> if n < 2 then (k n) else
-                          ((fib n - 1) (let clo_2 =
-                                          fun fib -> fun k -> fun n -> fun x ->
-                                                                        (
-                                                                        (fib
-                                                                        n - 2) (
-                                                                        let clo_1 =
-                                                                        fun k ->
+                          ((fib (n - 1)) (let clo_2 =
+                                            fun fib -> fun k -> fun n ->
+                                                                  fun x ->
+                                                                    ((fib (
+                                                                     n - 2)) (
+                                                                    let clo_1 =
+                                                                      fun k ->
                                                                         fun x ->
                                                                         fun y ->
-                                                                        (k
-                                                                        x + y) in
-                                                                        (
-                                                                        (clo_1 k) x)))
-                                          in (((clo_2 fib) k) n)))
+                                                                        (k (
+                                                                        x + y))
+                                                                      in
+                                                                      ((clo_1 k) x)))
+                                            in (((clo_2 fib) k) n)))
       in ((fib 6) (fun x_1 -> x_1))
     |}]
 ;;
