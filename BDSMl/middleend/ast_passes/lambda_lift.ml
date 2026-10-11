@@ -15,8 +15,7 @@ let bound_name = function
   | PUnit | PUnderscore -> None
 ;;
 
-let rec all_names expression =
-  match expression with
+let rec all_names = function
   | Unit | Int _ | Bool _ -> Names.empty
   | Var name -> Names.singleton name
   | BinOp (_, left, right) | App (left, right) ->
@@ -95,47 +94,38 @@ let builtin_names =
 ;;
 
 let lambda_lift program =
-  Fresh.reset ();
-  let used = ref (program_names program) in
-  let fresh () =
-    let rec choose () =
-      let candidate = Fresh.fresh_ident "lifted" in
-      if Names.mem candidate !used then choose () else candidate
-    in
-    let name = choose () in
-    used := Names.add name !used;
-    name
-  in
+  let ( let* ) = Fresh.bind in
+  let return = Fresh.return in
   let rec lift_expression available = function
-    | (Unit | Int _ | Bool _ | Var _) as expression -> expression, []
+    | (Unit | Int _ | Bool _ | Var _) as expression -> return (expression, [])
     | BinOp (operator, left, right) ->
-      let left, left_lifts = lift_expression available left in
-      let right, right_lifts = lift_expression available right in
-      BinOp (operator, left, right), left_lifts @ right_lifts
+      let* left, left_lifts = lift_expression available left in
+      let* right, right_lifts = lift_expression available right in
+      return (BinOp (operator, left, right), left_lifts @ right_lifts)
     | UnOp (operator, operand) ->
-      let operand, lifts = lift_expression available operand in
-      UnOp (operator, operand), lifts
+      let* operand, lifts = lift_expression available operand in
+      return (UnOp (operator, operand), lifts)
     | If (condition, if_true, if_false) ->
-      let condition, condition_lifts = lift_expression available condition in
-      let if_true, true_lifts = lift_expression available if_true in
-      let if_false, false_lifts = lift_expression available if_false in
-      If (condition, if_true, if_false), condition_lifts @ true_lifts @ false_lifts
+      let* condition, condition_lifts = lift_expression available condition in
+      let* if_true, true_lifts = lift_expression available if_true in
+      let* if_false, false_lifts = lift_expression available if_false in
+      return (If (condition, if_true, if_false), condition_lifts @ true_lifts @ false_lifts)
     | App (function_, argument) ->
-      let function_, function_lifts = lift_expression available function_ in
-      let argument, argument_lifts = lift_expression available argument in
-      App (function_, argument), function_lifts @ argument_lifts
+      let* function_, function_lifts = lift_expression available function_ in
+      let* argument, argument_lifts = lift_expression available argument in
+      return (App (function_, argument), function_lifts @ argument_lifts)
     | Abs _ as abstraction -> lift_abstraction available None abstraction
     | Let (Rec, PVar name, (Abs _ as value), body) ->
-      let value, value_lifts = lift_abstraction available (Some name) value in
-      let body, body_lifts = lift_expression available body in
-      Let (NonRec, PVar name, value, body), value_lifts @ body_lifts
+      let* value, value_lifts = lift_abstraction available (Some name) value in
+      let* body, body_lifts = lift_expression available body in
+      return (Let (NonRec, PVar name, value, body), value_lifts @ body_lifts)
     | Let (rec_flag, pattern, value, body) ->
-      let value, value_lifts = lift_expression available value in
-      let body, body_lifts = lift_expression available body in
-      Let (rec_flag, pattern, value, body), value_lifts @ body_lifts
+      let* value, value_lifts = lift_expression available value in
+      let* body, body_lifts = lift_expression available body in
+      return (Let (rec_flag, pattern, value, body), value_lifts @ body_lifts)
 
   and lift_abstraction available recursive_name abstraction =
-    let lifted_name = fresh () in
+    let* lifted_name = Fresh.fresh_ident "lifted" in
     let abstraction =
       match recursive_name with
       | None -> abstraction
@@ -148,27 +138,29 @@ let lambda_lift program =
       |> Names.elements
     in
     let parameters, body = split_abstractions abstraction in
-    let body, nested_lifts = lift_expression available body in
+    let* body, nested_lifts = lift_expression available body in
     let lifted_value =
       abstractions (List.map (fun name -> PVar name) captures @ parameters) body
     in
     let rec_flag = match recursive_name with None -> NonRec | Some _ -> Rec in
     let declaration = StrLet (rec_flag, PVar lifted_name, lifted_value) in
-    apply (Var lifted_name) (List.map (fun name -> Var name) captures),
-    nested_lifts @ [ declaration ]
+    return
+      (apply (Var lifted_name) (List.map (fun name -> Var name) captures),
+       nested_lifts @ [ declaration ])
   in
   let rec lift_program available = function
-    | [] -> []
+    | [] -> return []
     | StrEval expression :: rest ->
-      let expression, lifts = lift_expression available expression in
-      lifts @ (StrEval expression :: lift_program available rest)
+      let* expression, lifts = lift_expression available expression in
+      let* rest = lift_program available rest in
+      return (lifts @ (StrEval expression :: rest))
     | StrLet (rec_flag, pattern, value) :: rest ->
-      let value, lifts =
+      let* value, lifts =
         match value with
         | Abs _ ->
           let parameters, body = split_abstractions value in
-          let body, lifts = lift_expression available body in
-          abstractions parameters body, lifts
+          let* body, lifts = lift_expression available body in
+          return (abstractions parameters body, lifts)
         | _ -> lift_expression available value
       in
       let next_available =
@@ -176,7 +168,9 @@ let lambda_lift program =
         | None -> available
         | Some name -> Names.add name available
       in
-      lifts @ (StrLet (rec_flag, pattern, value) :: lift_program next_available rest)
+      let* rest = lift_program next_available rest in
+      return (lifts @ (StrLet (rec_flag, pattern, value) :: rest))
   in
-  lift_program builtin_names program
+  let state = Fresh.create (Names.elements (program_names program)) in
+  fst (lift_program builtin_names program state)
 ;;

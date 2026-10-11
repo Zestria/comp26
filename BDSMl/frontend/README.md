@@ -14,7 +14,8 @@
 Грамматика Menhir использует общий тип токенов `Tokens.token` через
 `--external-tokens Tokens`. `LR_parser.Lexer.tokenize_lazy` выдаёт токены
 по запросу, включая `TEOF`; `LR_parser.Lexer.tokenize` собирает их в список.
-Оба парсера читают токены из соответствующих ленивых последовательностей.
+LL-парсер читает ленивую последовательность токенов; Menhir запрашивает
+токены напрямую через ocamllex и общий `Lexing.lexbuf`.
 `Parse.parse` запускает Menhir и возвращает ошибки
 как строки, сохраняя прежний интерфейс `(Ast.program, string) result`.
 

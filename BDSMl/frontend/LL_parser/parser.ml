@@ -146,12 +146,12 @@ let rec parse_expr config tokens =
     Ok (If (cond, e_then, e_else), ts)
   | Cons (TFun, ts) ->
     let* params, ts = parse_pattern_list ts in
-    if params = []
-    then Error (`parse_error "'fun' expects at least one parameter")
-    else
-      let* (), ts = expect TArrow ts in
-      let* body, ts = parse_expr config ts in
-      Ok (wrap_abs params body, ts)
+    (match params with
+     | [] -> Error (`parse_error "'fun' expects at least one parameter")
+     | _ :: _ ->
+       let* (), ts = expect TArrow ts in
+       let* body, ts = parse_expr config ts in
+       Ok (wrap_abs params body, ts))
   | Cons _ | Nil -> parse_binary config 0 tokens
   | LexError e -> Error (e :> [> error ])
 

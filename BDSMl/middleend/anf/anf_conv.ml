@@ -11,6 +11,8 @@ open BDSMl_frontend.Ast
 open Anf_ast
 module Names = Set.Make (String)
 
+let ( let* ) = Result.bind
+
 let rec source_names names = function
   | Ast.Unit | Ast.Int _ | Ast.Bool _ -> names
   | Ast.Var name -> Names.add name names
@@ -26,18 +28,6 @@ let rec source_names names = function
 and pattern_name names = function
   | Ast.PVar name -> Names.add name names
   | Ast.PUnit | Ast.PUnderscore -> names
-;;
-
-let reserved = ref Names.empty
-
-let fresh_anf () =
-  let rec choose () =
-    let name = Fresh.fresh_ident "a" in
-    if Names.mem name !reserved then choose () else name
-  in
-  let name = choose () in
-  reserved := Names.add name !reserved;
-  name
 ;;
 
 let flatten_app (e : Ast.expr) : Ast.expr * Ast.expr list =
@@ -58,43 +48,64 @@ let split_params (e : Ast.expr) : Ast.pattern list * Ast.expr =
   go [] e
 ;;
 
-let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
+(* Continuations carry an immutable name supply; an error stops conversion. *)
+let rec to_imm e k state =
   match e with
-  | Ast.Int n -> k (ImmInt n)
-  | Ast.Bool b -> k (ImmBool b)
-  | Ast.Unit -> k ImmUnit
-  | Ast.Var x -> k (ImmId x)
+  | Ast.Int n -> k (ImmInt n) state
+  | Ast.Bool b -> k (ImmBool b) state
+  | Ast.Unit -> k ImmUnit state
+  | Ast.Var x -> k (ImmId x) state
   | _ ->
-    to_cexpr e (function
-      | CImm imm -> k imm
-      | ce ->
-        let name = fresh_anf () in
-        ALet (Ast.PVar name, ce, k (ImmId name)))
+    to_cexpr e
+      (fun ce state ->
+         match ce with
+         | CImm imm -> k imm state
+         | _ ->
+           let name, state = Fresh.fresh_ident "a" state in
+           let* body, state = k (ImmId name) state in
+           Ok (ALet (Ast.PVar name, ce, body), state))
+      state
 
-and to_imm_list (es : Ast.expr list) (k : immexpr list -> aexpr) : aexpr =
+and to_imm_list es k state =
   match es with
-  | [] -> k []
-  | e :: tl -> to_imm_list tl (fun imms -> to_imm e (fun imm -> k (imm :: imms)))
+  | [] -> k [] state
+  | e :: tl ->
+    to_imm_list tl
+      (fun imms -> to_imm e (fun imm -> k (imm :: imms)))
+      state
 
-and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
+and to_cexpr e k state =
   match e with
-  | Ast.Unit | Ast.Int _ | Ast.Bool _ | Ast.Var _ -> to_imm e (fun imm -> k (CImm imm))
-  | Ast.BinOp (And, a, b) -> to_cexpr (Ast.If (a, b, Ast.Bool false)) k
-  | Ast.BinOp (Or, a, b) -> to_cexpr (Ast.If (a, Ast.Bool true, b)) k
+  | Ast.Unit | Ast.Int _ | Ast.Bool _ | Ast.Var _ ->
+    to_imm e (fun imm -> k (CImm imm)) state
+  | Ast.BinOp (And, a, b) -> to_cexpr (Ast.If (a, b, Ast.Bool false)) k state
+  | Ast.BinOp (Or, a, b) -> to_cexpr (Ast.If (a, Ast.Bool true, b)) k state
   | Ast.BinOp (op, e1, e2) ->
-    to_imm e2 (fun b -> to_imm e1 (fun a -> k (CBinOp (op, a, b))))
-  | Ast.UnOp (op, e1) -> to_imm e1 (fun a -> k (CUnOp (op, a)))
+    to_imm e2 (fun b -> to_imm e1 (fun a -> k (CBinOp (op, a, b)))) state
+  | Ast.UnOp (op, e1) -> to_imm e1 (fun a -> k (CUnOp (op, a))) state
   | Ast.App _ ->
     let f, args = flatten_app e in
-    to_imm_list args (fun args_imm -> to_imm f (fun f_imm -> k (CApp (f_imm, args_imm))))
+    to_imm_list args
+      (fun args_imm -> to_imm f (fun f_imm -> k (CApp (f_imm, args_imm))))
+      state
   | Ast.If (c, e1, e2) ->
-    to_imm c (fun c_imm -> k (CIf (c_imm, to_aexpr e1, to_aexpr e2)))
+    to_imm c
+      (fun c_imm state ->
+         let* if_true, state = to_aexpr e1 state in
+         let* if_false, state = to_aexpr e2 state in
+         k (CIf (c_imm, if_true, if_false)) state)
+      state
   | Ast.Let (Rec, _, _, _) ->
-    failwith "to_cexpr: локальный let rec должен быть убран до ANF"
-  | Ast.Let (NonRec, p, e1, e2) -> to_cexpr e1 (fun ce -> ALet (p, ce, to_cexpr e2 k))
-  | Ast.Abs _ -> failwith "to_cexpr: лямбда должна быть убрана до ANF"
+    Error "ANF: локальный let rec должен быть убран до ANF"
+  | Ast.Let (NonRec, p, e1, e2) ->
+    to_cexpr e1
+      (fun ce state ->
+         let* body, state = to_cexpr e2 k state in
+         Ok (ALet (p, ce, body), state))
+      state
+  | Ast.Abs _ -> Error "ANF: лямбда должна быть убрана до ANF"
 
-and to_aexpr (e : Ast.expr) : aexpr = to_cexpr e (fun ce -> ACExpr ce)
+and to_aexpr e state = to_cexpr e (fun ce state -> Ok (ACExpr ce, state)) state
 
 let substitute_imm name replacement = function
   | ImmId current when current = name -> replacement
@@ -170,28 +181,31 @@ and compact_cexpr = function
   | expression -> expression
 ;;
 
-let anf_decl (item : Ast.structure_item) : decl =
+let anf_decl item state =
   match item with
-  | StrEval e -> AEval (compact_aexpr (to_aexpr e))
+  | StrEval e ->
+    let* body, state = to_aexpr e state in
+    Ok (AEval (compact_aexpr body), state)
   | StrLet (r, p, e) ->
     let params, body = split_params e in
-    ADecl (r, p, params, compact_aexpr (to_aexpr body))
+    let* body, state = to_aexpr body state in
+    Ok (ADecl (r, p, params, compact_aexpr body), state)
 ;;
 
-let anf (program : Ast.program) : aprogram =
-  Fresh.reset ();
-  reserved
-  := List.fold_left
-       (fun names -> function
-          | StrEval expression -> source_names names expression
-          | StrLet (_, pattern, expression) ->
-            source_names (pattern_name names pattern) expression)
-       Names.empty
-       program;
-  let rec go prog acc =
-    match prog with
-    | p :: tl -> go tl (anf_decl p :: acc)
-    | _ -> List.rev acc
+let anf (program : Ast.program) : (aprogram, string) result =
+  let names =
+    List.fold_left
+      (fun names -> function
+         | StrEval expression -> source_names names expression
+         | StrLet (_, pattern, expression) ->
+           source_names (pattern_name names pattern) expression)
+      Names.empty program
   in
-  go program []
+  let rec go state acc = function
+    | item :: rest ->
+      let* declaration, state = anf_decl item state in
+      go state (declaration :: acc) rest
+    | [] -> Ok (List.rev acc)
+  in
+  go (Fresh.create (Names.elements names)) [] program
 ;;

@@ -8,4 +8,5 @@
 
 open BDSMl_frontend
 
-val anf : Ast.program -> Anf_ast.aprogram
+(** Convert a lifted program; report remaining local recursion or abstractions. *)
+val anf : Ast.program -> (Anf_ast.aprogram, string) result

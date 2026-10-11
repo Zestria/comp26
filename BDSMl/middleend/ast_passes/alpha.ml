@@ -41,70 +41,66 @@ let program_names program =
 ;;
 
 let alpha program =
-  Fresh.reset ();
-  let used = ref (program_names program) in
-  let fresh name =
-    let rec choose () =
-      let candidate = Fresh.fresh_ident name in
-      if Names.mem candidate !used then choose () else candidate
-    in
-    let candidate = choose () in
-    used := Names.add candidate !used;
-    candidate
-  in
+  let ( let* ) = Fresh.bind in
+  let return = Fresh.return in
   let rename_pattern environment = function
     | PVar name ->
-      let renamed = fresh name in
-      PVar renamed, Environment.add name renamed environment
-    | (PUnit | PUnderscore) as pattern -> pattern, environment
+      let* renamed = Fresh.fresh_ident name in
+      return (PVar renamed, Environment.add name renamed environment)
+    | (PUnit | PUnderscore) as pattern -> return (pattern, environment)
   in
   let rec rename_expression environment = function
-    | (Unit | Int _ | Bool _) as expression -> expression
+    | (Unit | Int _ | Bool _) as expression -> return expression
     | Var name ->
-      Var (Option.value (Environment.find_opt name environment) ~default:name)
+      return (Var (Option.value (Environment.find_opt name environment) ~default:name))
     | BinOp (operator, left, right) ->
-      BinOp
-        ( operator
-        , rename_expression environment left
-        , rename_expression environment right )
-    | UnOp (operator, operand) -> UnOp (operator, rename_expression environment operand)
+      let* right = rename_expression environment right in
+      let* left = rename_expression environment left in
+      return (BinOp (operator, left, right))
+    | UnOp (operator, operand) ->
+      let* operand = rename_expression environment operand in
+      return (UnOp (operator, operand))
     | If (condition, if_true, if_false) ->
-      If
-        ( rename_expression environment condition
-        , rename_expression environment if_true
-        , rename_expression environment if_false )
+      let* if_false = rename_expression environment if_false in
+      let* if_true = rename_expression environment if_true in
+      let* condition = rename_expression environment condition in
+      return (If (condition, if_true, if_false))
     | App (function_, argument) ->
-      App
-        (rename_expression environment function_, rename_expression environment argument)
+      let* argument = rename_expression environment argument in
+      let* function_ = rename_expression environment function_ in
+      return (App (function_, argument))
     | Abs (pattern, body) ->
-      let pattern, body_environment = rename_pattern environment pattern in
-      Abs (pattern, rename_expression body_environment body)
+      let* pattern, body_environment = rename_pattern environment pattern in
+      let* body = rename_expression body_environment body in
+      return (Abs (pattern, body))
     | Let (rec_flag, pattern, value, body) ->
-      let pattern, body_environment = rename_pattern environment pattern in
+      let* pattern, body_environment = rename_pattern environment pattern in
       let value_environment =
         match rec_flag with
         | Rec -> body_environment
         | NonRec -> environment
       in
-      Let
-        ( rec_flag
-        , pattern
-        , rename_expression value_environment value
-        , rename_expression body_environment body )
+      let* body = rename_expression body_environment body in
+      let* value = rename_expression value_environment value in
+      return (Let (rec_flag, pattern, value, body))
   in
   let rec rename_program environment = function
-    | [] -> []
+    | [] -> return []
     | StrEval expression :: rest ->
-      StrEval (rename_expression environment expression) :: rename_program environment rest
+      let* rest = rename_program environment rest in
+      let* expression = rename_expression environment expression in
+      return (StrEval expression :: rest)
     | StrLet (rec_flag, pattern, value) :: rest ->
-      let pattern, next_environment = rename_pattern environment pattern in
+      let* pattern, next_environment = rename_pattern environment pattern in
       let value_environment =
         match rec_flag with
         | Rec -> next_environment
         | NonRec -> environment
       in
-      StrLet (rec_flag, pattern, rename_expression value_environment value)
-      :: rename_program next_environment rest
+      let* rest = rename_program next_environment rest in
+      let* value = rename_expression value_environment value in
+      return (StrLet (rec_flag, pattern, value) :: rest)
   in
-  rename_program Environment.empty program
+  let state = Fresh.create (Names.elements (program_names program)) in
+  fst (rename_program Environment.empty program state)
 ;;
