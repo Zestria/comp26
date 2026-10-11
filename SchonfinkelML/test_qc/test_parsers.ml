@@ -71,6 +71,10 @@ and surface_pp e =
 let rec shrink_expr e =
   match e with
   | Const _ | Ident _ -> empty
+  | App (App (Ident op, a), b) when is_binop op ->
+    of_list [ a; b ]
+    <+> (shrink_expr a >|= fun a -> App (App (Ident op, a), b))
+    <+> (shrink_expr b >|= fun b -> App (App (Ident op, a), b))
   | App (l, r) ->
     of_list [ l; r ]
     <+> (shrink_expr l >|= fun l -> App (l, r))
@@ -91,7 +95,7 @@ let rec shrink_expr e =
 (* --- Arbitraries --- *)
 
 (* One shared generator for both parsers. *)
-let arb_expr = QCheck.make ~print:surface_pp ~shrink:shrink_expr gen_expr_sized
+let arb_expr = QCheck.make ~print:string_of_expr ~shrink:shrink_expr gen_expr_sized
 
 let arb_triple =
   QCheck.make
@@ -111,18 +115,18 @@ let test_roundtrip (p : parser) =
     ~count:1000
     arb_expr
     (fun e ->
-       match p.parse_expr (surface_pp e) with
+       match p.parse_expr (string_of_expr e) with
        | Ok e' -> e = e'
        | Error () -> false)
 ;;
 
-(* [surface_pp] is canonical: one pass through parse/pp stabilises the AST. *)
+(* [string_of_expr] is canonical: one pass through parse/pp stabilises the AST. *)
 let test_idempotence (p : parser) =
   QCheck.Test.make ~name:(p.name ^ " idempotence pp/parse") arb_expr (fun e ->
-    match p.parse_expr (surface_pp e) with
+    match p.parse_expr (string_of_expr e) with
     | Error () -> false
     | Ok e' ->
-      (match p.parse_expr (surface_pp e') with
+      (match p.parse_expr (string_of_expr e') with
        | Error () -> false
        | Ok e'' -> e' = e''))
 ;;
