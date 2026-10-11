@@ -84,7 +84,7 @@ workflows:
               - echo "Pinning Zanuda..."
               - /usr/bin/time -f "%U" opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
               - .sourcecraft/dune.sh zanuda
-              - ls -l results.sarif
+              - ls -l result.sarif
               - .sourcecraft/dune.sh stats > STATS.md
 
           - name: scan-result-uploader
