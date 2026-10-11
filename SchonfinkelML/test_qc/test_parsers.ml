@@ -75,6 +75,7 @@ let rec shrink_expr e =
     of_list [ a; b ]
     <+> (shrink_expr a >|= fun a -> App (App (Ident op, a), b))
     <+> (shrink_expr b >|= fun b -> App (App (Ident op, a), b))
+  | App (Ident "-", a) -> of_list [ a ] <+> (shrink_expr a >|= fun a -> App (Ident "-", a))
   | App (l, r) ->
     of_list [ l; r ]
     <+> (shrink_expr l >|= fun l -> App (l, r))
@@ -120,7 +121,7 @@ let test_roundtrip (p : parser) =
        | Error () -> false)
 ;;
 
-(* [string_of_expr] is canonical: one pass through parse/pp stabilises the AST. *)
+(* One pass through parse/pp stabilises the AST. *)
 let test_idempotence (p : parser) =
   QCheck.Test.make ~name:(p.name ^ " idempotence pp/parse") arb_expr (fun e ->
     match p.parse_expr (string_of_expr e) with
