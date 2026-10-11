@@ -1,3 +1,7 @@
+(** Copyright 2023-2024, Kakadu, bogban893, shamashaehmitov and garry2311 *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
 let x = 5;;
 let result =
   let x = x + 1 in
