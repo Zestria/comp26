@@ -14,12 +14,18 @@ type dataset =
   ; source : string
   }
 
+(* Benchmark callbacks cannot return a diagnostic to the harness. Abort the
+   measurement on failure and report it once at the executable boundary. *)
+exception Benchmark_error of string
+
+let benchmark_error message = raise (Benchmark_error message)
+
 let parse_ll source =
   match LL_parser.Parser.parse_string_LL source with
   | Ok ast ->
     let (_ : Ast.program) = Sys.opaque_identity ast in
     ()
-  | Error _ -> failwith "the recursive-descent parser rejected a benchmark input"
+  | Error _ -> benchmark_error "the recursive-descent parser rejected a benchmark input"
 ;;
 
 let parse_lr source =
@@ -27,20 +33,20 @@ let parse_lr source =
   | Ok ast ->
     let (_ : Ast.program) = Sys.opaque_identity ast in
     ()
-  | Error message -> failwith ("the Menhir parser rejected a benchmark input: " ^ message)
+  | Error message -> benchmark_error ("the Menhir parser rejected a benchmark input: " ^ message)
 ;;
 
 let check_dataset dataset =
   match LL_parser.Parser.parse_string_LL dataset.source, Parse.parse dataset.source with
   | Ok ll_ast, Ok lr_ast when ll_ast = lr_ast -> ()
   | Ok _, Ok _ ->
-    failwith
+    benchmark_error
       (Printf.sprintf "parsers produced different ASTs for dataset %S" dataset.name)
   | Error _, _ ->
-    failwith
+    benchmark_error
       (Printf.sprintf "the recursive-descent parser rejected dataset %S" dataset.name)
   | _, Error message ->
-    failwith
+    benchmark_error
       (Printf.sprintf "the Menhir parser rejected dataset %S: %s" dataset.name message)
 ;;
 
@@ -98,7 +104,7 @@ let write_samples output dataset =
   flush output
 ;;
 
-let () =
+let run () =
   let output_path =
     if Array.length Sys.argv > 1 then Sys.argv.(1) else "benchmark/benchmark_results.csv"
   in
@@ -111,4 +117,11 @@ let () =
          "dataset,size,source_bytes,parser,repetition,iterations,total_wall_seconds,wall_seconds_per_parse\n";
        List.iter (write_samples output) datasets);
   Printf.printf "Benchmark results written to %s\n%!" output_path
+;;
+
+let () =
+  try run () with
+  | Benchmark_error message | Sys_error message ->
+    prerr_endline message;
+    exit 2
 ;;

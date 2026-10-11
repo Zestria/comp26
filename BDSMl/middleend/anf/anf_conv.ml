@@ -11,6 +11,8 @@ open BDSMl_frontend.Ast
 open Anf_ast
 module Names = Set.Make (String)
 
+let ( let* ) = Result.bind
+
 let rec source_names names = function
   | Ast.Unit | Ast.Int _ | Ast.Bool _ -> names
   | Ast.Var name -> Names.add name names
@@ -58,7 +60,7 @@ let split_params (e : Ast.expr) : Ast.pattern list * Ast.expr =
   go [] e
 ;;
 
-let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
+let rec to_imm (e : Ast.expr) (k : immexpr -> (aexpr, string) result) : (aexpr, string) result =
   match e with
   | Ast.Int n -> k (ImmInt n)
   | Ast.Bool b -> k (ImmBool b)
@@ -69,14 +71,15 @@ let rec to_imm (e : Ast.expr) (k : immexpr -> aexpr) : aexpr =
       | CImm imm -> k imm
       | ce ->
         let name = fresh_anf () in
-        ALet (Ast.PVar name, ce, k (ImmId name)))
+        let* body = k (ImmId name) in
+        Ok (ALet (Ast.PVar name, ce, body)))
 
-and to_imm_list (es : Ast.expr list) (k : immexpr list -> aexpr) : aexpr =
+and to_imm_list (es : Ast.expr list) (k : immexpr list -> (aexpr, string) result) : (aexpr, string) result =
   match es with
   | [] -> k []
   | e :: tl -> to_imm_list tl (fun imms -> to_imm e (fun imm -> k (imm :: imms)))
 
-and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
+and to_cexpr (e : Ast.expr) (k : cexpr -> (aexpr, string) result) : (aexpr, string) result =
   match e with
   | Ast.Unit | Ast.Int _ | Ast.Bool _ | Ast.Var _ -> to_imm e (fun imm -> k (CImm imm))
   | Ast.BinOp (And, a, b) -> to_cexpr (Ast.If (a, b, Ast.Bool false)) k
@@ -88,13 +91,19 @@ and to_cexpr (e : Ast.expr) (k : cexpr -> aexpr) : aexpr =
     let f, args = flatten_app e in
     to_imm_list args (fun args_imm -> to_imm f (fun f_imm -> k (CApp (f_imm, args_imm))))
   | Ast.If (c, e1, e2) ->
-    to_imm c (fun c_imm -> k (CIf (c_imm, to_aexpr e1, to_aexpr e2)))
+    to_imm c (fun c_imm ->
+      let* if_true = to_aexpr e1 in
+      let* if_false = to_aexpr e2 in
+      k (CIf (c_imm, if_true, if_false)))
   | Ast.Let (Rec, _, _, _) ->
-    failwith "to_cexpr: локальный let rec должен быть убран до ANF"
-  | Ast.Let (NonRec, p, e1, e2) -> to_cexpr e1 (fun ce -> ALet (p, ce, to_cexpr e2 k))
-  | Ast.Abs _ -> failwith "to_cexpr: лямбда должна быть убрана до ANF"
+    Error "ANF: локальный let rec должен быть убран до ANF"
+  | Ast.Let (NonRec, p, e1, e2) -> to_cexpr e1 (fun ce ->
+      let* body = to_cexpr e2 k in
+      Ok (ALet (p, ce, body)))
+  | Ast.Abs _ -> Error "ANF: лямбда должна быть убрана до ANF"
 
-and to_aexpr (e : Ast.expr) : aexpr = to_cexpr e (fun ce -> ACExpr ce)
+and to_aexpr (e : Ast.expr) : (aexpr, string) result =
+  to_cexpr e (fun ce -> Ok (ACExpr ce))
 
 let substitute_imm name replacement = function
   | ImmId current when current = name -> replacement
@@ -170,14 +179,17 @@ and compact_cexpr = function
   | expression -> expression
 ;;
 
-let anf_decl : Ast.structure_item -> decl = function
-  | StrEval e -> AEval (compact_aexpr (to_aexpr e))
+let anf_decl : Ast.structure_item -> (decl, string) result = function
+  | StrEval e ->
+    let* body = to_aexpr e in
+    Ok (AEval (compact_aexpr body))
   | StrLet (r, p, e) ->
     let params, body = split_params e in
-    ADecl (r, p, params, compact_aexpr (to_aexpr body))
+    let* body = to_aexpr body in
+    Ok (ADecl (r, p, params, compact_aexpr body))
 ;;
 
-let anf (program : Ast.program) : aprogram =
+let anf (program : Ast.program) : (aprogram, string) result =
   Fresh.reset ();
   reserved
   := List.fold_left
@@ -189,8 +201,10 @@ let anf (program : Ast.program) : aprogram =
        program;
   let rec go prog acc =
     match prog with
-    | p :: tl -> go tl (anf_decl p :: acc)
-    | _ -> List.rev acc
+    | p :: tl ->
+      let* declaration = anf_decl p in
+      go tl (declaration :: acc)
+    | [] -> Ok (List.rev acc)
   in
   go program []
 ;;

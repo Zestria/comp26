@@ -20,5 +20,6 @@ type stage =
     (alpha, closure conversion, lambda lifting, ANF) до стадии [stop_after]
     включительно и возвращает её результат в виде текста.
 
-    AST печатается через [Printer], ANF --- через [Anf.Anf_pp]. *)
-val run : stop_after:stage -> Ast.program -> string
+    AST печатается через [Printer], ANF --- через [Anf.Anf_pp].
+    Возвращает [Error], если программа нарушает требования входа ANF. *)
+val run : stop_after:stage -> Ast.program -> (string, string) result

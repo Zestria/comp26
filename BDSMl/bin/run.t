@@ -55,3 +55,8 @@
 
   $ sh check_stages.sh
   All stages preserve the output of all examples.
+
+  $ echo 'let main = let rec x = 1 in print_int x;;' > invalid_anf.ml
+  $ ../compiler.exe --stop-after anf invalid_anf.ml
+  ANF: локальный let rec должен быть убран до ANF
+  [2]
