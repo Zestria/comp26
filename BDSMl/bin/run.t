@@ -56,7 +56,24 @@
   $ sh check_stages.sh
   All stages preserve the output of all examples.
 
-  $ echo 'let main = let rec x = 1 in print_int x;;' > invalid_anf.ml
+  $ echo 'let main = let rec x = x in print_int x;;' > invalid_anf.ml
   $ ../compiler.exe --stop-after anf invalid_anf.ml
-  ANF: локальный let rec должен быть убран до ANF
+  Recursive initializer for x_2 is not supported
+  [2]
+
+  $ ../compiler.exe --parser=lr --parse='1 + 2'
+  BinOp ('+', Int 1, Int 2)
+  $ ../compiler.exe -parsing menhir --stop-after parsing -- cli_input.ml
+  let main = (print_int (1 + 2));;
+  $ ../compiler.exe --parser unknown 2> /dev/null
+  [2]
+  $ ../compiler.exe --stop-after 2> /dev/null
+  [2]
+  $ ../compiler.exe --stop-after unknown cli_input.ml 2> /dev/null
+  [2]
+  $ ../compiler.exe cli_input.ml closure_input.ml 2> /dev/null
+  [2]
+  $ ../compiler.exe --parse 1 cli_input.ml 2> /dev/null
+  [2]
+  $ ../compiler.exe --parser lr --operator-assoc minus:right --parse '8 - 3 - 1' 2> /dev/null
   [2]

@@ -6,23 +6,17 @@
 
 [@@@ocaml.text "/*"]
 
-(** Генератор свежих (новых, ни с чем не совпадающих) имён переменных.
+(** Immutable counter and reserved identifiers. *)
+type t
 
-    Устроен как [Ident] в компиляторе OCaml: один глобальный счётчик,
-    каждое новое имя получает следующий номер. Поэтому два сгенерированных
-    имени никогда не совпадают.
+(** Start an independent supply, reserving all given identifiers. *)
+val create : string list -> t
 
-    Имена имеют вид [base_N], где [N] --- номер из счётчика. Они остаются
-    валидными идентификаторами OCaml, чтобы вывод любого прохода можно было
-    запустить через [ocaml].
+(** Return an unused [base_N] identifier and the updated supply. *)
+val fresh_ident : string -> t -> string * t
 
-    С именами пользователя конфликтов нет, если alpha-conversion идёт
-    первой: после неё все связанные переменные получены через [fresh_ident]. *)
+(** Return a value without consuming identifiers. *)
+val return : 'a -> t -> 'a * t
 
-(** [fresh_ident base] возвращает новое имя [base_N] и увеличивает счётчик.
-
-    Например, [fresh_ident "x"] вернёт ["x_1"], следующий
-    [fresh_ident "lam"] вернёт ["lam_2"]. *)
-val fresh_ident : string -> string
-
-val reset : unit -> unit
+(** Sequence two computations using the same identifier supply. *)
+val bind : (t -> 'a * t) -> ('a -> t -> 'b * t) -> t -> 'b * t

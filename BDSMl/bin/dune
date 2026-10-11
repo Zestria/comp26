@@ -24,6 +24,7 @@
   if_argument.ml
   recursive_capture.ml
   evaluation_order.ml
+  recursive_initializer.ml
   check_stages.sh
   runtime.c
   %{exe:../compiler.exe}))

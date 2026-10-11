@@ -3,26 +3,35 @@ open BDSMl_frontend.Ast
 open BDSMl_middleend.Ast_passes
 open BDSMl_middleend.Anf
 
+let anf_or_fail program =
+  match Anf_conv.anf program with
+  | Ok program -> program
+  | Error message -> Alcotest.fail message
+;;
+
 let check_free_vars name expected expression =
   let actual = Free_vars.free_vars expression |> Free_vars.String_set.elements in
   Alcotest.(check (list string)) name expected actual
 ;;
 
 let fresh_names_are_distinct () =
-  BDSMl_middleend.Fresh.reset ();
-  let first = BDSMl_middleend.Fresh.fresh_ident "x" in
-  let second = BDSMl_middleend.Fresh.fresh_ident "x" in
-  let third = BDSMl_middleend.Fresh.fresh_ident "y" in
-  let names = [ first; second; third ] in
-  Alcotest.(check (list string)) "one counter across bases" [ "x_1"; "x_2"; "y_3" ] names
+  let module Fresh = BDSMl_middleend.Fresh in
+  let first, state = Fresh.fresh_ident "x" (Fresh.create []) in
+  let second, state = Fresh.fresh_ident "x" state in
+  let third, _ = Fresh.fresh_ident "y" state in
+  Alcotest.(check (list string)) "one counter across bases"
+    [ "x_1"; "x_2"; "y_3" ] [ first; second; third ]
 ;;
 
 let fresh_names_reset () =
-  BDSMl_middleend.Fresh.reset ();
-  let first = BDSMl_middleend.Fresh.fresh_ident "tmp" in
-  BDSMl_middleend.Fresh.reset ();
-  Alcotest.(check string) "reset gives reproducible names" first
-    (BDSMl_middleend.Fresh.fresh_ident "tmp")
+  let module Fresh = BDSMl_middleend.Fresh in
+  let initial = Fresh.create [ "tmp_1"; "tmp_2" ] in
+  let first, advanced = Fresh.fresh_ident "tmp" initial in
+  let second, _ = Fresh.fresh_ident "tmp" advanced in
+  let repeated, _ = Fresh.fresh_ident "tmp" initial in
+  Alcotest.(check string) "reserved names are skipped" "tmp_3" first;
+  Alcotest.(check string) "advanced supply" "tmp_4" second;
+  Alcotest.(check string) "initial supply stays unchanged" first repeated
 ;;
 
 let free_variables () =
@@ -212,7 +221,7 @@ let lifts_local_recursion () =
 let compact_anf_aliases () =
   let open Anf_ast in
   let check expected expression =
-    let actual = Anf_conv.anf [ StrEval expression ] in
+    let actual = anf_or_fail [ StrEval expression ] in
     Alcotest.(check bool) "minimal ANF" true (actual = [ AEval expected ])
   in
   check
@@ -247,7 +256,7 @@ let anf_preserves_shadowing_and_names () =
           , App (Var "f", Int 3)
           , BinOp (Plus, Var "x", Var "y") ) )
   in
-  let actual = Anf_conv.anf [ StrEval source ] in
+  let actual = anf_or_fail [ StrEval source ] in
   let expected =
     [ AEval
         (ALet
@@ -261,7 +270,7 @@ let anf_preserves_shadowing_and_names () =
   in
   Alcotest.(check bool) "alias does not capture a later binding" true (actual = expected);
   let collision =
-    Anf_conv.anf
+    anf_or_fail
       [ StrEval (App (Var "f", BinOp (Plus, Var "a_1", Int 2))) ]
   in
   let expected_collision =
@@ -276,13 +285,59 @@ let anf_preserves_shadowing_and_names () =
     (collision = expected_collision)
 ;;
 
+let anf_reports_invalid_input () =
+  let recursion = Let (Rec, PVar "x", Int 1, Var "x") in
+  let abstraction = Abs (PVar "x", Var "x") in
+  let check expected expression =
+    match Anf_conv.anf [ StrEval expression ] with
+    | Error message -> Alcotest.(check string) "diagnostic" expected message
+    | Ok _ -> Alcotest.fail "invalid ANF input was accepted"
+  in
+  check "ANF: локальный let rec должен быть убран до ANF"
+    (If (Bool true, Int 0, recursion));
+  check "ANF: лямбда должна быть убрана до ANF"
+    (App (Var "f", abstraction));
+  match BDSMl_middleend.Pipeline.run ~stop_after:BDSMl_middleend.Pipeline.Anf
+          [ StrEval (Let (Rec, PVar "x", Var "x", Var "x")) ] with
+  | Error _ -> ()
+  | Ok _ -> Alcotest.fail "pipeline accepted an unsupported recursive value"
+;;
+
+let passes_are_independent () =
+  let parse source =
+    match Parse.parse source with
+    | Ok program -> program
+    | Error message -> Alcotest.fail message
+  in
+  let source = parse
+      "let a_1 = 4 let lifted_1 x = let y = x + a_1 in fun z -> y + z let main = lifted_1 2 3"
+  in
+  let other = parse "let other x = fun y -> x + y" in
+  let check name transform =
+    let expected = transform source in
+    let _ = transform other in
+    Alcotest.(check bool) name true (expected = transform source)
+  in
+  check "alpha" Alpha.alpha;
+  check "lambda lifting" (fun source ->
+    source |> Alpha.alpha |> Closure_conv.closure_conv |> Lambda_lift.lambda_lift);
+  let run = BDSMl_middleend.Pipeline.run ~stop_after:BDSMl_middleend.Pipeline.Anf in
+  let expected = run source in
+  (match expected with
+   | Ok _ -> ()
+   | Error message -> Alcotest.fail message);
+  let _ = run (parse "let main = let rec x = x in x") in
+  Alcotest.(check bool) "ANF after failed conversion" true (expected = run source)
+;;
+
 let () =
   Alcotest.run
     "middleend"
     [ "free variables", [ Alcotest.test_case "examples" `Quick free_variables ]
     ; ( "fresh names"
       , [ Alcotest.test_case "distinct" `Quick fresh_names_are_distinct
-        ; Alcotest.test_case "reset" `Quick fresh_names_reset
+        ; Alcotest.test_case "independent supplies" `Quick fresh_names_reset
+        ; Alcotest.test_case "independent passes" `Quick passes_are_independent
         ] )
     ; ( "alpha conversion"
       , [ Alcotest.test_case "scopes and collisions" `Quick alpha_scopes
@@ -301,6 +356,7 @@ let () =
     ; ( "ANF"
       , [ Alcotest.test_case "remove aliases" `Quick compact_anf_aliases
         ; Alcotest.test_case "scope and names" `Quick anf_preserves_shadowing_and_names
+        ; Alcotest.test_case "invalid input" `Quick anf_reports_invalid_input
         ] )
     ]
 ;;
