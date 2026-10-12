@@ -77,8 +77,10 @@ workflows:
               #- cat teams.yml
               - echo "Pinning..."
               - .sourcecraft/dune.sh pin
+
               - echo "Deps..."
               - sh -ex .sourcecraft/dune.sh deps
+
               - echo "Build..."
               - opam exec -- sh .sourcecraft/dune.sh build
 
@@ -91,11 +93,12 @@ workflows:
           - name: scan-result-uploader
             image:
               name: sourcecraft/scan-result-uploader:0.6.0
+            env:
+              APPSEC_CUSTOM_ENGINE_NAME: "zanuda-lint"
             script:
               - ls -l $SOURCECRAFT_WORKSPACE
-              - pwd
-              # - cp handcrafted.json result.sarif -v
+              - echo "pwd  = $(pwd)"
+              - echo "result.sarif"
               - cat result.sarif
-              - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
               - /app/bin/scan-result-uploader
               # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
