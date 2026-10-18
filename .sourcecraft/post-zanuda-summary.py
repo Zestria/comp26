@@ -12,6 +12,7 @@ import sys
 import os
 import hashlib
 import urllib.request
+from pathlib import Path
 from collections import Counter
 
 
@@ -193,8 +194,15 @@ def files_table(file_counter):
         rows.append(f"| `{path}` | {count} |")
     return "\n".join(rows)
 
-# ---------- summary ----------
+def collect_stats():
+    path = Path("STATS.md")
 
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    else:
+        return ""
+
+# ---------- summary ----------
 def build_summary_body(rdjsonl_path, prev_fingerprints=None):
     lints = parse_lints(rdjsonl_path)
     parts = [ZANUDA_COMMENT_MARKER]
@@ -207,6 +215,7 @@ def build_summary_body(rdjsonl_path, prev_fingerprints=None):
     file_counter = Counter(lint["location"]["path"] for lint in lints)
     sev_counter  = Counter(lint.get("severity", "INFO") for lint in lints)
     rule_info    = collect_rule_info(lints)
+    stats = collect_stats()
 
     parts += [
         "### Zanuda analysis", "",
@@ -216,6 +225,7 @@ def build_summary_body(rdjsonl_path, prev_fingerprints=None):
         files_table(file_counter), "",
         "*Inline comments with details are posted on each affected line.*", "",
         encode_state(current_fps),
+        stats
     ]
     return "\n".join(parts)
 
