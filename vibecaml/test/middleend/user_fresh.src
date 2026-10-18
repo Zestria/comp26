@@ -1,0 +1,3 @@
+let lifted__1 = 5
+let make x = fun x -> x + lifted__1
+let () = print_int (make 2 3)

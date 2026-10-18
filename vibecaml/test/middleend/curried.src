@@ -1,0 +1,10 @@
+let mark n = let () = print_int n in n
+let mk a = fun b -> fun c -> a + b + c
+let () = print_int (mk 1 2 3)
+let add2 = mk 1
+let () = print_int (add2 2 3)
+let () = print_int (mk (mark 4) (mark 5) (mark 6))
+let deep = fun a -> fun (b, c) -> fun d -> a * b + c * d
+let () = print_int (deep 1 (2, 3) 4)
+let nested x = let y = x + 1 in fun z -> y * z
+let () = print_int (nested 2 5)

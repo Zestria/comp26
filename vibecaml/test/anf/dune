@@ -1,0 +1,11 @@
+(executable
+ (name fixture)
+ (modules fixture)
+ (libraries vibecaml))
+
+(cram
+ (package vibecaml)
+ (deps
+  fixture.exe
+  %{bin:ocaml}
+  (glob_files *.src)))

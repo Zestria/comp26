@@ -1,0 +1,2 @@
+let make x = fun y -> fun z -> x + y + z
+let () = print_int (make 1 2 3)
