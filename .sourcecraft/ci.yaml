@@ -62,6 +62,7 @@ workflows:
               - sudo usermod -aG root $(whoami)
               - echo "SOURCECRAFT_ROOT_DIRECTORY = $SOURCECRAFT_ROOT_DIRECTORY"
               - echo "SOURCECRAFT_WORKSPACE = $SOURCECRAFT_WORKSPACE"
+              - echo "SOURCECRAFT_EVENT = $SOURCECRAFT_EVENT"
               - echo "pwd =  $(pwd)..., OPAMROOT = $OPAMROOT"
               #- opam repo set-url default https://se.math.spbu.ru/opam
               - /usr/bin/time -f "%U" opam update
@@ -86,13 +87,17 @@ workflows:
 
               - echo "Pinning Zanuda..."
               - /usr/bin/time -f "%U" opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
+              - echo "Running Zanuda..."
               - .sourcecraft/dune.sh zanuda
-              - ls -l result.sarif
+
+              - echo "Calculating statistics..."
               - .sourcecraft/dune.sh stats > STATS.md
+
+              - ls -l result.sarif STATS.md
 
           - name: add-zanuda-comments
             needs: [ "run-zanuda" ]
-            if: env.SOURCECRAFT_EVENT == "pull_request"
+            #if: env.SOURCECRAFT_EVENT == "pull_request"
             env:
               SOURCECRAFT_TOKEN: ${{ secrets.ZANUDA_COMMENTS_TOKEN }}
               DUNE_PROJECT_ROOT: ${{ env.SOURCECRAFT_WORKSPACE }}
