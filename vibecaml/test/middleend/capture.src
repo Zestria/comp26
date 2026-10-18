@@ -1,0 +1,2 @@
+let make x = let saved = x in fun y -> saved + y
+let () = print_int (make 10 2)

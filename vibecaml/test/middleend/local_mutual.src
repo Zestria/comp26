@@ -1,0 +1,5 @@
+let check step n =
+  let rec even k = if k = 0 then 1 else odd (k - step)
+  and odd k = if k = 0 then 0 else even (k - step) in
+  even n + 10 * odd n
+let () = print_int (check 1 7 + 100 * check 2 8)

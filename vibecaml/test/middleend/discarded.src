@@ -1,0 +1,3 @@
+let _ = fun x -> print_int x
+let f x = let _ = fun y -> x + y in x
+let () = print_int (f 5)

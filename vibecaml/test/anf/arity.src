@@ -1,0 +1,9 @@
+let plus a b = a + b
+let get x = let () = print_int x in plus
+let apply k left right = k left right
+let partial = plus 1
+let alias = plus
+let () = print_int (plus 10 20)
+let () = print_int (apply alias 2 3)
+let () = print_int (partial 6)
+let () = print_int (get 9 4 5)

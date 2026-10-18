@@ -1,0 +1,4 @@
+let fib n =
+  let rec helper n k = if n < 2 then k n else helper (n - 1) (fun a -> helper (n - 2) (fun b -> k (a + b))) in
+  helper n (fun x -> x)
+let () = print_int (fib 10)

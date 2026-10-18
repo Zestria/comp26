@@ -1,0 +1,7 @@
+let ( <= ) a b = let () = print_int a in false
+let ( && ) c d = let () = print_int 8 in d
+let () = print_int (if 1 <= 2 then 3 else 4)
+let () = print_int (if false && true then 5 else 6)
+let mod_result = 7 mod 3
+let negative = -5
+let () = print_int (mod_result * negative)

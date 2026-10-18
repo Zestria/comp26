@@ -65,3 +65,7 @@ type structure_item =
 
 (** Файл программы после разбора. *)
 type structure = structure_item list [@@deriving show { with_path = false }]
+
+(** Имена, связываемые паттерном, слева направо. Дубли не убираются:
+    после [Rename.rename] их нет. *)
+val pattern_names : pattern -> identifier list

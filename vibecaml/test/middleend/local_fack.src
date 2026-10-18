@@ -1,0 +1,4 @@
+let fac n =
+  let rec helper n k = if n <= 1 then k 1 else helper (n - 1) (fun r -> k (r * n)) in
+  helper n (fun x -> x)
+let () = print_int (fac 5)
