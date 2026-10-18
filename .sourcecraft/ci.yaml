@@ -47,7 +47,7 @@ workflows:
     tasks:
       - name: task-PR-check
         cubes:
-          - name: install
+          - name: run-zanuda
             image:
               name: kakadu18/ocaml:comp26
               #entrypoint: "/bin/bash"
@@ -91,7 +91,7 @@ workflows:
               - .sourcecraft/dune.sh stats > STATS.md
 
           - name: add-zanuda-comments
-            needs: [ "task-PR-check" ]
+            needs: [ "run-zanuda" ]
             if: env.SOURCECRAFT_EVENT == "pull_request"
             env:
               SOURCECRAFT_TOKEN: ${{ secrets.ZANUDA_COMMENTS_TOKEN }}
