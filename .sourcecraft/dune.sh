@@ -50,7 +50,7 @@ case "$CMD" in
         ;;
     zanuda)
         echo "compiler = $COMPILER_NAME"
-        opam exec -- zanuda -dir "$COMPILER_NAME" -osarif result.sarif
+        opam exec -- zanuda -dir "$COMPILER_NAME" -osarif result.sarif -ordjsonl result.rdjsonl
         ;;
     stats)
         LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats

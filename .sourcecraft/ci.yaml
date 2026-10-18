@@ -55,7 +55,7 @@ workflows:
               OPAMROOT: /home/opam/.opam
               OPAMCONFIRMLEVEL: unsafe-yes
               TIMEFMT: '%U'
-              ZANUDA_HACK_SARIF_PREFIX: "/sourcecraft/workspace/"
+              #ZANUDA_HACK_SARIF_PREFIX: "/sourcecraft/workspace/"
             script:
               #- sudo su -
               - echo "whoami = $(whoami)"
@@ -90,15 +90,38 @@ workflows:
               - ls -l result.sarif
               - .sourcecraft/dune.sh stats > STATS.md
 
-          - name: scan-result-uploader
-            image:
-              name: sourcecraft/scan-result-uploader:0.6.0
+          - name: add-zanuda-comments
+            needs: [ "task-PR-check" ]
+            if: env.SOURCECRAFT_EVENT == "pull_request"
             env:
-              APPSEC_CUSTOM_ENGINE_NAME: "zanuda-lint"
+              SOURCECRAFT_TOKEN: ${{ secrets.ZANUDA_COMMENTS_TOKEN }}
+              DUNE_PROJECT_ROOT: ${{ env.SOURCECRAFT_WORKSPACE }}
             script:
+              - echo "SRC_WS = $SOURCECRAFT_WORKSPACE, pwd = $(pwd)"
+              - mkdir -p _log
               - ls -l $SOURCECRAFT_WORKSPACE
-              - echo "pwd  = $(pwd)"
-              - echo "result.sarif"
-              - cat result.sarif
-              - /app/bin/scan-result-uploader
-              # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
+              - cd $SOURCECRAFT_WORKSPACE
+              - cat result.rdjsonl | nl -ba
+
+              - |
+                echo "Posting summary"
+                python3 .sourcecraft/post-zanuda-summary.py result.rdjsonl | tee _log/post-zanuda-summary.log
+              - cat _log/post-zanuda-summary.log
+              - |
+                echo "Calling post-zanuda-inline.py"
+                python3 .sourcecraft/post-zanuda-inline.py result.rdjsonl | tee _log/post-zanuda-inline.log
+              - cat _log/post-zanuda-inline.log
+              - echo "FINISHED"
+
+          # - name: scan-result-uploader
+          #   image:
+          #     name: sourcecraft/scan-result-uploader:0.6.0
+          #   env:
+          #     APPSEC_CUSTOM_ENGINE_NAME: "zanuda-lint"
+          #   script:
+          #     - ls -l $SOURCECRAFT_WORKSPACE
+          #     - echo "pwd  = $(pwd)"
+          #     - echo "result.sarif"
+          #     - cat result.sarif
+          #     - /app/bin/scan-result-uploader
+          #     # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
