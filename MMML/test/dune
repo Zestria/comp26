@@ -2,38 +2,38 @@
  (name anf_usage_example)
  (package MMML)
  (modules anf_usage_example)
- (libraries MMML.middleend))
+ (libraries middleend))
 
 (library
  (name anf_test_support)
  (package MMML)
  (wrapped false)
  (modules anf_test_eval)
- (libraries MMML.middleend))
+ (libraries middleend))
 
 (test
  (name anf_qcheck)
  (package MMML)
  (modules anf_qcheck)
- (libraries MMML.middleend anf_test_support qcheck))
+ (libraries middleend anf_test_support qcheck))
 
 (test
  (name anf_semantics_test)
  (package MMML)
  (modules anf_semantics_test)
- (libraries MMML.middleend anf_test_support))
+ (libraries middleend anf_test_support))
 
 (test
  (name anf_normalize_test)
  (package MMML)
  (modules anf_normalize_test)
- (libraries MMML.middleend))
+ (libraries middleend))
 
 (test
  (name anf_ir_test)
  (package MMML)
  (modules anf_ir_test)
- (libraries MMML.middleend))
+ (libraries middleend))
 
 (test
  (name parser_test)
@@ -70,31 +70,31 @@
  (package MMML)
  (wrapped false)
  (modules closure_eval closure_generator closure_test_invariants)
- (libraries MMML.frontend MMML.middleend qcheck))
+ (libraries MMML.frontend middleend qcheck))
 
 (test
  (name closure_conversion_test)
  (package MMML)
  (modules closure_conversion_test)
- (libraries MMML.frontend MMML.middleend closure_test_support))
+ (libraries MMML.frontend middleend closure_test_support))
 
 (test
  (name closure_conversion_qcheck)
  (package MMML)
  (modules closure_conversion_qcheck)
- (libraries MMML.frontend MMML.middleend closure_test_support qcheck))
+ (libraries MMML.frontend middleend closure_test_support qcheck))
 
 (test
  (name closure_usage_example)
  (package MMML)
  (modules closure_usage_example)
- (libraries MMML.frontend MMML.middleend closure_test_support))
+ (libraries MMML.frontend middleend closure_test_support))
 
 (library
  (name lambda_lifting_test)
  (package MMML)
  (modules lambda_lifting_test)
- (libraries MMML.frontend MMML.middleend)
+ (libraries MMML.frontend middleend)
  (inline_tests)
  (preprocess
   (pps ppx_expect)))
