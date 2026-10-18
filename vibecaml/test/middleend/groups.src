@@ -1,0 +1,3 @@
+let x = 5
+let f n = let x = n and y = x in (fun z -> x + y + z) 1
+let () = print_int (f 2)

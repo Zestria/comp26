@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 (** Bottom-up parsing through Menhir and ocamllex. Each entry point consumes
     the complete input and returns positioned lexical or syntax errors.
 

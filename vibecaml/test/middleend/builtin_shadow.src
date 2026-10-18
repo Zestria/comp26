@@ -1,0 +1,3 @@
+let use print_int = fun n -> print_int n
+let result x = x + 1
+let () = print_int (use result 4)
