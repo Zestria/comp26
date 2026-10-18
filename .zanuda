@@ -1,1 +1,3 @@
 ignore BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/grammar.ml
+ignore BDSMl/frontend/LR_parser/parser.ml
+ignore BDSMl/frontend/LR_parser/parser.mli

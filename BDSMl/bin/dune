@@ -2,6 +2,7 @@
  (name BDSMl)
  (public_name BDSMl)
  (wrapped false)
+ (modules LL REPL)
  (libraries
   llvm
   llvm.analysis
