@@ -1,0 +1,5 @@
+(cram
+ (package MMML)
+ (deps
+  ../compiler.exe
+  (glob_files fixtures/*)))

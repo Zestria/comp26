@@ -65,3 +65,10 @@ type structure_item =
 
 (** Файл программы после разбора. *)
 type structure = structure_item list [@@deriving show { with_path = false }]
+
+let rec pattern_names = function
+  | Pat_var name -> [ name ]
+  | Pat_tuple (first, second, rest) ->
+    List.concat_map pattern_names (first :: second :: rest)
+  | Pat_wildcard | Pat_constant _ -> []
+;;

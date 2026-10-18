@@ -1,0 +1,2 @@
+let make x = if x > 0 then (fun y -> x + y) else (fun y -> x - y)
+let () = print_int (make 3 2 + make (-3) 2)

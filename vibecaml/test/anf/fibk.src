@@ -1,0 +1,6 @@
+let rec fibk_step_b k_b a_b b_b = k_b (a_b + b_b)
+and fibk_step_a n_a k_a a_a = fibk (n_a - 2) (fibk_step_b k_a a_a)
+and fibk n k = if n < 2 then k n else fibk (n - 1) (fibk_step_a n k)
+let identity x = x
+let result = fibk 10 identity
+let () = print_int result
