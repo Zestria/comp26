@@ -11,7 +11,7 @@
     [let%test] runs it against the top-down parser and the menhir-generated
     bottom-up parser in turn. *)
 
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 module Top_down = Top_down.Parser
 module Bottom_up = Bottom_up.Parser
 
@@ -438,7 +438,7 @@ let%test "compose function" =
           (elambda "y" (emul (Ident "y") (econsti 2)))))
 ;;
 
-(* --- Comments and whitespace (Frontend.Lexer is shared) --- *)
+(* --- Comments and whitespace (SchonfinkelML_frontend.Lexer is shared) --- *)
 
 let%test "comments" = check_expr_both "(* c *) 1 (* d *)" (econsti 1)
 let%test "newlines" = check_expr_both "1\n+\n2" (eadd (econsti 1) (econsti 2))

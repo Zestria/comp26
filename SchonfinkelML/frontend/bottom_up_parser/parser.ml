@@ -6,17 +6,19 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend.Common
-open Frontend.Lexer
+open SchonfinkelML_frontend.Common
+open SchonfinkelML_frontend.Lexer
 
-type error = Frontend.Lexer.error
+type error = SchonfinkelML_frontend.Lexer.error
 
 let parse_expr (src : string) : (expr, unit) result =
   try
-    match Parser_gen.program Frontend.Lexer.token (Lexing.from_string src) with
+    match
+      Parser_gen.program SchonfinkelML_frontend.Lexer.token (Lexing.from_string src)
+    with
     | [ StrEval e ] -> Ok e
     | _ -> Error ()
   with
   | Parser_gen.Error -> Error ()
-  | Frontend.Lexer.Lexing_error e -> Error ()
+  | SchonfinkelML_frontend.Lexer.Lexing_error e -> Error ()
 ;;

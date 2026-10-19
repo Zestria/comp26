@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2023-2025, Kakadu and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Benchmark
 open Top_down
 open Bottom_up
@@ -24,8 +32,16 @@ let () =
          throughputN
            ~repeat
            t
-           [ "top_down_parser", (fun s -> ignore (top_down_parser s)), content
-           ; "bottom_up_parser", (fun s -> ignore (bottom_up_parser s)), content
+           [ ( "top_down_parser"
+             , (fun s ->
+                 let _ = top_down_parser s in
+                 ())
+             , content )
+           ; ( "bottom_up_parser"
+             , (fun s ->
+                 let _ = bottom_up_parser s in
+                 ())
+             , content )
            ])
       files
   in

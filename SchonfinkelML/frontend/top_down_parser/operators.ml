@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-module Common = Frontend.Common
+module Common = SchonfinkelML_frontend.Common
 
 type assoc =
   | Left
