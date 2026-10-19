@@ -1,14 +1,16 @@
   $ clang-18 -c runtime.c -o runtime.o
   $ ../compiler.exe --help
   Usage: compiler.exe [options] [file]
-  Reads an expression from <file> (or stdin) and parses it.
+  Compiles an ML program from <file> (or stdin).
   
   Options:
-    --parser=comb|menhir  Select top-down (default) or bottom-up parser
-    --extended            Allow reserved words as identifiers (e.g. `let in = 1 in in`); combinator parser only
-    --ast                 Print the parsed AST
-    --llvm-demo           Run the LLVM codegen demo instead of parsing (writes out.ll)
-    --help                Show this message
+    -parsing topdown|menhir   Parser to use: top-down (default) or bottom-up
+    --stop-after parsing|anf|closure|lifting  Stop after the stage and print its result (default: anf)
+    -o <file>                 Write the result to <file>; '-o -' writes to stdout (default)
+    --extended                Allow reserved words as identifiers (e.g. `let in = 1 in in`); top-down parser only
+    --ast                     With '--stop-after parsing', also print the AST
+    --llvm-demo               Run the LLVM codegen demo instead of compiling (writes out.ll)
+    --help                    Show this message
 
 
   $ ../compiler.exe --llvm-demo
@@ -37,15 +39,15 @@ CPS-style factorial (task 1 requires the grammar to be rich enough for
 this; evaluating it is out of scope here, only parsing is), checked on
 both parsers:
 
-  $ echo "let rec fact n = if n <= 1 then 1 else n * fact (n - 1) in fact 5" | ../compiler.exe
+  $ echo "let rec fact n = if n <= 1 then 1 else n * fact (n - 1) in fact 5" | ../compiler.exe --stop-after parsing
   (let rec fact n = (if (n <= 1) then 1 else (n * (fact (n - 1)))) in (fact 5))
 
-  $ echo "let rec fact n = if n <= 1 then 1 else n * fact (n - 1) in fact 5" | ../compiler.exe --parser=menhir
+  $ echo "let rec fact n = if n <= 1 then 1 else n * fact (n - 1) in fact 5" | ../compiler.exe -parsing menhir --stop-after parsing
   (let rec fact n = (if (n <= 1) then 1 else (n * (fact (n - 1)))) in (fact 5))
 
-  $ echo "let in = 1 in in" | ../compiler.exe --extended
+  $ echo "let in = 1 in in" | ../compiler.exe --extended --stop-after parsing
   (let in = 1 in in)
 
-  $ echo "1 + 2" | ../compiler.exe --ast
+  $ echo "1 + 2" | ../compiler.exe --ast --stop-after parsing
+  [(DExpr (BinOp (Add, (Const 1), (Const 2))))]
   (1 + 2)
-  (BinOp (Add, (Const 1), (Const 2)))

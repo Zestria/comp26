@@ -207,15 +207,21 @@ def build_summary_body(rdjsonl_path, prev_fingerprints=None):
     lints = parse_lints(rdjsonl_path)
     parts = [ZANUDA_COMMENT_MARKER]
 
+    stats = collect_stats()
+
+
     if not lints:
-        parts += ["### Zanuda found no issues", "", encode_state(set())]
+        parts += [
+            "### Zanuda found no issues", "",
+            encode_state(set()),
+            stats
+        ]
         return "\n".join(parts)
 
     current_fps  = {fingerprint(l) for l in lints}
     file_counter = Counter(lint["location"]["path"] for lint in lints)
     sev_counter  = Counter(lint.get("severity", "INFO") for lint in lints)
     rule_info    = collect_rule_info(lints)
-    stats = collect_stats()
 
     parts += [
         "### Zanuda analysis", "",

@@ -34,3 +34,9 @@ let parse_with_menhir_result s =
 
 let parse_with_comb = Parser_comb.parse
 let parse_with_comb_extended = Parser_comb.parse_extended
+let parse_program_with_comb = Parser_comb.parse_program
+let parse_program_with_comb_extended = Parser_comb.parse_program_extended
+
+let parse_program_with_menhir s =
+  Result.map (fun e -> [ DExpr e ]) (parse_with_menhir_result s)
+;;

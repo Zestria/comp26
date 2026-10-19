@@ -31,3 +31,16 @@ type expr =
   | Let of name * expr * expr
   | LetRec of name * name * expr * expr
 [@@deriving show { with_path = false }]
+
+(** A top-level declaration. The name [_] may be bound, by [let] or [fun], but
+    is never used as a variable. *)
+type decl =
+  | DLet of name * expr (** [let x = e]; [let f x = e] is [let f = fun x -> e] *)
+  | DLetRec of name * name * expr (** [let rec f x = e] *)
+  | DExpr of expr (** an expression at the beginning of the program *)
+[@@deriving show { with_path = false }]
+
+(** A program is a sequence of declarations, e.g.
+    [let rec fac n = ... let main = print_int (fac 5)]. A program that is a
+    single expression is [[DExpr e]]. *)
+type program = decl list [@@deriving show { with_path = false }]
