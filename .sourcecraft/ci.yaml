@@ -13,37 +13,33 @@ on:
       #   target_branches: "master"
 
 workflows:
-  sample-workflow:
-    tasks:
-      - name: sample-task
-        cubes:
-          - name: install
-            image:
-              name: kakadu18/ocaml:rukaml5.5
-            env:
-              OPAMROOT: /home/opam/.opam
-              OPAMCONFIRMLEVEL: unsafe-yes
-            script:
-              - sudo su -
-              - echo "I am $(whoami)"
-              - sudo usermod -aG root $(whoami)
-              - opam repo set-url default https://se.math.spbu.ru/opam
-              - opam update
-              - cd $SOURCECRAFT_WORKSPACE
-              - git config --global --add safe.directory .
+  # sample-workflow:
+  #   tasks:
+  #     - name: sample-task
+  #       cubes:
+  #         - name: install
+  #           image:
+  #             name: kakadu18/ocaml:rukaml5.5
+  #           env:
+  #             OPAMROOT: /home/opam/.opam
+  #             OPAMCONFIRMLEVEL: unsafe-yes
+  #           script:
+  #             - sudo su -
+  #             - echo "I am $(whoami)"
+  #             - sudo usermod -aG root $(whoami)
+  #             - opam repo set-url default https://se.math.spbu.ru/opam
+  #             - opam update
+  #             - cd $SOURCECRAFT_WORKSPACE
+  #             - git config --global --add safe.directory .
 
-              - cd $(yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml)
-              - opam install . --deps-only --with-test --with-doc --yes # --verbose
-              - opam exec -- dune build @install
-              #- opam pin add zanuda --dev-repo -y
-              - opam exec -- dune b @check
-              #- opam exec -- zanuda -dir .
-              #- opam exec -- zanuda -dir . -ordjsonl results.json
-              #- cat results.json
-              #- opam exec -- dune exec ./validate.exe -- 1.json
-              #- opam exec -- dune exec ./validate.exe -- results.json
+  #             - cd $(yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml)
+  #             - opam install . --deps-only --with-test --with-doc --yes # --verbose
+  #             - opam exec -- dune build @install
+  #             - opam exec -- dune b @check
 
   compile-and-review:
+    settings:
+      shared: true             # This thing should start workflows automatically.
     tasks:
       - name: task-PR-check
         cubes:
