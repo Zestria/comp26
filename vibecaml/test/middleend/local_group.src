@@ -1,0 +1,2 @@
+let make x = let f y = x + y and g y = y * 2 in fun z -> f (g z)
+let () = print_int (make 3 4)

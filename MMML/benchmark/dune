@@ -10,10 +10,7 @@
  (public_name MMML-parser-bench)
  (package MMML)
  (modules parser_benchmark)
- (libraries
-  MMML.frontend
-  parser_benchmark_workload
-  unix))
+ (libraries MMML.frontend parser_benchmark_workload unix))
 
 (rule
  (alias benchmark)

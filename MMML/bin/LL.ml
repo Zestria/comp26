@@ -7,7 +7,6 @@
 [@@@ocaml.text "/*"]
 
 open Llvm
-open Printf
 
 module type S = sig
   val context : Llvm.llcontext
@@ -44,6 +43,8 @@ module type S = sig
   val pp_value : Format.formatter -> llvalue -> unit
 end
 
+exception Function_not_found of string
+
 let make context builder module_ =
   let module L : S = struct
     let context = context
@@ -64,7 +65,7 @@ let make context builder module_ =
     let lookup_func_exn fname =
       match lookup_function fname module_ with
       | Some f -> f
-      | None -> failwith (sprintf "Function '%s' not found" fname)
+      | None -> raise (Function_not_found fname)
     ;;
 
     let build_add ?(name = "") l r = build_add l r name builder

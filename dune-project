@@ -101,6 +101,7 @@
   qcheck
   bisect_ppx_ng
   ppx_deriving
+  ppx_expect
   (llvm
    (= "18-shared"))
   (ppx_deriving_qcheck

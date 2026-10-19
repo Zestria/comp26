@@ -1,3 +1,11 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Mikhail and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 open Token
 open Error_monad
 open Ast
@@ -79,9 +87,7 @@ let comparison_operators =
   ]
 ;;
 
-let rec expr state = lambda_let_if state
-
-and lambda_let_if state =
+let rec expr state =
   match state.current.token with
   | FUN ->
     (let* () = advance in
