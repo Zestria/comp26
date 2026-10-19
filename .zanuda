@@ -1,8 +1,6 @@
 ignore BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/grammar.ml
-<<<<<<< HEAD
 ignore BDSMl/frontend/LR_parser/parser.ml
 ignore BDSMl/frontend/LR_parser/parser.mli
-=======
 ignore MMML/lib/frontend/parser.ml
 ignore MMML/lib/frontend/parser.mli
 forward mutability_check ignore MMML/test/anf_test_eval.ml
@@ -11,4 +9,3 @@ ignore vibecaml/lib/menhir_parser.ml
 ignore vibecaml/lib/menhir_parser.mli
 ignore shmel/lib/parser.ml
 ignore shmel/lib/parser.mli
->>>>>>> kakadu/master
