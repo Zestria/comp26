@@ -23,8 +23,8 @@ let is_digit = function
   | _ -> false
 ;;
 
-let is_lower = function
-  | 'a' .. 'z' -> true
+let is_name_start = function
+  | 'a' .. 'z' | '_' -> true
   | _ -> false
 ;;
 
@@ -47,20 +47,41 @@ let chainl1 p op =
   many (lift2 (fun f y -> f, y) op p) >>| List.fold_left (fun acc (f, y) -> f acc y) x
 ;;
 
+(* [let x = e] or [let rec f x = e] without [in]: the beginning of both a
+   [let] expression and a top-level declaration. *)
+type binding =
+  | Value of Ast.name * Ast.expr
+  | Recursive of Ast.name * Ast.name * Ast.expr
+
+let let_in binding body =
+  match binding with
+  | Value (x, e) -> Ast.Let (x, e, body)
+  | Recursive (f, p, e) -> Ast.LetRec (f, p, e, body)
+;;
+
+let declaration = function
+  | Value (x, e) -> Ast.DLet (x, e)
+  | Recursive (f, p, e) -> Ast.DLetRec (f, p, e)
+;;
+
 let make_parser ~extended =
-  let identifier =
+  let name =
     lift2
       (fun first rest -> String.make 1 first ^ rest)
-      (satisfy is_lower)
+      (satisfy is_name_start)
       (take_while is_ident_char)
-    >>= fun s -> if List.mem s keywords then fail "keyword" else return s
+  in
+  let reserved s = List.mem s keywords in
+  (* [_] can be bound, but it is not a variable. *)
+  let identifier =
+    name
+    >>= fun s -> if reserved s || String.equal s "_" then fail "keyword" else return s
   in
   let binder_name =
-    lift2
-      (fun first rest -> String.make 1 first ^ rest)
-      (satisfy is_lower)
-      (take_while is_ident_char)
-    >>= fun s -> if (not extended) && List.mem s keywords then fail "keyword" else return s
+    name >>= fun s -> if (not extended) && reserved s then fail "keyword" else return s
+  in
+  let head_name =
+    binder_name >>= fun s -> if String.equal s "_" then fail "wildcard" else return s
   in
   let integer = take_while1 is_digit >>| int_of_string in
   let keyword s =
@@ -75,110 +96,136 @@ let make_parser ~extended =
       | Some c when is_ident_char c -> fail "keyword followed by identifier char"
       | _ -> spaces
   in
-  fix (fun expr ->
-    let rec unary_atom ~var_name () =
-      spaces
-      *> choice
-           [ (char '-' *> peek_char
-              >>= function
-              | Some c when (not (is_space c)) && c <> ')' ->
-                unary_atom ~var_name () >>| fun e -> Ast.Neg e
-              | _ -> fail "not a unary minus")
-           ; atom ~var_name
-           ]
-    and atom ~var_name =
-      spaces
-      *> choice
-           [ char '(' *> spaces *> expr <* spaces <* char ')'
-           ; (integer >>| fun n -> Ast.Const n)
-           ; (keyword "if" *> expr
-              >>= fun cond ->
-              keyword "then" *> expr
-              >>= fun t1 -> keyword "else" *> expr >>| fun t2 -> Ast.If (cond, t1, t2))
-           ; (keyword "let" *> keyword "rec" *> binder_name
-              >>= fun fname ->
-              many (spaces1 *> binder_name)
-              >>= fun params ->
-              keyword "=" *> expr
-              >>= fun body ->
-              keyword "in" *> expr
-              >>| fun in_expr ->
-              match params with
-              | [] -> Ast.Let (fname, body, in_expr)
-              | param :: rest ->
-                let full_body = List.fold_right (fun p b -> Ast.Abs (p, b)) rest body in
-                Ast.LetRec (fname, param, full_body, in_expr))
-           ; (keyword "let" *> binder_name
-              >>= fun name ->
-              many (spaces1 *> binder_name)
-              >>= fun params ->
-              keyword "=" *> expr
-              >>= fun e1 ->
-              keyword "in" *> expr
-              >>| fun e2 ->
-              let full_body = List.fold_right (fun p b -> Ast.Abs (p, b)) params e1 in
-              Ast.Let (name, full_body, e2))
-           ; (var_name >>| fun v -> Ast.Var v)
-           ]
-      <* spaces
-    in
-    let mult_op =
-      spaces
-      *> choice
-           [ string "*" *> return (fun l r -> Ast.BinOp (Ast.Mul, l, r))
-           ; string "/" *> return (fun l r -> Ast.BinOp (Ast.Div, l, r))
-           ]
-      <* spaces
-    in
-    let add_op =
-      spaces
-      *> choice
-           [ string "+" *> return (fun l r -> Ast.BinOp (Ast.Add, l, r))
-           ; string "-" *> return (fun l r -> Ast.BinOp (Ast.Sub, l, r))
-           ]
-      <* spaces
-    in
-    let cmp_op =
-      spaces
-      *> choice
-           [ string "<=" *> return (fun l r -> Ast.BinOp (Ast.Le, l, r))
-           ; string ">=" *> return (fun l r -> Ast.BinOp (Ast.Ge, l, r))
-           ; string "=" *> return (fun l r -> Ast.BinOp (Ast.Eq, l, r))
-           ; string "<" *> return (fun l r -> Ast.BinOp (Ast.Lt, l, r))
-           ; string ">" *> return (fun l r -> Ast.BinOp (Ast.Gt, l, r))
-           ]
-      <* spaces
-    in
-    let app =
+  let symbol s = spaces *> string s *> spaces in
+  let binding expr =
+    let body =
       lift2
-        (fun head args -> List.fold_left (fun l r -> Ast.App (l, r)) head args)
-        (atom ~var_name:binder_name)
-        (many (unary_atom ~var_name:identifier ()))
+        (fun params body -> List.fold_right (fun p b -> Ast.Abs (p, b)) params body)
+        (many (spaces1 *> binder_name))
+        (symbol "=" *> expr)
     in
-    let unary =
-      fix (fun unary ->
-        choice [ (spaces *> char '-' *> unary >>| fun e -> Ast.Neg e); app ])
+    let recursive =
+      lift2 (fun f body -> f, body) binder_name body
+      >>= function
+      | f, Ast.Abs (p, body) -> return (Recursive (f, p, body))
+      | _ -> fail "let rec must define a function"
     in
-    let mult = chainl1 unary mult_op in
-    let add = chainl1 mult add_op in
-    let cmp = chainl1 add cmp_op in
-    choice
-      [ (keyword "fun"
-         *> many1 (spaces *> binder_name <* spaces)
-         >>= fun vars ->
-         string "->" *> cmp >>| fun body -> List.fold_right (fun v b -> Ast.Abs (v, b)) vars body)
-      ; cmp
-      ])
+    keyword "let"
+    *> (keyword "rec" *> recursive <|> lift2 (fun x e -> Value (x, e)) binder_name body)
+  in
+  let expr =
+    fix (fun expr ->
+      (* Arguments are simple, as in OCaml: [f -1] is [f - 1], and [if], [let]
+         and [fun] need parentheses. *)
+      let simple ~var_name =
+        spaces
+        *> choice
+             [ char '(' *> spaces *> expr <* spaces <* char ')'
+             ; (integer >>| fun n -> Ast.Const n)
+             ; (var_name >>| fun v -> Ast.Var v)
+             ]
+        <* spaces
+      in
+      let atom =
+        spaces
+        *> choice
+             [ (keyword "if" *> expr
+                >>= fun cond ->
+                keyword "then" *> expr
+                >>= fun t1 -> keyword "else" *> expr >>| fun t2 -> Ast.If (cond, t1, t2))
+             ; (binding expr >>= fun b -> keyword "in" *> expr >>| let_in b)
+             ; simple ~var_name:head_name
+             ]
+        <* spaces
+      in
+      let mult_op =
+        spaces
+        *> choice
+             [ string "*" *> return (fun l r -> Ast.BinOp (Ast.Mul, l, r))
+             ; string "/" *> return (fun l r -> Ast.BinOp (Ast.Div, l, r))
+             ]
+        <* spaces
+      in
+      let add_op =
+        spaces
+        *> choice
+             [ string "+" *> return (fun l r -> Ast.BinOp (Ast.Add, l, r))
+             ; string "-" *> return (fun l r -> Ast.BinOp (Ast.Sub, l, r))
+             ]
+        <* spaces
+      in
+      let cmp_op =
+        spaces
+        *> choice
+             [ string "<=" *> return (fun l r -> Ast.BinOp (Ast.Le, l, r))
+             ; string ">=" *> return (fun l r -> Ast.BinOp (Ast.Ge, l, r))
+             ; string "=" *> return (fun l r -> Ast.BinOp (Ast.Eq, l, r))
+             ; string "<" *> return (fun l r -> Ast.BinOp (Ast.Lt, l, r))
+             ; string ">" *> return (fun l r -> Ast.BinOp (Ast.Gt, l, r))
+             ]
+        <* spaces
+      in
+      let app =
+        lift2
+          (fun head args -> List.fold_left (fun l r -> Ast.App (l, r)) head args)
+          atom
+          (many (simple ~var_name:identifier))
+      in
+      let unary =
+        fix (fun unary ->
+          choice [ (spaces *> char '-' *> unary >>| fun e -> Ast.Neg e); app ])
+      in
+      let mult = chainl1 unary mult_op in
+      let add = chainl1 mult add_op in
+      let cmp = chainl1 add cmp_op in
+      choice
+        [ (keyword "fun" *> many1 (spaces *> binder_name <* spaces)
+           >>= fun vars ->
+           string "->" *> expr
+           >>| fun body -> List.fold_right (fun v b -> Ast.Abs (v, b)) vars body)
+        ; cmp
+        ])
+  in
+  (* A program may start with an expression; the other items are declarations.
+     A [let] followed by [in] is an expression. *)
+  let first_item =
+    binding expr
+    >>= (fun b ->
+    option (declaration b) (keyword "in" *> expr >>| fun e -> Ast.DExpr (let_in b e)))
+    <|> (expr >>| fun e -> Ast.DExpr e)
+  in
+  let program =
+    lift2
+      (fun first rest -> Option.to_list first @ rest)
+      (option None (first_item >>| Option.some))
+      (many (binding expr >>| declaration))
+  in
+  option None (expr >>| Option.some), program >>| Option.some
 ;;
 
-let parser_impl = make_parser ~extended:false
-let parser_impl_extended = make_parser ~extended:true
-
-let parse_gen p str =
-  match Angstrom.parse_string p ~consume:Angstrom.Consume.All str with
-  | Result.Ok x -> Result.Ok x
-  | Error er -> Result.Error (`Parsing_error er)
+let syntax_error text offset =
+  let line, column =
+    String.fold_left
+      (fun (line, column) c ->
+         if Char.equal c '\n' then line + 1, 1 else line, column + 1)
+      (1, 1)
+      (String.sub text 0 offset)
+  in
+  Printf.sprintf "syntax error at line %d, column %d" line column
 ;;
 
-let parse str = parse_gen parser_impl str
-let parse_extended str = parse_gen parser_impl_extended str
+(* Parses as much as possible; if something is left, the error points to it. *)
+let parse_gen p text =
+  let p = lift2 (fun result stop -> result, stop) (spaces *> p <* spaces) pos in
+  match parse_string ~consume:Consume.Prefix p text with
+  | Ok (Some x, stop) when stop = String.length text -> Ok x
+  | Ok (_, stop) -> Error (`Parsing_error (syntax_error text stop))
+  | Error msg -> Error (`Parsing_error msg)
+;;
+
+let expr_impl, program_impl = make_parser ~extended:false
+let expr_impl_extended, program_impl_extended = make_parser ~extended:true
+let parse text = parse_gen expr_impl text
+let parse_extended text = parse_gen expr_impl_extended text
+let parse_program text = parse_gen program_impl text
+let parse_program_extended text = parse_gen program_impl_extended text

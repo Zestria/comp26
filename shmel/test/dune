@@ -1,4 +1,21 @@
 (test
  (name frontend_tests)
+ (modules frontend_tests)
  (package shmel)
  (libraries shmel.Lib))
+
+(test
+ (name anf_tests)
+ (modules anf_tests)
+ (package shmel)
+ (libraries qcheck shmel.Lib shmel.Middleend))
+
+(cram
+ (package shmel)
+ (deps ../compiler.exe))
+
+(test
+ (name closure_tests)
+ (modules closure_tests)
+ (package shmel)
+ (libraries qcheck shmel.Lib shmel.Middleend))
