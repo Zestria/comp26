@@ -15,7 +15,7 @@ module type S = sig
   val builder : Llvm.llbuilder
   val build_store : Llvm.llvalue -> Llvm.llvalue -> Llvm.llvalue
   val build_call : lltype -> ?name:string -> llvalue -> llvalue list -> llvalue
-  val lookup_func_exn : string -> llvalue
+  val lookup_func : string -> (llvalue, string) result
   val has_toplevel_func : string -> bool
   val build_add : ?name:string -> llvalue -> llvalue -> llvalue
   val build_sub : ?name:string -> llvalue -> llvalue -> llvalue

@@ -20,3 +20,15 @@ val parse_with_comb : string -> (Ast.expr, Parser_comb.error) result
 
 (** Top-down parser with keywords allowed as identifiers ([--extended]). *)
 val parse_with_comb_extended : string -> (Ast.expr, Parser_comb.error) result
+
+(** Top-down parser for a whole program (see {!Parser_comb.parse_program}). *)
+val parse_program_with_comb : string -> (Ast.program, Parser_comb.error) result
+
+(** Same as {!parse_program_with_comb}, with keywords allowed as identifiers. *)
+val parse_program_with_comb_extended : string -> (Ast.program, Parser_comb.error) result
+
+(** The menhir grammar does not support declarations yet, so the program is a
+    single expression. *)
+val parse_program_with_menhir
+  :  string
+  -> (Ast.program, [ `Parsing_error of string ]) result
