@@ -1,0 +1,18 @@
+(include_subdirs unqualified)
+
+(library
+ (name metabannedinrflanguage_frontend)
+ (public_name MetaBannedInRfLanguage.frontend)
+ (wrapped false)
+ (modules
+  ast
+  syntax
+  op_settings
+  pprint
+  rd_parser
+  menhir_lexer
+  menhir_grammar
+  menhir_parser)
+ (libraries base angstrom menhirLib)
+ (preprocess
+  (pps ppx_deriving.show)))

@@ -1,0 +1,12 @@
+(library
+ (name metabannedinrflanguage_ast_gen)
+ (public_name MetaBannedInRfLanguage.ast_gen)
+ (wrapped false)
+ (modules ast_gen)
+ (libraries qcheck metabannedinrflanguage_frontend))
+
+(test
+ (name test_round_trip)
+ (package MetaBannedInRfLanguage)
+ (modules test_round_trip)
+ (libraries qcheck metabannedinrflanguage_frontend metabannedinrflanguage_ast_gen))
