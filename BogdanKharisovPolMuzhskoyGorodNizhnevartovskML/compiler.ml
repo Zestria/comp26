@@ -14,30 +14,52 @@ type parser =
   | Angstrom of operator_mode
   | Menhir
 
+type stage =
+  | Parsing
+  | Anf
+  | Cc
+  | Ll
+
 type command =
-  | Run of parser * string option
+  | Run of parser * stage * string option * string option
   | Help of string
 
-(* Arg callbacks accumulate options in local references. *)
+(* Arg callbacks return unit. Keep their mutable option state local, then return
+   an immutable command. *)
 [@@@zanuda "-mutability_check"]
 
 let parse_arguments argv =
   let menhir = ref false in
   let operator_extension = ref false in
   let input = ref None in
+  let output = ref None in
+  let stage = ref Ll in
   let set_input path =
     match !input with
     | None -> input := Some path
     | Some _ -> raise (Arg.Bad "Expected at most one input file")
   in
-  let set_parser = function
-    | "angstrom" -> menhir := false
+  let set_parsing = function
+    | "topdown" -> menhir := false
     | "menhir" -> menhir := true
+    | name -> raise (Arg.Bad ("Unknown parser: " ^ name ^ "; expected topdown or menhir"))
+  in
+  let set_stop_after = function
+    | "parsing" -> stage := Parsing
+    | "anf" -> stage := Anf
+    | "cc" -> stage := Cc
+    | "ll" -> stage := Ll
     | name ->
-      raise (Arg.Bad ("Unknown parser: " ^ name ^ "; expected angstrom or menhir"))
+      raise (Arg.Bad ("Unknown stage: " ^ name ^ "; expected parsing, anf, cc or ll"))
   in
   let options =
-    [ "--parser", Arg.String set_parser, "NAME Use angstrom (default) or menhir"
+    [ "-parsing", Arg.String set_parsing, "NAME Use topdown (default) or menhir"
+    ; ( "--stop-after"
+      , Arg.String set_stop_after
+      , "STAGE Stop after parsing, anf, cc or ll (default: ll)" )
+    ; ( "-o"
+      , Arg.String (fun path -> output := Some path)
+      , "FILE Write to FILE or - for stdout (default)" )
     ; ( "--operator-extension"
       , Arg.Set operator_extension
       , " Enable operator declarations (Angstrom only)" )
@@ -51,13 +73,14 @@ let parse_arguments argv =
       argv
       options
       set_input
-      "Usage: compiler [--parser angstrom|menhir] [--operator-extension] [FILE]\n\
+      "Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o \
+       FILE] [--operator-extension] [FILE]\n\
        Without FILE, read standard input.";
     match !menhir, !operator_extension with
     | true, true -> Error "--operator-extension requires the Angstrom parser\n"
-    | true, false -> Ok (Run (Menhir, !input))
-    | false, true -> Ok (Run (Angstrom Extended, !input))
-    | false, false -> Ok (Run (Angstrom Standard, !input))
+    | true, false -> Ok (Run (Menhir, !stage, !input, !output))
+    | false, true -> Ok (Run (Angstrom Extended, !stage, !input, !output))
+    | false, false -> Ok (Run (Angstrom Standard, !stage, !input, !output))
   with
   | Arg.Help message -> Ok (Help message)
   | Arg.Bad message -> Error message
@@ -70,7 +93,7 @@ let io action =
   | Sys_error message -> Error ("I/O error: " ^ message)
 ;;
 
-let run parser input =
+let run parser stage input output =
   let ( let* ) = Result.bind in
   let* source =
     io (fun () ->
@@ -87,7 +110,28 @@ let run parser input =
   let* program =
     Result.map_error (fun message -> "Parse error: " ^ message) (parse source)
   in
-  io (fun () -> Format.printf "%a@." Frontend.Ast_print.program program)
+  let middleend printer result =
+    Result.map
+      (fun program formatter -> printer formatter program)
+      (Result.map_error
+         (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
+         result)
+  in
+  let* print_program =
+    match stage with
+    | Parsing -> Ok (fun formatter -> Frontend.Ast_print.program formatter program)
+    | Anf -> middleend Middleend.Anf_print.program (Middleend.Pipeline.anf program)
+    | Cc -> middleend Middleend.Closure_print.program (Middleend.Pipeline.cc program)
+    | Ll -> middleend Middleend.Lifted_print.program (Middleend.Pipeline.compile program)
+  in
+  let print channel =
+    let formatter = Format.formatter_of_out_channel channel in
+    Format.fprintf formatter "%t@." print_program
+  in
+  io (fun () ->
+    match output with
+    | None | Some "-" -> print stdout
+    | Some path -> Out_channel.with_open_bin path print)
 ;;
 
 let main argv =
@@ -98,8 +142,8 @@ let main argv =
   | Ok (Help message) ->
     print_string message;
     0
-  | Ok (Run (parser, input)) ->
-    (match run parser input with
+  | Ok (Run (parser, stage, input, output)) ->
+    (match run parser stage input output with
      | Ok () -> 0
      | Error message ->
        prerr_endline message;

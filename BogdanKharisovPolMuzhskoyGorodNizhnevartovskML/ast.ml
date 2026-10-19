@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-type constant =
+type constant = Constant.t =
   | Int of Integer_literal.t
   | Bool of bool
   | Unit
