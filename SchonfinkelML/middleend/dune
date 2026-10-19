@@ -1,0 +1,19 @@
+(library
+ (name middleend)
+ (modules anf names closure_conversion lambda_lifting)
+ (libraries SchonfinkelML_frontend)
+ (package SchonfinkelML))
+
+(subdir
+ tests
+ (library
+  (name middleend_tests)
+  (modules anf_test closure_conversion_test lambda_lifting_test)
+  (libraries middleend SchonfinkelML_frontend top_down)
+  (inline_tests)
+  (preprocess
+   (pps ppx_expect_nobase))
+  (package SchonfinkelML))
+ (env
+  (release
+   (inline_tests enabled))))

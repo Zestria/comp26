@@ -28,14 +28,14 @@ type fixity =
     the relative order of precedences matters, a larger [prec] binds tighter. *)
 type entry =
   { sym : string
-  ; tok : Frontend.Common.token
+  ; tok : SchonfinkelML_frontend.Common.token
   ; fixity : fixity
   ; prec : int
   }
 
 type t = entry list
 
-val token_of_sym : string -> Frontend.Common.token option
+val token_of_sym : string -> SchonfinkelML_frontend.Common.token option
 
 (** The table used when no table is given on the command line, that is
     ["left 4 = < >; left 6 + -; left 7 * /; prefix 9 -"]. *)
@@ -58,9 +58,9 @@ val string_of : t -> string
 
 (** [find_infix t tok] is the entry of [tok], provided [t] makes it a binary
     operator. *)
-val find_infix : t -> Frontend.Common.token -> entry option
+val find_infix : t -> SchonfinkelML_frontend.Common.token -> entry option
 
 (** [find_prefix t tok] is the entry of [tok], provided [t] makes it a prefix
     (unary) operator.  A token may be both an infix and a prefix operator, as
     [-] is in [default]. *)
-val find_prefix : t -> Frontend.Common.token -> entry option
+val find_prefix : t -> SchonfinkelML_frontend.Common.token -> entry option

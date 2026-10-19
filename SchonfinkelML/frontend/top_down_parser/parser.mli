@@ -6,19 +6,21 @@
 
 [@@@ocaml.text "/*"]
 
-(** Top-down (recursive descent) parser over the token stream produced by [Frontend.Lexer].
+[@@@zanuda "-mutability_check"]
+
+(** Top-down (recursive descent) parser over the token stream produced by [SchonfinkelML_frontend.Lexer].
 
     Operators are described by an [Operators.t], so their arity, associativity and
     precedence are data: the table can be redefined from the command line.
 
-    The source is read token by token from a lexbuf, and what [Frontend.Lexer]
+    The source is read token by token from a lexbuf, and what [SchonfinkelML_frontend.Lexer]
     rejects comes back as an [error] rather than as an exception. *)
 
 (** What went wrong: a position and a message, as the lexer has it. *)
-type error = Frontend.Lexer.error
+type error = SchonfinkelML_frontend.Lexer.error
 
 (** Errors print as [line:column: message], whether they came from lexing or
-    from parsing; [Frontend.Lexer.pp_error] says more about the format. *)
+    from parsing; [SchonfinkelML_frontend.Lexer.pp_error] says more about the format. *)
 val pp_error : Format.formatter -> error -> unit
 
 val string_of_error : error -> string
@@ -38,4 +40,4 @@ val parse_expr
   :  ?ops:Operators.t
   -> ?max_budget:int
   -> string
-  -> (Frontend.Common.expr, error) result
+  -> (SchonfinkelML_frontend.Common.expr, error) result

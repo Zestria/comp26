@@ -6,6 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
+[@@@zanuda "-mutability_check"] (* Config is required to use with assignment '<-' *)
+
 type parser_kind =
   | Top_down
   | Bottom_up
@@ -15,13 +17,37 @@ let string_of_parser_kind = function
   | Bottom_up -> "bottom-up"
 ;;
 
+let parser_kind_of_string = function
+  | "topdown" -> Ok Top_down
+  | "menhir" -> Ok Bottom_up
+  | s -> Error s
+;;
+
+type stop_after =
+  | Parsing
+  | Anf
+
+let stop_after_of_string = function
+  | "parsing" -> Ok Parsing
+  | "anf" -> Ok Anf
+  | s -> Error s
+;;
+
+let string_of_stop_after = function
+  | Parsing -> "parsing"
+  | Anf -> "anf"
+;;
+
 type config =
   { mutable output : string
   ; mutable parser : parser_kind
   ; mutable parser_settings : string option
+  ; mutable stop_after : stop_after option
   }
 
-let default_config () = { output = "a.out"; parser = Top_down; parser_settings = None }
+let default_config () =
+  { output = "-"; parser = Top_down; parser_settings = None; stop_after = None }
+;;
 
 let usage_msg =
   {|
@@ -44,7 +70,19 @@ where
 let flag_specs cfg =
   [ ( "-o"
     , Arg.String (fun f -> cfg.output <- f)
-    , " <file>  write output to <file> (default: stdout)" )
+    , " <file>  write output to <file>, \"-\" means stdout (default: -)" )
+  ; ( "-parsing"
+    , Arg.String
+        (fun s ->
+          match parser_kind_of_string s with
+          | Ok kind -> cfg.parser <- kind
+          | Error s ->
+            raise
+              (Arg.Bad
+                 (Printf.sprintf
+                    "unknown parser in -parsing: %s (expected topdown, menhir)"
+                    s)))
+    , " <kind>  choose the parser: topdown (default), menhir" )
   ; "--bottom-up", Arg.Unit (fun () -> cfg.parser <- Bottom_up), "Use LR(1) parser"
   ; ( "--top-down"
     , Arg.Unit (fun () -> cfg.parser <- Top_down)
@@ -55,6 +93,19 @@ let flag_specs cfg =
           cfg.parser_settings <- Some settings;
           cfg.parser <- Top_down)
     , " <settings>  Pass settings to top down parser, see FORMAT for more info" )
+  ; ( "--stop-after"
+    , Arg.String
+        (fun s ->
+          match stop_after_of_string s with
+          | Ok stage -> cfg.stop_after <- Some stage
+          | Error s ->
+            raise
+              (Arg.Bad
+                 (Printf.sprintf
+                    "unknown stage in --stop-after: %s (expected %s)"
+                    s
+                    (String.concat ", " (List.map string_of_stop_after [ Parsing; Anf ])))))
+    , " <stage>  stop after <stage>: parsing, anf" )
   ]
 ;;
 
