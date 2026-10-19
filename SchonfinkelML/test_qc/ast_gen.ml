@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 module Gen = QCheck.Gen
-open Frontend.Common
+open SchonfinkelML_frontend.Common
 
 let binop_ops = [ "+"; "-"; "*"; "/"; "<"; ">"; "=" ]
 
@@ -36,6 +36,7 @@ let rec gen_expr n =
       ; Gen.map3 elet gen_name gen_half gen_half
       ; Gen.map3 eletrec gen_name gen_half gen_half
       ; Gen.map2 elambda gen_name gen_pred
+      ; Gen.map euminus gen_half
       ])
 ;;
 
@@ -84,6 +85,8 @@ let lexer_words =
   ; "="
   ; "<"
   ; ">"
+  ; "<="
+  ; ">="
   ; "("
   ; ")"
   ; "()"
