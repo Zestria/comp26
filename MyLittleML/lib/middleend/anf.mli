@@ -44,3 +44,4 @@ module StringSet : Set.S with type elt = string
 
 val is_cexp_rhs : aexp -> bool
 val anf_prog : A.prog -> aprogram
+val to_string : aprogram -> string

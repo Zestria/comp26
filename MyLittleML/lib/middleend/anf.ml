@@ -238,3 +238,54 @@ let anf_prog (prog : A.prog) : aprogram =
   List.map anf_item prog
 ;;
 
+(* ---------------------------------------------------------------------- *)
+(** Pretty-printing for ANF programs. *)
+
+let bop_to_string = function
+  | A.Add -> "+"
+  | A.Sub -> "-"
+  | A.Mul -> "*"
+  | A.Div -> "/"
+  | A.Mod -> "mod"
+  | A.Lt -> "<"
+  | A.Le -> "<="
+  | A.Gt -> ">"
+  | A.Ge -> ">="
+  | A.Eq -> "="
+  | A.Neq -> "<>"
+;;
+
+let rec pp_atom ppf = function
+  | AInt n -> Format.fprintf ppf "%d" n
+  | ABool b -> Format.fprintf ppf "%b" b
+  | AVar v -> Format.fprintf ppf "%s" v
+
+and pp_cexp ppf = function
+  | CAtom a -> pp_atom ppf a
+  | CBinop (op, l, r) ->
+    Format.fprintf ppf "(%a %s %a)" pp_atom l (bop_to_string op) pp_atom r
+  | CNeg a -> Format.fprintf ppf "(-%a)" pp_atom a
+  | CApp (f, x) -> Format.fprintf ppf "(%a %a)" pp_atom f pp_atom x
+  | CIf (c, t, f) ->
+    Format.fprintf ppf "if %a then %a else %a" pp_atom c pp_aexp t pp_aexp f
+  | CFun (params, body) ->
+    Format.fprintf ppf "fun %s -> %a" (String.concat " " params) pp_aexp body
+
+and pp_aexp ppf = function
+  | ACexp c -> pp_cexp ppf c
+  | ALet (flag, name, rhs, rest) ->
+    Format.fprintf ppf "let %s%s = %a in %a"
+      (if flag = Rec then "rec " else "") name pp_aexp rhs pp_aexp rest
+
+let pp_item ppf = function
+  | ADecl (flag, name, rhs) ->
+    Format.fprintf ppf "let %s%s = %a"
+      (if flag = Rec then "rec " else "") name pp_aexp rhs
+  | AExp e -> pp_aexp ppf e
+
+let pp_aprogram ppf prog =
+  List.iter (fun item -> Format.fprintf ppf "%a;;\n" pp_item item) prog
+
+let to_string = Format.asprintf "%a" pp_aprogram
+;;
+

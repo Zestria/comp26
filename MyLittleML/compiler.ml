@@ -138,28 +138,16 @@ let run opts source =
       prerr_endline ("compiler: " ^ msg);
       exit 1
   in
-  let show_anf (stage : stop_after) prog =
-    let prog = Middleend.Anf.anf_prog prog in
-    let prog =
-      match stage with
-      | Frontend -> assert false
-      | Anf -> prog
-      | Closure | Lambda -> Middleend.Closure.convert_prog prog
-    in
-    let prog =
-      match stage with
-      | Frontend -> assert false
-      | Lambda -> Middleend.Lambda_lift.lift_prog prog
-      | Anf | Closure -> prog
-    in
-    Middleend.Anf.show_aprogram prog
-  in
   let output =
     match opts.stop_after with
-    | Frontend -> Frontend.Ast.show_prog prog
-    | Anf -> show_anf Anf prog
-    | Closure -> show_anf Closure prog
-    | Lambda -> show_anf Lambda prog
+    | Frontend -> Frontend.Pp.to_string prog
+    | Anf -> Middleend.Anf.to_string (Middleend.Anf.anf_prog prog)
+    | Closure ->
+      Middleend.Anf.to_string (Middleend.Closure.convert_prog (Middleend.Anf.anf_prog prog))
+    | Lambda ->
+      Middleend.Anf.to_string
+        (Middleend.Lambda_lift.lift_prog
+           (Middleend.Closure.convert_prog (Middleend.Anf.anf_prog prog)))
   in
   (match opts.output with
    | None | Some "-" -> print_endline output
