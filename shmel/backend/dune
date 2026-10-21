@@ -1,0 +1,6 @@
+(library
+ (name shmel_backend)
+ (public_name shmel.Backend)
+ (libraries shmel.Lib shmel.Middleend)
+ (instrumentation
+  (backend bisect_ppx_ng)))
