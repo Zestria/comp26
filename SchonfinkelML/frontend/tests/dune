@@ -1,7 +1,7 @@
 (library
  (name common_tests)
  (modules parsers_unit_tests)
- (libraries top_down bottom_up frontend)
+ (libraries top_down bottom_up SchonfinkelML_frontend)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test))

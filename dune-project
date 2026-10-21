@@ -101,6 +101,7 @@
   qcheck
   bisect_ppx_ng
   ppx_deriving
+  ppx_expect
   (llvm
    (= "18-shared"))
   (ppx_deriving_qcheck
@@ -145,6 +146,29 @@
   menhir
   qcheck
   ppx_expect))
+
+(package
+ (name MetaBannedInRfLanguage)
+ (synopsis "A compiler for a subset of OCaml, targeting RISC-V")
+ (description
+  "An educational compiler for a subset of OCaml: top-down and bottom-up (menhir) parsers, type inference, and code generation targeting RISC-V.")
+ (authors "nmigunova04" "b08lsoai" "akagambit2")
+ (maintainers "nmigunova04")
+ (license LGPL-3.0-or-later)
+ (source
+  (uri "git+ssh://ssh.sourcecraft.dev/nmigunova04/comp26.git"))
+ (homepage "https://sourcecraft.dev/nmigunova04/comp26")
+ (depends
+  ocaml
+  dune
+  base
+  menhir
+  menhirLib
+  benchmark
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  ppx_deriving))
 
 (package
  (name MyLittleML)

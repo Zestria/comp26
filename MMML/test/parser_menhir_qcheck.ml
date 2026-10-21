@@ -5,11 +5,7 @@ let var name = Variable name
 let pvar name = PVariable name
 let int value = Constant (Integer value)
 let binding pattern expression = pattern, expression
-
-let operators =
-  [ "+"; "-"; "*"; "/"; "="; "<>"; "<"; "<="; ">"; ">="; "&&"; "||" ]
-;;
-
+let operators = [ "+"; "-"; "*"; "/"; "="; "<>"; "<"; "<="; ">"; ">="; "&&"; "||" ]
 let parenthesize source = "( " ^ source ^ " )"
 let joined render separator values = String.concat separator (List.map render values)
 let name_source name = if List.mem name operators then parenthesize name else name
@@ -60,7 +56,7 @@ and binding_source recursive (pattern, expression) =
 let program_source program =
   joined
     (fun (Definition (recursive, pattern, value)) ->
-      binding_source recursive (pattern, value))
+       binding_source recursive (pattern, value))
     "\n"
     program
 ;;
@@ -76,7 +72,6 @@ let constants =
 ;;
 
 let recursive_flags = Gen.oneof_list [ Nonrecursive; Recursive ]
-
 let patterns = Gen.oneof [ Gen.return PWildcard; Gen.map pvar names ]
 
 let rec expressions depth =
@@ -139,7 +134,8 @@ let rec shrink_expression expression yield =
 ;;
 
 let shrink_item (Definition (recursive, pattern, value)) yield =
-  shrink_expression value (fun smaller -> yield (Definition (recursive, pattern, smaller)))
+  shrink_expression value (fun smaller ->
+    yield (Definition (recursive, pattern, smaller)))
 ;;
 
 let arbitrary_expression =
@@ -409,10 +405,11 @@ let full_input_consumption =
 let check_error_location parse source offset line column =
   match parse source with
   | Error { Error_monad.location; message } ->
-    if location.offset = offset
-       && location.line = line
-       && location.column = column
-       && String.length message > 0
+    if
+      location.offset = offset
+      && location.line = line
+      && location.column = column
+      && String.length message > 0
     then true
     else
       Test.fail_reportf

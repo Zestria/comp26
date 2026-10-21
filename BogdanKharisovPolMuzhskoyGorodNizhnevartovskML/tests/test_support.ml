@@ -28,10 +28,8 @@ let integer_literal =
 ;;
 
 let equal ~print ~expected actual =
-  if actual = expected
-  then true
-  else
-    QCheck.Test.fail_reportf "Expected: %s\nActual:   %s" (print expected) (print actual)
+  actual = expected
+  || QCheck.Test.fail_reportf "Expected: %s\nActual:   %s" (print expected) (print actual)
 ;;
 
 let strings alphabet =

@@ -13,41 +13,37 @@ on:
       #   target_branches: "master"
 
 workflows:
-  sample-workflow:
-    tasks:
-      - name: sample-task
-        cubes:
-          - name: install
-            image:
-              name: kakadu18/ocaml:rukaml5.5
-            env:
-              OPAMROOT: /home/opam/.opam
-              OPAMCONFIRMLEVEL: unsafe-yes
-            script:
-              - sudo su -
-              - echo "I am $(whoami)"
-              - sudo usermod -aG root $(whoami)
-              - opam repo set-url default https://se.math.spbu.ru/opam
-              - opam update
-              - cd $SOURCECRAFT_WORKSPACE
-              - git config --global --add safe.directory .
+  # sample-workflow:
+  #   tasks:
+  #     - name: sample-task
+  #       cubes:
+  #         - name: install
+  #           image:
+  #             name: kakadu18/ocaml:rukaml5.5
+  #           env:
+  #             OPAMROOT: /home/opam/.opam
+  #             OPAMCONFIRMLEVEL: unsafe-yes
+  #           script:
+  #             - sudo su -
+  #             - echo "I am $(whoami)"
+  #             - sudo usermod -aG root $(whoami)
+  #             - opam repo set-url default https://se.math.spbu.ru/opam
+  #             - opam update
+  #             - cd $SOURCECRAFT_WORKSPACE
+  #             - git config --global --add safe.directory .
 
-              - cd $(yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml)
-              - opam install . --deps-only --with-test --with-doc --yes # --verbose
-              - opam exec -- dune build @install
-              #- opam pin add zanuda --dev-repo -y
-              - opam exec -- dune b @check
-              #- opam exec -- zanuda -dir .
-              #- opam exec -- zanuda -dir . -ordjsonl results.json
-              #- cat results.json
-              #- opam exec -- dune exec ./validate.exe -- 1.json
-              #- opam exec -- dune exec ./validate.exe -- results.json
+  #             - cd $(yq -r '.[] | to_entries[] | select(.value[]? == "Kakadu") | .key' teams.yml)
+  #             - opam install . --deps-only --with-test --with-doc --yes # --verbose
+  #             - opam exec -- dune build @install
+  #             - opam exec -- dune b @check
 
   compile-and-review:
+    settings:
+      shared: true             # This thing should start workflows automatically.
     tasks:
       - name: task-PR-check
         cubes:
-          - name: install
+          - name: run-zanuda
             image:
               name: kakadu18/ocaml:comp26
               #entrypoint: "/bin/bash"
@@ -55,12 +51,14 @@ workflows:
               OPAMROOT: /home/opam/.opam
               OPAMCONFIRMLEVEL: unsafe-yes
               TIMEFMT: '%U'
+              #ZANUDA_HACK_SARIF_PREFIX: "/sourcecraft/workspace/"
             script:
               #- sudo su -
               - echo "whoami = $(whoami)"
               - sudo usermod -aG root $(whoami)
               - echo "SOURCECRAFT_ROOT_DIRECTORY = $SOURCECRAFT_ROOT_DIRECTORY"
               - echo "SOURCECRAFT_WORKSPACE = $SOURCECRAFT_WORKSPACE"
+              - echo "SOURCECRAFT_EVENT = $SOURCECRAFT_EVENT"
               - echo "pwd =  $(pwd)..., OPAMROOT = $OPAMROOT"
               #- opam repo set-url default https://se.math.spbu.ru/opam
               - /usr/bin/time -f "%U" opam update
@@ -76,28 +74,55 @@ workflows:
               #- cat teams.yml
               - echo "Pinning..."
               - .sourcecraft/dune.sh pin
+
               - echo "Deps..."
               - sh -ex .sourcecraft/dune.sh deps
+
               - echo "Build..."
               - opam exec -- sh .sourcecraft/dune.sh build
 
-              #- echo "Pinning Zanuda..."
-              #- /usr/bin/time -f "%U"  opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
-              #- opam exec -- dune b @check
-              #- opam exec -- zanuda -dir . -ordjsonl results.json -osarif sarif.json
-              #- cat results.json
-              #- opam exec -- dune exec ./validate.exe -- 1.json
-              #- opam exec -- dune exec ./validate.exe -- sarif.json
-              #- cp -v sarif.json $SOURCECRAFT_WORKSPACE/result.sarif
+              - echo "Pinning Zanuda..."
+              - /usr/bin/time -f "%U" opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
+              - echo "Running Zanuda..."
+              - .sourcecraft/dune.sh zanuda
 
-          - name: scan-result-uploader
-            image:
-              name: sourcecraft/scan-result-uploader:0.6.0
+              - echo "Calculating statistics..."
+              - .sourcecraft/dune.sh stats > STATS.md
+
+              - ls -l result.sarif STATS.md
+
+          - name: add-zanuda-comments
+            needs: [ "run-zanuda" ]
+            #if: env.SOURCECRAFT_EVENT == "pull_request"
+            env:
+              SOURCECRAFT_TOKEN: ${{ secrets.ZANUDA_COMMENTS_TOKEN }}
+              DUNE_PROJECT_ROOT: ${{ env.SOURCECRAFT_WORKSPACE }}
             script:
+              - echo "SRC_WS = $SOURCECRAFT_WORKSPACE, pwd = $(pwd)"
+              - mkdir -p _log
               - ls -l $SOURCECRAFT_WORKSPACE
-              # - pwd
-              # - cp handcrafted.json result.sarif -v
-              # - cat result.sarif
-              # - export APPSEC_CUSTOM_ENGINE_NAME="zanuda-lint"
-              # - /app/bin/scan-result-uploader
-        # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader
+              - cd $SOURCECRAFT_WORKSPACE
+              - cat result.rdjsonl | nl -ba
+
+              - |
+                echo "Posting summary"
+                python3 .sourcecraft/post-zanuda-summary.py result.rdjsonl | tee _log/post-zanuda-summary.log
+              - cat _log/post-zanuda-summary.log
+              - |
+                echo "Calling post-zanuda-inline.py"
+                python3 .sourcecraft/post-zanuda-inline.py result.rdjsonl | tee _log/post-zanuda-inline.log
+              - cat _log/post-zanuda-inline.log
+              - echo "FINISHED"
+
+          # - name: scan-result-uploader
+          #   image:
+          #     name: sourcecraft/scan-result-uploader:0.6.0
+          #   env:
+          #     APPSEC_CUSTOM_ENGINE_NAME: "zanuda-lint"
+          #   script:
+          #     - ls -l $SOURCECRAFT_WORKSPACE
+          #     - echo "pwd  = $(pwd)"
+          #     - echo "result.sarif"
+          #     - cat result.sarif
+          #     - /app/bin/scan-result-uploader
+          #     # more options from https://sourcecraft.dev/sourcecraft/appsec/browse/scan-result-uploader

@@ -1,0 +1,10 @@
+let mark n = let () = print_int n in n
+let choose left_arg right_arg = left_arg + right_arg
+let result = choose (mark 1) (mark 2)
+let (a, b, c) = (mark 3, mark 4, mark 5)
+let grouped = let left = mark 6 and right = mark 7 in left + right
+let false_value x = let () = print_int x in false
+let true_value y = let () = print_int y in true
+let short_and = false && false_value 8
+let short_or = true || true_value 9
+let () = print_int (result + a + b + c + grouped)

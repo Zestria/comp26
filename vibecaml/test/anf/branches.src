@@ -1,0 +1,4 @@
+let choose x = 1 + (if x <= 1 then (if x = 0 then 3 else 4) else 5) + 2
+let id x = x
+let result = id (let value = choose 0 in value + choose 3)
+let () = print_int result

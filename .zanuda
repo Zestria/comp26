@@ -1,3 +1,14 @@
 ignore BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/grammar.ml
+ignore MMML/lib/frontend/parser.ml
+ignore MMML/lib/frontend/parser.mli
+forward mutability_check ignore MMML/test/anf_test_eval.ml
+ignore _none_
+ignore vibecaml/lib/menhir_parser.ml
+ignore vibecaml/lib/menhir_parser.mli
 ignore shmel/lib/parser.ml
 ignore shmel/lib/parser.mli
+ignore SchonfinkelML/frontend/bottom_up_parser/parser_gen.ml
+ignore SchonfinkelML/frontend/bottom_up_parser/parser_gen.mli
+forward mutability_check ignore SchonfinkelML/frontend/config.ml,SchonfinkelML/frontend/config.mli
+forward mutability_check ignore SchonfinkelML/frontend/top_down_parser/parser.ml,SchonfinkelML/frontend/top_down_parser/parser.mli,
+forward mutability_check ignore SchonfinkelML/bench/gen_benchmarks.ml,SchonfinkelML/bench/gen_benchmarks.mli

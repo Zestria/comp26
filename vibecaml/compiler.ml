@@ -5,7 +5,8 @@
 open Vibecaml
 
 (* Точка входа компилятора: читает программу из файла или stdin, разбирает
-   выбранным парсером и печатает дерево и/или программу принтером. *)
+   выбранным парсером, прогоняет конвейер до нужной стадии и печатает
+   результат в stdout или в файл. *)
 
 let read_source = function
   | None | Some "-" -> Ok (In_channel.input_all In_channel.stdin)
@@ -25,20 +26,59 @@ let fail message =
   exit 1
 ;;
 
+let show structure = Format.asprintf "%a@." Pprint.pp_structure structure
+
 (* Без флагов дампа печатаем программу принтером: такой вывод легко читать и
    сравнивать между парсерами. *)
-let print_outputs config structure =
+let show_parsed config structure =
   let { Config.dump_ast; dump_pretty_printed; _ } = config in
-  if dump_ast then Format.printf "%a@." Ast.pp_structure structure;
-  if dump_pretty_printed || not dump_ast
-  then Format.printf "%a@." Pprint.pp_structure structure
+  let tree = if dump_ast then Format.asprintf "%a@." Ast.pp_structure structure else "" in
+  let program = if dump_pretty_printed || not dump_ast then show structure else "" in
+  tree ^ program
+;;
+
+(* Конвейер middleend по порядку из #9; на стадии из --stop-after печатаем
+   результат и останавливаемся. *)
+let compile config parsed =
+  let ( let* ) = Result.bind in
+  let stop_after stage = config.Config.stop_after = Some stage in
+  if stop_after Config.Parsing
+  then Ok (show_parsed config parsed)
+  else
+    let* renamed = Rename.rename parsed in
+    if stop_after Config.Rename
+    then Ok (show renamed)
+    else
+      let* cc = Closure_conv.convert renamed in
+      if stop_after Config.Closure_conversion
+      then Ok (show cc)
+      else
+        let* lifted = Lambda_lift.lift cc in
+        if stop_after Config.Lambda_lifting
+        then Ok (show lifted)
+        else
+          let* anf = Anf_conv.convert lifted in
+          let anf = Anf_simplify.simplify anf in
+          Ok (Format.asprintf "%a@." Anf.pp_program anf)
+;;
+
+let write_output config text =
+  match config.Config.output_file with
+  | None | Some "-" -> Ok (print_string text)
+  | Some file ->
+    (try
+       Ok (Out_channel.with_open_bin file (fun channel -> output_string channel text))
+     with
+     | Sys_error message -> Error message)
 ;;
 
 let run config =
   let ( let* ) = Result.bind in
   let* source = read_source config.Config.input_file in
   let* structure = parse_structure config source in
-  Ok (print_outputs config structure)
+  Fresh.reset ();
+  let* text = compile config structure in
+  write_output config text
 ;;
 
 let () =
