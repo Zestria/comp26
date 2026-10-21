@@ -1,0 +1,9 @@
+(test
+ (name riscv_tests)
+ (package shmel)
+ (libraries qcheck shmel.Lib shmel.Middleend shmel.Backend)
+ (deps harness.c))
+
+(cram
+ (package shmel)
+ (deps riscv_tests.exe))
