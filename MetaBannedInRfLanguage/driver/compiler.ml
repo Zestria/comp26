@@ -79,6 +79,12 @@ let run (cli : Cli.t) =
     write_output
       cli.output
       (Anf_pprint.string_of_program (Lambda_lifting.program program))
+  | Stop_after_riscv ->
+    let* program = Anf_conv.convert structure in
+    let program = Closure_conversion.program program in
+    let program = Lambda_lifting.program program in
+    let asm = Codegen.gen_program program in
+    write_output cli.output (Riscv.pp_asm asm)
 ;;
 
 let () =

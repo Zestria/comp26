@@ -15,6 +15,8 @@ type stop_after =
   | Stop_after_anf
   | Stop_after_cc
   | Stop_after_ll
+  | Stop_after_riscv
+[@@deriving show { with_path = false }]
 
 type output =
   | To_stdout
@@ -29,7 +31,7 @@ type t =
   }
 
 let usage =
-  "usage: compiler.exe [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o \
+  "usage: compiler.exe [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll|riscv] [-o \
    <filename>|-o -] [-ops <settings>] <input.ml>"
 ;;
 
@@ -41,22 +43,23 @@ A compiler for a subset of OCaml.
 positional arguments:
   <input.ml>              name or path of the source file to compile
 
-options:
-  -parsing <topdown|menhir>
-                          which parser to use (default: topdown)
-                            topdown  - recursive-descent (Angstrom) parser
-                            menhir   - bottom-up (menhir) parser
-
-  --stop-after <parsing|anf|cc|ll>
-                          stop the pipeline after the given stage and print
-                          its result (default: parsing)
-                            parsing  - print the parsed AST
-                            anf      - print the program after ANF conversion
-                            cc       - print the program after closure conversion
-                            ll       - print the program after lambda lifting
-
-  -o <filename>           write the output to <filename>
-  -o -                    write the output to stdout (default)
+   options:
+   -parsing <topdown|menhir>
+                           which parser to use (default: topdown)
+                             topdown  - recursive-descent (Angstrom) parser
+                             menhir   - bottom-up (menhir) parser
+ 
+   --stop-after <parsing|anf|cc|ll|riscv>
+                           stop the pipeline after the given stage and print
+                           its result (default: riscv)
+                             parsing  - print the parsed AST
+                             anf      - print the program after ANF conversion
+                             cc       - print the program after closure conversion
+                             ll       - print the program after lambda lifting
+                             riscv    - print the RISC-V assembly
+ 
+   -o <filename>           write the output to <filename>
+   -o -                    write the output to stdout (default)
 
   -ops <settings>         override operator precedence/associativity/arity;
                           by default the built-in operator table is used.
@@ -84,10 +87,11 @@ let stop_after_of_string = function
   | "anf" -> Ok Stop_after_anf
   | "cc" -> Ok Stop_after_cc
   | "ll" -> Ok Stop_after_ll
+  | "riscv" -> Ok Stop_after_riscv
   | value ->
     Error
       (Printf.sprintf
-         "unknown --stop-after value %S (expected \"parsing\", \"anf\", \"cc\" or \"ll\")"
+         "unknown --stop-after value %S (expected \"parsing\", \"anf\", \"cc\", \"ll\" or \"riscv\")"
          value)
 ;;
 
