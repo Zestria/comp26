@@ -8,10 +8,15 @@
 
 (** Reference evaluator for the MyLittleML middle-end (Task 2).
 
-    {!eval_anf} covers the ANF, closure-converted and lifted programs (all
-    three share {!Anf.aprogram}); {!eval_src} handles source {!Frontend.Ast}
-    programs.  [test_mid] checks that CPS factorial and fibonacci evaluate
-    to the same integers on every stage.
+    {!eval_mid} interprets {!Anf.aprogram} values at every middle-end stage.
+    After ANF, closure conversion and lambda lifting the program is still an
+    [aprogram]: closure conversion only widens [CFun] shapes and applies them
+    to their free variables via intermediate [ALet]s, and lambda lifting only
+    hoists closed lambdas.  So a single interpreter serves all three stages;
+    {!eval_anf}, {!eval_cc} and {!eval_ll} are thin aliases kept so call
+    sites read as the stage they are at.
+
+    {!eval_src} handles source {!Frontend.Ast} programs.
 
     Semantics: call-by-value; applications are single-argument
     ({!Frontend.Ast.App} is curried), multi-parameter functions build
@@ -26,6 +31,7 @@
     closures closure conversion creates in the scope of the cell — sees the
     final value. *)
 module A = Frontend.Ast
+
 open Anf
 
 exception Eval_error of string
@@ -143,7 +149,6 @@ let eval_bop (op : A.bop) (l : value) (r : value) : value =
      | _ -> raise (Eval_error "equality on non-integers"))
 ;;
 
-
 (* Mutual recursion: application runs bodies, bodies evaluate expressions,
    source expressions build closures. *)
 
@@ -230,7 +235,6 @@ and eval_atom (env : env) (a : atom) : value =
 
 and eval_aexp (env : env) (e : aexp) : value =
   match e with
-
   | ACexp c -> eval_cexp env c
   | ALet (Nonrec, name, rhs, rest) ->
     let v = eval_aexp env rhs in
@@ -276,15 +280,16 @@ let eval_src (prog : A.prog) : value =
   | first :: rest -> snd (List.fold_left eval_phrase ([], VInt 0) (first :: rest))
 ;;
 
-let eval_anf (prog : aprogram) : value =
-  (* Top-level names behave as globals: closure conversion treats them as
-     free-of-capture ([Closure.make_state] [top]) and lambda lifting may
-     hoist a lambda before the declaration it mentions.  So every [ADecl]
-     name gets its seed cell up front, and the declaration backpatches it.
+(** [eval_mid] evaluates a middle-end [aprogram].  Top-level names behave as
+    globals: closure conversion treats them as free-of-capture
+    ([Closure.make_state] [top]) and lambda lifting may hoist a lambda
+    before the declaration it mentions.  So every [ADecl] name gets its seed
+    cell up front, and the declaration backpatches it.
 
-     Assumption: top-level names are unique (declaration shadowing would
-     make the earlier value unreachable from closures; source programs of
-     [test_mid] declare each name once). *)
+    Assumption: top-level names are unique (declaration shadowing would make
+    the earlier value unreachable from closures; source programs of
+    [test_mid] declare each name once). *)
+let eval_mid (prog : aprogram) : value =
   let top_seeds =
     List.filter_map
       (function
@@ -292,7 +297,9 @@ let eval_anf (prog : aprogram) : value =
         | AExp _ -> None)
       prog
   in
-  let env0 : env = List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds in
+  let env0 : env =
+    List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds
+  in
   let backpatch (name : string) (v : value) : unit =
     match List.assoc_opt name top_seeds with
     | Some cell -> cell := Some v
@@ -312,65 +319,13 @@ let eval_anf (prog : aprogram) : value =
   | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))
 ;;
 
+(** Stage aliases: all three middle-end passes preserve the
+    {!Anf.aprogram} representation, so the same interpreter serves every
+    stage.  The names document which stage the caller is at; if a pass ever
+    changes the representation (e.g. explicit closure environments), only
+    the corresponding alias needs to be replaced with a dedicated
+    evaluator. *)
+let eval_anf = eval_mid
 
-(** [eval_cc] evaluates a [prog] that has undergone closure conversion.
-    After closure conversion, every [CFun] has been closed over its free
-    variables, and the program can be evaluated like ANF but with the
-    assurance that all [CFun] bodies are closed. *)
-
-let eval_cc (prog : aprogram) : value =
-  let top_seeds =
-    List.filter_map
-      (function
-        | ADecl (_, name, _) -> Some (name, ref None)
-        | AExp _ -> None)
-      prog
-  in
-  let env0 : env = List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds in
-  let backpatch (name : string) (v : value) : unit =
-    match List.assoc_opt name top_seeds with
-    | Some cell -> cell := Some v
-    | None -> ()
-  in
-  let rec eval_item (env, _) (item : item) : env * value =
-    match item with
-    | ADecl (flag, name, rhs) ->
-      let v = eval_aexp env (ALet (flag, name, rhs, ACexp (CAtom (AVar name)))) in
-      backpatch name v;
-      env, v
-    | AExp e -> env, eval_aexp env e
-  in
-  match prog with
-  | [] -> raise (Eval_error "empty program")
-  | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))
-
-(** [eval_ll] evaluates a [prog] that has undergone lambda lifting.
-    After lambda lifting, all free variables of [CFun] bodies are either
-    parameters or enclosing [ALet]-bound cells, so the program can be
-    evaluated with a simplified environment. *)
-
-let eval_ll (prog : aprogram) : value =
-  let top_seeds =
-    List.filter_map
-      (function
-        | ADecl (_, name, _) -> Some (name, ref None)
-        | AExp _ -> None)
-      prog
-  in
-  let env0 : env = List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds in
-  let backpatch (name : string) (v : value) : unit =
-    match List.assoc_opt name top_seeds with
-    | Some cell -> cell := Some v
-    | None -> ()
-  in
-  let rec eval_item (env, _) (item : item) : env * value =
-    match item with
-    | ADecl (flag, name, rhs) ->
-      let v = eval_aexp env (ALet (flag, name, rhs, ACexp (CAtom (AVar name)))) in
-      backpatch name v;
-      env, v
-    | AExp e -> env, eval_aexp env e
-  in
-  match prog with
-  | [] -> raise (Eval_error "empty program")
-  | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))
+let eval_cc = eval_mid
+let eval_ll = eval_mid
