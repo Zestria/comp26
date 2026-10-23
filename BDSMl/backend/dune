@@ -1,0 +1,6 @@
+(include_subdirs qualified)
+
+(library
+ (name BDSMl_backend)
+ (public_name BDSMl.backend)
+ (libraries BDSMl.frontend BDSMl.middleend))
