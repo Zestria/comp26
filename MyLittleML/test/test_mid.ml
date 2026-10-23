@@ -20,8 +20,8 @@
     QCheck generators follow the [Test_qc] conventions: identifier pools and
     explicitly bounded sizes. *)
 
-open Frontend
-open Middleend
+open Mylittleml.Frontend
+open Mylittleml.Middleend
 
 (* CPS programs (same as Test_qc) ------------------------------------------ *)
 
@@ -84,8 +84,8 @@ let check_semantics name src expected =
       check_invariants (name ^ " (" ^ kname ^ ")") (anf, cc, ll);
       let got_src = as_int (Eval.eval_src prog) in
       let got_anf = as_int (Eval.eval_anf anf) in
-      let got_cc = as_int (Eval.eval_anf cc) in
-      let got_ll = as_int (Eval.eval_anf ll) in
+      let got_cc = as_int (Eval.eval_cc cc) in
+      let got_ll = as_int (Eval.eval_ll ll) in
       if got_src <> expected || got_anf <> expected || got_cc <> expected || got_ll <> expected
       then
         failwith

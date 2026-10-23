@@ -311,3 +311,66 @@ let eval_anf (prog : aprogram) : value =
   | [] -> raise (Eval_error "empty program")
   | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))
 ;;
+
+
+(** [eval_cc] evaluates a [prog] that has undergone closure conversion.
+    After closure conversion, every [CFun] has been closed over its free
+    variables, and the program can be evaluated like ANF but with the
+    assurance that all [CFun] bodies are closed. *)
+
+let eval_cc (prog : aprogram) : value =
+  let top_seeds =
+    List.filter_map
+      (function
+        | ADecl (_, name, _) -> Some (name, ref None)
+        | AExp _ -> None)
+      prog
+  in
+  let env0 : env = List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds in
+  let backpatch (name : string) (v : value) : unit =
+    match List.assoc_opt name top_seeds with
+    | Some cell -> cell := Some v
+    | None -> ()
+  in
+  let rec eval_item (env, _) (item : item) : env * value =
+    match item with
+    | ADecl (flag, name, rhs) ->
+      let v = eval_aexp env (ALet (flag, name, rhs, ACexp (CAtom (AVar name)))) in
+      backpatch name v;
+      env, v
+    | AExp e -> env, eval_aexp env e
+  in
+  match prog with
+  | [] -> raise (Eval_error "empty program")
+  | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))
+
+(** [eval_ll] evaluates a [prog] that has undergone lambda lifting.
+    After lambda lifting, all free variables of [CFun] bodies are either
+    parameters or enclosing [ALet]-bound cells, so the program can be
+    evaluated with a simplified environment. *)
+
+let eval_ll (prog : aprogram) : value =
+  let top_seeds =
+    List.filter_map
+      (function
+        | ADecl (_, name, _) -> Some (name, ref None)
+        | AExp _ -> None)
+      prog
+  in
+  let env0 : env = List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds in
+  let backpatch (name : string) (v : value) : unit =
+    match List.assoc_opt name top_seeds with
+    | Some cell -> cell := Some v
+    | None -> ()
+  in
+  let rec eval_item (env, _) (item : item) : env * value =
+    match item with
+    | ADecl (flag, name, rhs) ->
+      let v = eval_aexp env (ALet (flag, name, rhs, ACexp (CAtom (AVar name)))) in
+      backpatch name v;
+      env, v
+    | AExp e -> env, eval_aexp env e
+  in
+  match prog with
+  | [] -> raise (Eval_error "empty program")
+  | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))

@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-module A = Frontend.Ast
+module A = Ast
 
 type rec_flag =
   | Rec

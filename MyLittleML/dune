@@ -9,6 +9,6 @@
  (package MyLittleML)
  (name compiler)
  (modules compiler)
- (libraries LL frontend middleend)
+ (libraries mylittleml_LL mylittleml)
  (instrumentation
   (backend bisect_ppx_ng)))

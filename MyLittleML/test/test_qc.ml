@@ -21,7 +21,7 @@
     precedence ladder and a few error cases.  Sticky-mode demos live in a
     separate commit ({!Parse.opts}.{!Parse.sticky}). *)
 
-open Frontend
+open Mylittleml.Frontend
 
 (* Generators ---------------------------------------------------------- *)
 

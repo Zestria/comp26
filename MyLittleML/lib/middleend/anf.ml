@@ -14,7 +14,7 @@
     nodes there (see {!is_cexp_rhs}), while later passes (closure conversion)
     reuse the same type with richer right-hand sides. *)
 
-module A = Frontend.Ast
+module A = Ast
 open Names
 module StringSet = Names.StringSet
 
@@ -62,7 +62,9 @@ let rec is_cexp_rhs : aexp -> bool = function
 (** All identifiers occurring in a source program, used to seed fresh-name
     generation so that [anf_t<i>] temporaries never collide with user names. *)
 let collect_names (prog : A.prog) : Names.StringSet.t =
-  let add_vars acc params = List.fold_left (fun s v -> Names.StringSet.add v s) acc params in
+  let add_vars acc params =
+    List.fold_left (fun s v -> Names.StringSet.add v s) acc params
+  in
   let rec expr acc = function
     | A.Int _ | A.Bool _ -> acc
     | A.Var v -> Names.StringSet.add v acc
@@ -86,9 +88,7 @@ let collect_names (prog : A.prog) : Names.StringSet.t =
     shared with closure conversion and lambda lifting through {!Names}. *)
 type fresh = Names.t
 
-let rec_flag_of_bool (rec_ : bool) : rec_flag =
-  if rec_ then Rec else Nonrec
-;;
+let rec_flag_of_bool (rec_ : bool) : rec_flag = if rec_ then Rec else Nonrec
 
 (** Smart constructor for [ALet]: [let x = v in x] is just [v].  Only non-recursive
     bindings fuse: under [Rec] the name may occur in its own right-hand
@@ -109,6 +109,7 @@ let bind_temp (st : fresh) (c : cexp) (k : atom -> aexp) : aexp =
 let rec norm_named (st : fresh) (name : string) (rhs : A.expr) (cont : aexp) : aexp =
   let rhs' = norm_tail st rhs in
   mk_alet (rec_flag_of_bool false) name rhs' cont
+
 and norm (st : fresh) (e : A.expr) (k : atom -> aexp) : aexp =
   match e with
   | A.Int n -> k (AInt n)
@@ -117,7 +118,8 @@ and norm (st : fresh) (e : A.expr) (k : atom -> aexp) : aexp =
   | A.Neg e -> norm st e (fun a -> bind_temp st (CNeg a) k)
   | A.Binop (op, l, r) ->
     norm st l (fun al -> norm st r (fun ar -> bind_temp st (CBinop (op, al, ar)) k))
-  | A.App (f, x) -> norm st f (fun af -> norm st x (fun ax -> bind_temp st (CApp (af, ax)) k))
+  | A.App (f, x) ->
+    norm st f (fun af -> norm st x (fun ax -> bind_temp st (CApp (af, ax)) k))
   | A.If (c, t, f) ->
     norm st c (fun ac -> bind_temp st (CIf (ac, norm_tail st t, norm_tail st f)) k)
   | A.Fun (params, body) -> bind_temp st (CFun (params, norm_tail st body)) k
@@ -129,18 +131,29 @@ and norm (st : fresh) (e : A.expr) (k : atom -> aexp) : aexp =
      | [], Some body -> norm_named st b.A.name b.A.body (norm_tail st body)
      | [], None -> norm_named st b.A.name b.A.body (ACexp (CAtom (AVar b.A.name)))
      | _ :: _, Some body ->
-       mk_alet flag b.A.name (ACexp (CFun (b.A.params, norm_tail st b.A.body))) (norm_tail st body)
+       mk_alet
+         flag
+         b.A.name
+         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
+         (norm_tail st body)
      | _ :: _, None ->
-       mk_alet flag b.A.name (ACexp (CFun (b.A.params, norm_tail st b.A.body))) (ACexp (CAtom (AVar b.A.name))))
+       mk_alet
+         flag
+         b.A.name
+         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
+         (ACexp (CAtom (AVar b.A.name))))
+
 and norm_tail (st : fresh) (e : A.expr) : aexp =
   match e with
   | A.Int n -> ACexp (CAtom (AInt n))
   | A.Bool b -> ACexp (CAtom (ABool b))
   | A.Var v -> ACexp (CAtom (AVar v))
   | A.Neg e -> norm st e (fun a -> ACexp (CNeg a))
-  | A.Binop (op, l, r) -> norm st l (fun al -> norm st r (fun ar -> ACexp (CBinop (op, al, ar))))
+  | A.Binop (op, l, r) ->
+    norm st l (fun al -> norm st r (fun ar -> ACexp (CBinop (op, al, ar))))
   | A.App (f, x) -> norm st f (fun af -> norm st x (fun ax -> ACexp (CApp (af, ax))))
-  | A.If (c, t, f) -> norm st c (fun ac -> ACexp (CIf (ac, norm_tail st t, norm_tail st f)))
+  | A.If (c, t, f) ->
+    norm st c (fun ac -> ACexp (CIf (ac, norm_tail st t, norm_tail st f)))
   | A.Fun ([], body) -> norm_tail st body
   | A.Fun (params, body) -> ACexp (CFun (params, norm_tail st body))
   | A.Let (b, Some (A.Var v)) when (not b.A.rec_) && b.A.params = [] && v = b.A.name ->
@@ -151,9 +164,17 @@ and norm_tail (st : fresh) (e : A.expr) : aexp =
      | [], Some body -> norm_named st b.A.name b.A.body (norm_tail st body)
      | [], None -> norm_named st b.A.name b.A.body (ACexp (CAtom (AVar b.A.name)))
      | _ :: _, Some body ->
-       mk_alet flag b.A.name (ACexp (CFun (b.A.params, norm_tail st b.A.body))) (norm_tail st body)
+       mk_alet
+         flag
+         b.A.name
+         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
+         (norm_tail st body)
      | _ :: _, None ->
-       mk_alet flag b.A.name (ACexp (CFun (b.A.params, norm_tail st b.A.body))) (ACexp (CAtom (AVar b.A.name))))
+       mk_alet
+         flag
+         b.A.name
+         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
+         (ACexp (CAtom (AVar b.A.name))))
 ;;
 
 (** Convert a whole source program: declaration phrases become [ADecl] items,
@@ -207,17 +228,31 @@ and pp_cexp ppf = function
 and pp_aexp ppf = function
   | ACexp c -> pp_cexp ppf c
   | ALet (flag, name, rhs, rest) ->
-    Format.fprintf ppf "let %s%s = %a in %a"
-      (if flag = Rec then "rec " else "") name pp_aexp rhs pp_aexp rest
+    Format.fprintf
+      ppf
+      "let %s%s = %a in %a"
+      (if flag = Rec then "rec " else "")
+      name
+      pp_aexp
+      rhs
+      pp_aexp
+      rest
+;;
 
 let pp_item ppf = function
   | ADecl (flag, name, rhs) ->
-    Format.fprintf ppf "let %s%s = %a"
-      (if flag = Rec then "rec " else "") name pp_aexp rhs
+    Format.fprintf
+      ppf
+      "let %s%s = %a"
+      (if flag = Rec then "rec " else "")
+      name
+      pp_aexp
+      rhs
   | AExp e -> pp_aexp ppf e
+;;
 
 let pp_aprogram ppf prog =
   List.iter (fun item -> Format.fprintf ppf "%a;;\n" pp_item item) prog
+;;
 
 let to_string = Format.asprintf "%a" pp_aprogram
-;;

@@ -23,7 +23,7 @@ type stop_after =
   | Lambda
 
 type opts =
-  { parser_kind : Frontend.Parse.parser_kind
+  { parser_kind : Mylittleml.Frontend.Parse.parser_kind
   ; sticky : bool
   ; stop_after : stop_after
   ; output : string option
@@ -58,8 +58,8 @@ let fail_usage msg =
 
 let parse_parser_kind s =
   match s with
-  | "topdown" -> Frontend.Parse.Topdown
-  | "menhir" | "bottomup" -> Frontend.Parse.Bottomup
+  | "topdown" -> Mylittleml.Frontend.Parse.Topdown
+  | "menhir" | "bottomup" -> Mylittleml.Frontend.Parse.Bottomup
   | _ -> fail_usage ("unknown parser: " ^ s ^ " (expected 'topdown' or 'menhir')")
 ;;
 
@@ -72,7 +72,7 @@ let parse_stop_after = function
 ;;
 
 let parse_args argv =
-  let parser_kind = ref Frontend.Parse.Topdown in
+  let parser_kind = ref Mylittleml.Frontend.Parse.Topdown in
   let sticky = ref false in
   let stop_after = ref Lambda in
   let output = ref None in
@@ -130,9 +130,9 @@ let read_input = function
 ;;
 
 let run opts source =
-  let popts = { Frontend.Parse.sticky = opts.sticky } in
+  let popts = { Mylittleml.Frontend.Parse.sticky = opts.sticky } in
   let prog =
-    match Frontend.Parse.parse opts.parser_kind popts source with
+    match Mylittleml.Frontend.Parse.parse opts.parser_kind popts source with
     | Ok prog -> prog
     | Error msg ->
       prerr_endline ("compiler: " ^ msg);
@@ -140,14 +140,14 @@ let run opts source =
   in
   let output =
     match opts.stop_after with
-    | Frontend -> Frontend.Pp.to_string prog
-    | Anf -> Middleend.Anf.to_string (Middleend.Anf.anf_prog prog)
+    | Frontend -> Mylittleml.Frontend.Pp.to_string prog
+    | Anf -> Mylittleml.Middleend.Anf.to_string (Mylittleml.Middleend.Anf.anf_prog prog)
     | Closure ->
-      Middleend.Anf.to_string (Middleend.Closure.convert_prog (Middleend.Anf.anf_prog prog))
+      Mylittleml.Middleend.Anf.to_string (Mylittleml.Middleend.Closure.convert_prog (Mylittleml.Middleend.Anf.anf_prog prog))
     | Lambda ->
-      Middleend.Anf.to_string
-        (Middleend.Lambda_lift.lift_prog
-           (Middleend.Closure.convert_prog (Middleend.Anf.anf_prog prog)))
+      Mylittleml.Middleend.Anf.to_string
+        (Mylittleml.Middleend.Lambda_lift.lift_prog
+           (Mylittleml.Middleend.Closure.convert_prog (Mylittleml.Middleend.Anf.anf_prog prog)))
   in
   (match opts.output with
    | None | Some "-" -> print_endline output

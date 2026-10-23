@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-module A = Frontend.Ast
+module A = Ast
 open Anf
 
 exception Eval_error of string
@@ -30,3 +30,5 @@ and env = (string * value) list
 
 val eval_src : Frontend.Ast.prog -> value
 val eval_anf : aprogram -> value
+val eval_cc : aprogram -> value
+val eval_ll : aprogram -> value

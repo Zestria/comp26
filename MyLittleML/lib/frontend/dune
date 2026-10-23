@@ -1,14 +1,2 @@
-(library
- (name frontend)
- (public_name MyLittleML.frontend)
- (modules ast pp parser lexer parser_topdown parse)
- (libraries angstrom)
- (preprocess
-  (pps ppx_deriving.show))
- (instrumentation
-  (backend bisect_ppx_ng)))
-
 (ocamllex lexer)
-
-(menhir
- (modules parser))
+(menhir(modules parser))

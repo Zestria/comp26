@@ -2,7 +2,7 @@
  (name test_qc)
  (package MyLittleML)
  (modules test_qc)
- (libraries qcheck frontend)
+ (libraries qcheck mylittleml)
  (preprocess
   (pps ppx_deriving_qcheck ppx_deriving.show)))
 
@@ -10,17 +10,19 @@
  (name test_mid)
  (package MyLittleML)
  (modules test_mid)
- (libraries qcheck frontend middleend))
+ (libraries qcheck mylittleml))
 
 (executable
  (name bench)
  (modules bench)
- (libraries frontend))
+ (libraries mylittleml))
 
 (cram
  (package MyLittleML)
+ (applies_to bench)
  (deps ./bench.exe))
 
 (cram
  (package MyLittleML)
+ (applies_to pipeline)
  (deps ../compiler.exe))

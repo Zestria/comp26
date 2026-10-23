@@ -1,9 +1,0 @@
-(library
- (name middleend)
- (public_name MyLittleML.middleend)
- (modules anf names closure lambda_lift)
- (libraries frontend)
- (preprocess
-  (pps ppx_deriving.show))
- (instrumentation
-  (backend bisect_ppx_ng)))
