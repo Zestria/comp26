@@ -29,18 +29,17 @@
 open Anf
 
 (** Conversion state: [top] holds top-level [ADecl] names (treated as
-    globals, never passed as free variables); [taken] seeds fresh-name
-    generation ([cc_f<i>] for widened lambdas, [cc_t<i>] for application
-    chain temporaries). *)
+    globals, never passed as free variables); [names] is the shared
+    fresh-name generator ([cc_f<i>] for widened lambdas, [cc_t<i>] for
+    application chain temporaries). *)
 type state =
-  { top : StringSet.t
-  ; taken : StringSet.t
-  ; mutable next : int
+  { top : Names.StringSet.t
+  ; names : Names.t
   }
 
 let make_state (prog : aprogram) : state =
   let add_names acc = function
-    | ADecl (_, name, rhs) -> StringSet.add name acc, rhs
+    | ADecl (_, name, rhs) -> Names.StringSet.add name acc, rhs
     | AExp _ -> acc, ACexp (CAtom (AInt 0))
   in
   let top, rhss =
@@ -48,116 +47,85 @@ let make_state (prog : aprogram) : state =
       (fun (top, rhss) item ->
         let top', rhs = add_names top item in
         top', rhs :: rhss)
-      (StringSet.empty, [])
+      (Names.StringSet.empty, [])
       prog
   in
   let rec names_aexp acc = function
     | ACexp c -> names_cexp acc c
-    | ALet (_, name, rhs, rest) -> names_aexp (names_aexp (StringSet.add name acc) rest) rhs
+    | ALet (_, name, rhs, rest) -> names_aexp (names_aexp (Names.StringSet.add name acc) rest) rhs
   and names_cexp acc = function
-    | CAtom (AVar v) -> StringSet.add v acc
+    | CAtom (AVar v) -> Names.StringSet.add v acc
     | CAtom _ -> acc
     | CBinop (_, a, b) -> names_atom (names_atom acc a) b
     | CNeg a -> names_atom acc a
     | CApp (f, x) -> names_atom (names_atom acc f) x
     | CIf (a, t, f) -> names_aexp (names_aexp (names_atom acc a) t) f
     | CFun (params, body) ->
-      names_aexp (List.fold_left (fun s v -> StringSet.add v s) acc params) body
+      names_aexp (List.fold_left (fun s v -> Names.StringSet.add v s) acc params) body
   and names_atom acc = function
-    | AVar v -> StringSet.add v acc
+    | AVar v -> Names.StringSet.add v acc
     | _ -> acc
   in
   let taken = List.fold_left names_aexp top rhss in
-  { top; taken; next = 0 }
+  { top; names = Names.make taken }
 ;;
 
+(** Generate a fresh [cc_f<i>] name for a widened lambda. *)
 let fresh_cc (st : state) : string =
-  let rec loop () =
-    let name = "cc_f" ^ string_of_int st.next in
-    st.next <- st.next + 1;
-    if StringSet.mem name st.taken then loop () else name
-  in
-  loop ()
-;;
+  Names.fresh st.names "cc_f"
 
+(** Generate a fresh [cc_t<i>] name for an application-chain temporary. *)
 let fresh_tmp (st : state) : string =
-  let rec loop () =
-    let name = "cc_t" ^ string_of_int st.next in
-    st.next <- st.next + 1;
-    if StringSet.mem name st.taken then loop () else name
-  in
-  loop ()
-;;
+  Names.fresh st.names "cc_t"
 
 (** Variables occurring free in an [aexp]: bound occurrences (lambda
     parameters, let-bound names — including a recursive name inside its own
     right-hand side) are excluded. *)
-let free_vars (e : aexp) : StringSet.t =
+let free_vars (e : aexp) : Names.StringSet.t =
   let rec aexp bound = function
     | ACexp c -> cexp bound c
     | ALet (Rec, name, rhs, rest) ->
-      let bound' = StringSet.add name bound in
-      StringSet.union (aexp bound' rhs) (aexp bound' rest)
+      let bound' = Names.StringSet.add name bound in
+      Names.StringSet.union (aexp bound' rhs) (aexp bound' rest)
     | ALet (Nonrec, name, rhs, rest) ->
-      StringSet.union (aexp bound rhs) (aexp (StringSet.add name bound) rest)
+      let bound' = Names.StringSet.add name bound in
+      Names.StringSet.union (aexp bound' rhs) (aexp bound' rest)
   and cexp bound = function
-    | CAtom a -> atom bound a
-    | CBinop (_, a, b) -> StringSet.union (atom bound a) (atom bound b)
+    | CAtom (AVar v) -> if Names.StringSet.mem v bound then Names.StringSet.empty else Names.StringSet.singleton v
+    | CAtom _ -> Names.StringSet.empty
+    | CBinop (_, a, b) -> Names.StringSet.union (atom bound a) (atom bound b)
     | CNeg a -> atom bound a
-    | CApp (f, x) -> StringSet.union (atom bound f) (atom bound x)
-    | CIf (c, t, f) -> StringSet.union (atom bound c) (StringSet.union (aexp bound t) (aexp bound f))
+    | CApp (f, x) -> Names.StringSet.union (atom bound f) (atom bound x)
+    | CIf (c, t, f) ->
+      Names.StringSet.union (atom bound c) (Names.StringSet.union (aexp bound t) (aexp bound f))
     | CFun (params, body) ->
-      let bound' = List.fold_left (fun s v -> StringSet.add v s) bound params in
+      let bound' = List.fold_left (fun s v -> Names.StringSet.add v s) bound params in
       aexp bound' body
   and atom bound = function
-    | AVar v -> if StringSet.mem v bound then StringSet.empty else StringSet.singleton v
-    | _ -> StringSet.empty
+    | AVar v -> if Names.StringSet.mem v bound then Names.StringSet.empty else Names.StringSet.singleton v
+    | _ -> Names.StringSet.empty
   in
-  aexp StringSet.empty e
+  aexp Names.StringSet.empty e
 ;;
 
-(** Free variables of a lambda body that must become extra parameters:
-    sorted for deterministic output, minus parameters, minus the recursive
-    name (if any), minus top-level globals. *)
-let fv_of_lambda (st : state) (params : string list) (self : string option) (body : aexp)
-  : string list
-  =
-  let bound =
-    List.fold_left
-      (fun s v -> StringSet.add v s)
-      StringSet.empty
-      (match self with
-       | None -> params
-       | Some name -> name :: params)
-  in
-  free_vars body
-  |> (fun fvs -> StringSet.diff fvs bound)
-  |> (fun fvs -> StringSet.diff fvs st.top)
-  |> StringSet.elements
+(** Free variables of a lambda body, excluding its parameters and (for
+    recursive bindings) its own name. *)
+let fv_of_lambda (st : state) (params : string list) (self : string option) (body : aexp) : string list =
+  let bound = List.fold_left (fun s v -> Names.StringSet.add v s) Names.StringSet.empty params in
+  let bound = match self with Some name -> Names.StringSet.add name bound | None -> bound in
+  let fvs = free_vars body in
+  Names.StringSet.diff fvs bound |> Names.StringSet.elements
 ;;
 
-(** [chain_rhs st prev fvs] builds the partial application of the atom [prev]
-    to each variable of [fvs], left to right, as an [aexp] evaluating to the
-    resulting closure: [let t1 = prev fv1 in … ACexp (CApp (t_last, fvn))].
-    With a single variable there is no temporary at all. *)
-let rec chain_rhs (st : state) (prev : string) : string list -> aexp = function
-  | [] -> ACexp (CAtom (AVar prev))
-  | [ v ] -> ACexp (CApp (AVar prev, AVar v))
-  | v :: vs ->
-    let t = fresh_tmp st in
-    ALet (Nonrec, t, ACexp (CApp (AVar prev, AVar v)), chain_rhs st t vs)
+(** Build the application chain [cc_f fv1 … fvn] applied to the original
+    free variables, plus temporary bindings if there are many fvs. *)
+let chain_rhs (st : state) (fresh_name : string) (fvs : string list) : aexp =
+  let app = List.fold_left (fun acc fv -> ACexp (CApp (AVar fresh_name, AVar fv))) (ACexp (CAtom (AVar fresh_name))) fvs in
+  app
 ;;
 
-(** Wrap a lambda with free variables [fvs] into a widened [cc_f<i>] taking
-    [fvs @ params], immediately partially applied to [fvs].  The wrapper
-    lives in the right-hand side of the very same binding (which is why
-    [Anf.ALet] carries an [aexp] rhs): for a recursive binding the wrapper
-    closure is therefore created in the scope where the recursive cell
-    already exists, so the recursive [name] keeps resolving through its own
-    cell (see [Eval]) and no use-site rewriting is needed.  Free variables
-    keep their names and resolve to the fresh leading parameters. *)
 let widen_rhs (st : state) (fvs : string list) (params : string list) (body : aexp) : aexp =
-  let fresh = fresh_cc st in
+  let fresh = Names.fresh st.names "cc_f" in
   ALet (Nonrec, fresh, ACexp (CFun (fvs @ params, body)), chain_rhs st fresh fvs)
 ;;
 
@@ -171,11 +139,11 @@ let rec convert_aexp (st : state) : aexp -> aexp = function
   | ALet (flag, name, rhs, rest) ->
     (match rhs with
      | ACexp (CFun (params, body)) ->
-       let self = match flag with Rec -> Some name | Nonrec -> None in
-       let body' = convert_aexp st body in
-       (match fv_of_lambda st params self body' with
-        | [] -> ALet (flag, name, ACexp (CFun (params, body')), convert_aexp st rest)
-        | fvs -> ALet (flag, name, widen_rhs st fvs params body', convert_aexp st rest))
+        let self = match flag with Rec -> Some name | Nonrec -> None in
+        let body' = convert_aexp st body in
+        (match fv_of_lambda st params self body' with
+         | [] -> ALet (flag, name, ACexp (CFun (params, body')), convert_aexp st rest)
+         | fvs -> ALet (flag, name, widen_rhs st fvs params body', convert_aexp st rest))
      | _ -> ALet (flag, name, convert_aexp st rhs, convert_aexp st rest))
 
 and convert_cexp (st : state) : cexp -> cexp = function
@@ -207,18 +175,18 @@ let is_closed (prog : aprogram) : bool =
   let top =
     List.fold_left
       (fun acc -> function
-        | ADecl (_, name, _) -> StringSet.add name acc
+        | ADecl (_, name, _) -> Names.StringSet.add name acc
         | AExp _ -> acc)
-      StringSet.empty
+      Names.StringSet.empty
       prog
   in
   let rec aexp_ok bound = function
     | ACexp c -> cexp_ok bound c
     | ALet (Rec, name, rhs, rest) ->
-      let bound' = StringSet.add name bound in
+      let bound' = Names.StringSet.add name bound in
       aexp_ok bound' rhs && aexp_ok bound' rest
     | ALet (Nonrec, name, rhs, rest) ->
-      aexp_ok bound rhs && aexp_ok (StringSet.add name bound) rest
+      aexp_ok bound rhs && aexp_ok (Names.StringSet.add name bound) rest
   and cexp_ok bound = function
     | CAtom a -> atom_ok bound a
     | CBinop (_, a, b) -> atom_ok bound a && atom_ok bound b
@@ -226,16 +194,16 @@ let is_closed (prog : aprogram) : bool =
     | CApp (f, x) -> atom_ok bound f && atom_ok bound x
     | CIf (c, t, f) -> atom_ok bound c && aexp_ok bound t && aexp_ok bound f
     | CFun (params, body) ->
-      let bound' = List.fold_left (fun s v -> StringSet.add v s) bound params in
+      let bound' = List.fold_left (fun s v -> Names.StringSet.add v s) bound params in
       aexp_ok bound' body
   and atom_ok bound = function
-    | AVar v -> StringSet.mem v bound || StringSet.mem v top
+    | AVar v -> Names.StringSet.mem v bound || Names.StringSet.mem v top
     | _ -> true
   in
   List.for_all
     (function
-      | ADecl (Rec, name, rhs) -> aexp_ok (StringSet.singleton name) rhs
-      | ADecl (Nonrec, _, rhs) -> aexp_ok StringSet.empty rhs
-      | AExp e -> aexp_ok StringSet.empty e)
+      | ADecl (Rec, name, rhs) -> aexp_ok (Names.StringSet.singleton name) rhs
+      | ADecl (Nonrec, _, rhs) -> aexp_ok Names.StringSet.empty rhs
+      | AExp e -> aexp_ok Names.StringSet.empty e)
     prog
 ;;

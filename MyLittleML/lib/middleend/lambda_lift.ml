@@ -33,47 +33,41 @@
     [ALet (Rec, …)]. *)
 open Anf
 
-(** Lifting state: [taken] seeds fresh-name generation ([ll_f<i>]);
+(** Lifting state: [names] is the shared fresh-name generator ([ll_f<i>]);
     [lifted] accumulates hoisted declarations in reverse order. *)
 type state =
-  { taken : StringSet.t
-  ; mutable next : int
+  { names : Names.t
   ; mutable lifted : item list
   }
 
 let make_state (prog : aprogram) : state =
   let rec names_aexp acc = function
     | ACexp c -> names_cexp acc c
-    | ALet (_, name, rhs, rest) -> names_aexp (names_aexp (StringSet.add name acc) rest) rhs
+    | ALet (_, name, rhs, rest) -> names_aexp (names_aexp (Names.StringSet.add name acc) rest) rhs
   and names_cexp acc = function
-    | CAtom (AVar v) -> StringSet.add v acc
+    | CAtom (AVar v) -> Names.StringSet.add v acc
     | CAtom _ -> acc
     | CBinop (_, a, b) -> names_atom (names_atom acc a) b
     | CNeg a -> names_atom acc a
     | CApp (f, x) -> names_atom (names_atom acc f) x
     | CIf (a, t, f) -> names_aexp (names_aexp (names_atom acc a) t) f
     | CFun (params, body) ->
-      names_aexp (List.fold_left (fun s v -> StringSet.add v s) acc params) body
+      names_aexp (List.fold_left (fun s v -> Names.StringSet.add v s) acc params) body
   and names_atom acc = function
-    | AVar v -> StringSet.add v acc
+    | AVar v -> Names.StringSet.add v acc
     | _ -> acc
   in
   let names_item acc = function
-    | ADecl (_, name, rhs) -> names_aexp (StringSet.add name acc) rhs
+    | ADecl (_, name, rhs) -> names_aexp (Names.StringSet.add name acc) rhs
     | AExp e -> names_aexp acc e
   in
-  let taken = List.fold_left names_item StringSet.empty prog in
-  { taken; next = 0; lifted = [] }
+  let taken = List.fold_left names_item Names.StringSet.empty prog in
+  { names = Names.make taken; lifted = [] }
 ;;
 
+(** Generate a fresh [ll_f<i>] name for a hoisted lambda. *)
 let fresh_ll (st : state) : string =
-  let rec loop () =
-    let name = "ll_f" ^ string_of_int st.next in
-    st.next <- st.next + 1;
-    if StringSet.mem name st.taken then loop () else name
-  in
-  loop ()
-;;
+  Names.fresh st.names "ll_f"
 
 (** Hoist one lambda: remember it as a top-level declaration, return the
     atom that replaces the original occurrence. *)
@@ -82,7 +76,6 @@ let hoist (st : state) (params : string list) (body : aexp) : atom =
   st.lifted <- ADecl (Nonrec, name, ACexp (CFun (params, body))) :: st.lifted;
   AVar name
 ;;
-
 
 let rec lift_aexp (st : state) : aexp -> aexp = function
   | ACexp (CFun (params, body)) ->
