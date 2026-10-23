@@ -1,0 +1,7 @@
+(library
+ (name metabannedinrflanguage_backend)
+ (public_name MetaBannedInRfLanguage.backend)
+ (wrapped false)
+ (libraries metabannedinrflanguage_middleend)
+ (preprocess
+  (pps ppx_deriving.show)))

@@ -3,4 +3,4 @@
  (package MetaBannedInRfLanguage)
  (name compiler)
  (modules compiler cli)
- (libraries metabannedinrflanguage_frontend metabannedinrflanguage_middleend))
+ (libraries metabannedinrflanguage_frontend metabannedinrflanguage_middleend metabannedinrflanguage_backend))
