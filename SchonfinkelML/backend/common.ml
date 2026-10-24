@@ -85,7 +85,7 @@ type instr =
   | BGE of reg * reg * string
   | BLTU of reg * reg * string
   | BGEU of reg * reg * string
-  (* We are going to assume that M extension is on target machine   *)
+  (* We are going to assume that M extension is on target machine *)
   | MUL of reg * reg * reg
   | MULH of reg * reg * reg
   | MULHSU of reg * reg * reg
