@@ -7,96 +7,96 @@
 [@@@ocaml.text "/*"]
 
 type reg =
-  | Zero
-  | RA
-  | SP
-  | A0
-  | A1
-  | A2
-  | A3
-  | A4
-  | A5
-  | A6
-  | A7
-  | T0
-  | T1
-  | T2
-  | T3
-  | T4
-  | T5
-  | T6
-  | S0
-  | S1
-  | S2
-  | S3
-  | S4
-  | S5
-  | S6
-  | S7
-  | S8
-  | S9
-  | S10
-  | S11
+  | Zero (** zero *)
+  | RA (** ra *)
+  | SP (** sp *)
+  | A0 (** a0 *)
+  | A1 (** a1 *)
+  | A2 (** a2 *)
+  | A3 (** a3 *)
+  | A4 (** a4 *)
+  | A5 (** a5 *)
+  | A6 (** a6 *)
+  | A7 (** a7 *)
+  | T0 (** t0 *)
+  | T1 (** t1 *)
+  | T2 (** t2 *)
+  | T3 (** t3 *)
+  | T4 (** t4 *)
+  | T5 (** t5 *)
+  | T6 (** t6 *)
+  | S0 (** s0 *)
+  | S1 (** s1 *)
+  | S2 (** s2 *)
+  | S3 (** s3 *)
+  | S4 (** s4 *)
+  | S5 (** s5 *)
+  | S6 (** s6 *)
+  | S7 (** s7 *)
+  | S8 (** s8 *)
+  | S9 (** s9 *)
+  | S10 (** s10 *)
+  | S11 (** s11 *)
 
 type instr =
-  | LB of reg * reg * int
-  | LH of reg * reg * int
-  | LW of reg * reg * int
-  | LD of reg * reg * int
-  | LBU of reg * reg * int
-  | LHU of reg * reg * int
-  | LWU of reg * reg * int
-  | SB of reg * reg * int
-  | SH of reg * reg * int
-  | SW of reg * reg * int
-  | SD of reg * reg * int
-  | ADDI of reg * reg * int
-  | SLTI of reg * reg * int
-  | SLTIU of reg * reg * int
-  | XORI of reg * reg * int
-  | ORI of reg * reg * int
-  | ANDI of reg * reg * int
-  | SLLI of reg * reg * int
-  | SRLI of reg * reg * int
-  | SRAI of reg * reg * int
-  | ADD of reg * reg * reg
-  | SUB of reg * reg * reg
-  | SLL of reg * reg * reg
-  | SLT of reg * reg * reg
-  | SLTU of reg * reg * reg
-  | XOR of reg * reg * reg
-  | SRL of reg * reg * reg
-  | SRA of reg * reg * reg
-  | OR of reg * reg * reg
-  | AND of reg * reg * reg
-  | LUI of reg * int
-  | AUIPC of reg * int
-  | JAL of reg * string
-  | JALR of reg * reg * int
-  | BEQ of reg * reg * string
-  | BNE of reg * reg * string
-  | BLT of reg * reg * string
-  | BGE of reg * reg * string
-  | BLTU of reg * reg * string
-  | BGEU of reg * reg * string
-  | MUL of reg * reg * reg
-  | MULH of reg * reg * reg
-  | MULHSU of reg * reg * reg
-  | MULHU of reg * reg * reg
-  | DIV of reg * reg * reg
-  | DIVU of reg * reg * reg
-  | REM of reg * reg * reg
-  | REMU of reg * reg * reg
-  | ADDIW of reg * reg * int
-  | ADDW of reg * reg * reg
-  | SUBW of reg * reg * reg
-  | SLLW of reg * reg * reg
-  | SRLW of reg * reg * reg
-  | SRAW of reg * reg * reg
-  | MV of reg * reg
-  | LI of reg * int
-  | NOP
-  | RET
+  | LB of reg * reg * int (** lb *)
+  | LH of reg * reg * int (** lh *)
+  | LW of reg * reg * int (** lw *)
+  | LD of reg * reg * int (** ld *)
+  | LBU of reg * reg * int (** lbu *)
+  | LHU of reg * reg * int (** lhu *)
+  | LWU of reg * reg * int (** lwu *)
+  | SB of reg * reg * int (** sb *)
+  | SH of reg * reg * int (** sh *)
+  | SW of reg * reg * int (** sw *)
+  | SD of reg * reg * int (** sd *)
+  | ADDI of reg * reg * int (** addi *)
+  | SLTI of reg * reg * int (** slti *)
+  | SLTIU of reg * reg * int (** sltiu *)
+  | XORI of reg * reg * int (** xori *)
+  | ORI of reg * reg * int (** ori *)
+  | ANDI of reg * reg * int (** andi *)
+  | SLLI of reg * reg * int (** slli *)
+  | SRLI of reg * reg * int (** srli *)
+  | SRAI of reg * reg * int (** srai *)
+  | ADD of reg * reg * reg (** add *)
+  | SUB of reg * reg * reg (** sub *)
+  | SLL of reg * reg * reg (** sll *)
+  | SLT of reg * reg * reg (** slt *)
+  | SLTU of reg * reg * reg (** sltu *)
+  | XOR of reg * reg * reg (** xor *)
+  | SRL of reg * reg * reg (** srl *)
+  | SRA of reg * reg * reg (** sra *)
+  | OR of reg * reg * reg (** or *)
+  | AND of reg * reg * reg (** and *)
+  | LUI of reg * int (** lui *)
+  | AUIPC of reg * int (** auipc *)
+  | JAL of reg * string (** jal *)
+  | JALR of reg * reg * int (** jalr *)
+  | BEQ of reg * reg * string (** beq *)
+  | BNE of reg * reg * string (** bne *)
+  | BLT of reg * reg * string (** blt *)
+  | BGE of reg * reg * string (** bge *)
+  | BLTU of reg * reg * string (** bltu *)
+  | BGEU of reg * reg * string (** bgeu *)
+  | MUL of reg * reg * reg (** mul *)
+  | MULH of reg * reg * reg (** mulh *)
+  | MULHSU of reg * reg * reg (** mulhsu *)
+  | MULHU of reg * reg * reg (** mulhu *)
+  | DIV of reg * reg * reg (** div *)
+  | DIVU of reg * reg * reg (** divu *)
+  | REM of reg * reg * reg (** rem *)
+  | REMU of reg * reg * reg (** remu *)
+  | ADDIW of reg * reg * int (** addiw *)
+  | ADDW of reg * reg * reg (** addw *)
+  | SUBW of reg * reg * reg (** subw *)
+  | SLLW of reg * reg * reg (** sllw *)
+  | SRLW of reg * reg * reg (** srlw *)
+  | SRAW of reg * reg * reg (** sraw *)
+  | MV of reg * reg (** mv *)
+  | LI of reg * int (** li *)
+  | NOP (** nop *)
+  | RET (** ret *)
 
 type error =
   | Invalid_immediate of
@@ -104,8 +104,8 @@ type error =
       ; value : int
       ; min : int
       ; max : int
-      }
-  | Invalid_label of string
+      } (** Immediate is not in range *)
+  | Invalid_label of string (** Label should not be empty *)
 
 type 'a checked = ('a, error) result
 
