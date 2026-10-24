@@ -1,6 +1,2 @@
-(executable
- (public_name compiler)
- (package MetaBannedInRfLanguage)
- (name compiler)
- (modules compiler cli)
- (libraries metabannedinrflanguage_frontend))
+(rule
+ (copy driver/compiler.exe compiler.exe))

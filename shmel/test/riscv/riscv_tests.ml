@@ -98,12 +98,12 @@ let run_on_qemu functions =
   write_file "tests.s" (Format.asprintf "%a@." Riscv.pp_instrs code);
   let commands =
     [ "riscv64-linux-gnu-gcc -march=rv64gc harness.c tests.s -o tests.exe"
-    ; "qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./tests.exe > tests.out"
+    ; "qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu max ./tests.exe > tests.out"
     ]
   in
-  if List.for_all (fun c -> Sys.command c = 0) commands
-  then Ok (In_channel.with_open_text "tests.out" In_channel.input_lines)
-  else Error "assembling or running failed, see tests.s"
+  match List.find_opt (fun c -> Sys.command c <> 0) commands with
+  | None -> Ok (In_channel.with_open_text "tests.out" In_channel.input_lines)
+  | Some failed -> Error (Printf.sprintf "command failed: %s" failed)
 ;;
 
 (* ---------- hand-written cases ---------- *)

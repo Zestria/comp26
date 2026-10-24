@@ -1,3 +1,10 @@
+(executable
+ (name interp_check)
+ (public_name MetaBannedInRfLanguage.interp_check)
+ (package MetaBannedInRfLanguage)
+ (modules interp_check)
+ (libraries metabannedinrflanguage_frontend metabannedinrflanguage_middleend))
+
 (cram
  (package MetaBannedInRfLanguage)
- (deps ../compiler.exe))
+ (deps ../driver/compiler.exe ./interp_check.exe))

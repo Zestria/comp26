@@ -10,3 +10,20 @@
  (package MetaBannedInRfLanguage)
  (modules test_round_trip)
  (libraries qcheck metabannedinrflanguage_frontend metabannedinrflanguage_ast_gen))
+
+(library
+ (name metabannedinrflanguage_typed_gen)
+ (public_name MetaBannedInRfLanguage.typed_gen)
+ (wrapped false)
+ (modules typed_gen)
+ (libraries qcheck metabannedinrflanguage_frontend))
+
+(test
+ (name test_anf)
+ (package MetaBannedInRfLanguage)
+ (modules test_anf)
+ (libraries
+  qcheck
+  metabannedinrflanguage_frontend
+  metabannedinrflanguage_middleend
+  metabannedinrflanguage_typed_gen))
