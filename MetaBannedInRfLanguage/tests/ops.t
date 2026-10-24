@@ -6,7 +6,7 @@ Associativity: by default '-' is left-associative
   > let x = 1 - 2 - 3
   > EOF
 
-  $ ../compiler.exe assoc.ml
+  $ ../driver/compiler.exe assoc.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -20,7 +20,7 @@ Associativity: by default '-' is left-associative
       []))
     ]
 
-  $ ../compiler.exe -ops "right 3 -" assoc.ml
+  $ ../driver/compiler.exe -ops "right 3 -" assoc.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -38,7 +38,7 @@ Precedence: by default '*' binds tighter than '+'
   > let x = 1 + 2 * 3
   > EOF
 
-  $ ../compiler.exe prec.ml
+  $ ../driver/compiler.exe prec.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -50,7 +50,7 @@ Precedence: by default '*' binds tighter than '+'
       []))
     ]
 
-  $ ../compiler.exe -ops "left 5 +" prec.ml
+  $ ../driver/compiler.exe -ops "left 5 +" prec.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -70,11 +70,11 @@ A new infix operator is unknown without -ops
   > let x = 1 + 2 $ 3
   > EOF
 
-  $ ../compiler.exe dollar.ml
+  $ ../driver/compiler.exe dollar.ml
   compiler: dollar.ml: parsing error: end_of_input
   [1]
 
-  $ ../compiler.exe -ops "left 5 \$" dollar.ml
+  $ ../driver/compiler.exe -ops "left 5 \$" dollar.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -92,11 +92,11 @@ Prefix operator arity
   > let x = ~ f y
   > EOF
 
-  $ ../compiler.exe prefix.ml
+  $ ../driver/compiler.exe prefix.ml
   compiler: prefix.ml: parsing error: end_of_input
   [1]
 
-  $ ../compiler.exe -ops "prefix 1 ~" prefix.ml
+  $ ../driver/compiler.exe -ops "prefix 1 ~" prefix.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -104,7 +104,7 @@ Prefix operator arity
       []))
     ]
 
-  $ ../compiler.exe -ops "prefix 2 ~" prefix.ml
+  $ ../driver/compiler.exe -ops "prefix 2 ~" prefix.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -118,7 +118,7 @@ Several groups at once
   > let x = 1 - 2 - 3 * 4 + 5
   > EOF
 
-  $ ../compiler.exe -ops "right 3 - ; left 5 +" mixed.ml
+  $ ../driver/compiler.exe -ops "right 3 - ; left 5 +" mixed.ml
   [(SValue (NonRec,
       { vb_pat = (PVar "x");
         vb_expr =
@@ -136,28 +136,41 @@ Several groups at once
 
 The menhir parser has a fixed grammar, so -ops is rejected
 
-  $ ../compiler.exe -parsing menhir -ops "left 5 +" prec.ml
+  $ ../driver/compiler.exe -parsing menhir -ops "left 5 +" prec.ml
   compiler: -ops is supported only with -parsing topdown
   [1]
 
 Malformed settings
 
-  $ ../compiler.exe -ops "left" prec.ml
+  $ ../driver/compiler.exe -ops "left" prec.ml
   compiler: settings group "left" lacks a number
   [1]
 
-  $ ../compiler.exe -ops "left 5" prec.ml
+  $ ../driver/compiler.exe -ops "left 5" prec.ml
   compiler: settings group "left" "5" has no operators
   [1]
 
-  $ ../compiler.exe -ops "middle 5 +" prec.ml
+  $ ../driver/compiler.exe -ops "middle 5 +" prec.ml
   compiler: expected left, right or prefix, got "middle"
   [1]
 
-  $ ../compiler.exe -ops "left x +" prec.ml
+  $ ../driver/compiler.exe -ops "left x +" prec.ml
   compiler: expected a number after "left", got "x"
   [1]
 
-  $ ../compiler.exe -ops "left 5 + ; right 3 +" prec.ml
+  $ ../driver/compiler.exe -ops "left 5 + ; right 3 +" prec.ml
   compiler: operator "+" is overridden twice (in infix settings)
   [1]
+
+A prefix minus in parentheses is not an operator value
+
+  $ cat > paren.ml <<EOF
+  > let a = (-1);;
+  > let f x = g (-x) (x * (-2));;
+  > let m = ( - );;
+  > let t = (1, -2)
+  > EOF
+
+  $ ../driver/compiler.exe -parsing topdown paren.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir paren.ml > menhir.txt
+  $ diff topdown.txt menhir.txt

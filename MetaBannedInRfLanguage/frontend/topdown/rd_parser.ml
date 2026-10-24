@@ -144,16 +144,15 @@ let parse_expr_paren table self =
       (List.map (Syntax.operator_names table) ~f:(fun name ->
          p_operator_token name >>| fun _ -> EIdent name))
   in
-  let inner =
-    operator_value
-    <|> (self
-         >>= fun first ->
-         many (token "," *> self)
-         >>= function
-         | [] -> return first
-         | second :: tail -> return (ETuple (first, second, tail)))
+  let tuple =
+    self
+    >>= fun first ->
+    many (token "," *> self)
+    >>= function
+    | [] -> return first
+    | second :: tail -> return (ETuple (first, second, tail))
   in
-  token "(" *> inner <* token ")"
+  token "(" *> (operator_value <* token ")" <|> (tuple <* token ")"))
 ;;
 
 let parse_atom table self =

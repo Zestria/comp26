@@ -13,6 +13,8 @@ type parsing =
 type stop_after =
   | Stop_after_parsing
   | Stop_after_anf
+  | Stop_after_cc
+  | Stop_after_ll
 
 type output =
   | To_stdout
@@ -27,8 +29,8 @@ type t =
   }
 
 let usage =
-  "usage: compiler.exe [-parsing topdown|menhir] [--stop-after parsing|anf] \
-   [-o <filename>|-o -] [-ops <settings>] <input.ml>"
+  "usage: compiler.exe [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o \
+   <filename>|-o -] [-ops <settings>] <input.ml>"
 ;;
 
 let help_text =
@@ -45,11 +47,13 @@ options:
                             topdown  - recursive-descent (Angstrom) parser
                             menhir   - bottom-up (menhir) parser
 
-  --stop-after <parsing|anf>
+  --stop-after <parsing|anf|cc|ll>
                           stop the pipeline after the given stage and print
                           its result (default: parsing)
                             parsing  - print the parsed AST
                             anf      - print the program after ANF conversion
+                            cc       - print the program after closure conversion
+                            ll       - print the program after lambda lifting
 
   -o <filename>           write the output to <filename>
   -o -                    write the output to stdout (default)
@@ -71,14 +75,20 @@ example:
 let parsing_of_string = function
   | "topdown" -> Ok Topdown
   | "menhir" -> Ok Menhir
-  | value -> Error (Printf.sprintf "unknown -parsing value %S (expected topdown or menhir)" value)
+  | value ->
+    Error (Printf.sprintf "unknown -parsing value %S (expected topdown or menhir)" value)
 ;;
 
 let stop_after_of_string = function
   | "parsing" -> Ok Stop_after_parsing
   | "anf" -> Ok Stop_after_anf
+  | "cc" -> Ok Stop_after_cc
+  | "ll" -> Ok Stop_after_ll
   | value ->
-    Error (Printf.sprintf "unknown --stop-after value %S (expected \"parsing\" or \"anf\")" value)
+    Error
+      (Printf.sprintf
+         "unknown --stop-after value %S (expected \"parsing\", \"anf\", \"cc\" or \"ll\")"
+         value)
 ;;
 
 type partial =
@@ -160,10 +170,15 @@ let parse_arguments_impl argv =
         (match partial.p_input_file with
          | Some first ->
            Error
-             (Printf.sprintf "input file already given (%S), unexpected argument %S" first file)
+             (Printf.sprintf
+                "input file already given (%S), unexpected argument %S"
+                first
+                file)
          | None -> loop { partial with p_input_file = Some file } (index + 1)))
   in
   loop default_partial 1
 ;;
 
-let parse_arguments argv = if requests_help argv then Ok Show_help else parse_arguments_impl argv
+let parse_arguments argv =
+  if requests_help argv then Ok Show_help else parse_arguments_impl argv
+;;
