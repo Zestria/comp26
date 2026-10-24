@@ -1,5 +1,7 @@
 (executable
  (name interp_check)
+ (public_name MetaBannedInRfLanguage.interp_check)
+ (package MetaBannedInRfLanguage)
  (modules interp_check)
  (libraries metabannedinrflanguage_frontend metabannedinrflanguage_middleend))
 
