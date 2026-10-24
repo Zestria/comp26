@@ -10,6 +10,7 @@
 
 open SchonfinkelML_frontend.Common
 open SchonfinkelML_frontend.Config
+module Middleend = SchonfinkelML_middleend
 
 let write_output path text =
   let write oc =

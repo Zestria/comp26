@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open SchonfinkelML_frontend.Common
-module CC = Middleend.Closure_conversion
+module CC = SchonfinkelML_middleend.Closure_conversion
 
 let parse s =
   match Top_down.Parser.parse_expr s with
