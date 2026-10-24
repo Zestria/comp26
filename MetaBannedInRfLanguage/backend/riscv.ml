@@ -144,3 +144,92 @@ type asm_item =
   | Directive of directive
 
 type asm = asm_item list
+
+let check_imm12 name imm =
+  if imm < -2048 || imm > 2047
+  then
+    invalid_arg
+      (Printf.sprintf "Riscv.%s: immediate %d is outside [-2048, 2047]" name imm)
+;;
+
+let pp_rrr name rd rs1 rs2 =
+  Printf.sprintf
+    "  %s %s, %s, %s"
+    name
+    (reg_to_string rd)
+    (reg_to_string rs1)
+    (reg_to_string rs2)
+;;
+
+let pp_rr name rd rs =
+  Printf.sprintf "  %s %s, %s" name (reg_to_string rd) (reg_to_string rs)
+;;
+
+let pp_rri name rd rs imm =
+  check_imm12 name imm;
+  Printf.sprintf "  %s %s, %s, %d" name (reg_to_string rd) (reg_to_string rs) imm
+;;
+
+let pp_mem name reg { offset; base } =
+  check_imm12 name offset;
+  Printf.sprintf "  %s %s, %d(%s)" name (reg_to_string reg) offset (reg_to_string base)
+;;
+
+let pp_branch name rs1 rs2 label =
+  Printf.sprintf "  %s %s, %s, %s" name (reg_to_string rs1) (reg_to_string rs2) label
+;;
+
+let pp_instr = function
+  | Add (rd, rs1, rs2) -> pp_rrr "add" rd rs1 rs2
+  | Sub (rd, rs1, rs2) -> pp_rrr "sub" rd rs1 rs2
+  | Mul (rd, rs1, rs2) -> pp_rrr "mul" rd rs1 rs2
+  | Div (rd, rs1, rs2) -> pp_rrr "div" rd rs1 rs2
+  | And (rd, rs1, rs2) -> pp_rrr "and" rd rs1 rs2
+  | Or (rd, rs1, rs2) -> pp_rrr "or" rd rs1 rs2
+  | Xor (rd, rs1, rs2) -> pp_rrr "xor" rd rs1 rs2
+  | Addi (rd, rs, imm) -> pp_rri "addi" rd rs imm
+  | Slt (rd, rs1, rs2) -> pp_rrr "slt" rd rs1 rs2
+  | Seqz (rd, rs) -> pp_rr "seqz" rd rs
+  | Snez (rd, rs) -> pp_rr "snez" rd rs
+  | Ld (rd, mem) -> pp_mem "ld" rd mem
+  | Sd (rs, mem) -> pp_mem "sd" rs mem
+  | Beq (rs1, rs2, label) -> pp_branch "beq" rs1 rs2 label
+  | Bne (rs1, rs2, label) -> pp_branch "bne" rs1 rs2 label
+  | Blt (rs1, rs2, label) -> pp_branch "blt" rs1 rs2 label
+  | Bge (rs1, rs2, label) -> pp_branch "bge" rs1 rs2 label
+  | J label -> Printf.sprintf "  j %s" label
+  | Call label -> Printf.sprintf "  call %s" label
+  | Ret -> "  ret"
+  | Label label -> Printf.sprintf "%s:" label
+  | Li (rd, imm) -> Printf.sprintf "  li %s, %d" (reg_to_string rd) imm
+  | La (rd, label) -> Printf.sprintf "  la %s, %s" (reg_to_string rd) label
+  | Mv (rd, rs) -> pp_rr "mv" rd rs
+;;
+
+let pp_directive = function
+  | Section section ->
+    (match section with
+     | Text -> "  .text"
+     | Data -> "  .data"
+     | Bss -> "  .bss"
+     | Rodata -> "  .section .rodata")
+  | Globl label -> Printf.sprintf "  .globl %s" label
+  | P2align n ->
+    if n < 0 then invalid_arg "Riscv.pp_directive: negative alignment exponent";
+    Printf.sprintf "  .p2align %d" n
+  | Quad n -> Printf.sprintf "  .quad %Ld" n
+  | Zero bytes ->
+    if bytes < 0 then invalid_arg "Riscv.pp_directive: negative zero-fill size";
+    Printf.sprintf "  .zero %d" bytes
+;;
+
+let pp_asm_item = function
+  | Instruction instr -> pp_instr instr
+  | Directive directive -> pp_directive directive
+;;
+
+let pp_asm (asm : asm) =
+  match asm with
+  | [] -> ""
+  | _ -> String.concat "\n" (List.map pp_asm_item asm) ^ "\n"
+;;
