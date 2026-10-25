@@ -4,8 +4,8 @@
 set -eu
 
 case "${1:-}" in
-    codegen|runtime) mode="$1" ;;
-    *) echo "usage: docker_runner.sh <codegen|runtime>" >&2; exit 2 ;;
+    codegen|runtime|integration) mode="$1" ;;
+    *) echo "usage: docker_runner.sh <codegen|runtime|integration>" >&2; exit 2 ;;
 esac
 
 docker="${DOCKER:-docker}"
@@ -32,6 +32,10 @@ case "$mode" in
         ;;
     runtime)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh closure_runtime_tests.c \
+            -C ../../backend closure_runtime.c closure_runtime.h
+        ;;
+    integration)
+        COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh integration.c integration.s \
             -C ../../backend closure_runtime.c closure_runtime.h
         ;;
 esac

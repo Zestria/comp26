@@ -11,6 +11,22 @@
  (package shmel)
  (libraries shmel.Backend))
 
+(test
+ (name calls_tests)
+ (modules calls_tests)
+ (package shmel)
+ (libraries shmel.Backend shmel.Middleend))
+
+(test
+ (name calls_integration_tests)
+ (modules calls_integration_tests)
+ (package shmel)
+ (libraries qcheck shmel.Lib shmel.Middleend shmel.Backend)
+ (deps
+  run_riscv.sh
+  ../../backend/closure_runtime.h
+  ../../backend/closure_runtime.c))
+
 (cram
  (package shmel)
  (deps riscv_tests.exe))
@@ -34,6 +50,7 @@
  (deps
   (universe)
   riscv_tests.exe
+  calls_integration_tests.exe
   harness.c
   Dockerfile
   run_riscv.sh
@@ -44,4 +61,5 @@
  (action
   (progn
    (run ./riscv_tests.exe --runner docker)
+   (run ./calls_integration_tests.exe --runner docker)
    (run sh docker_runner.sh runtime))))
