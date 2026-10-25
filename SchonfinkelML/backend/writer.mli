@@ -1,4 +1,9 @@
-val string_of_reg : Common.reg -> string
-val write_instr : out_channel -> Common.instr -> unit
-val write_item : out_channel -> Emitter.item -> unit
+[@@@ocaml.text "/*"]
+
+(** Copyright 2023-2025, Kakadu and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 val write : out_channel -> Emitter.item list -> unit
