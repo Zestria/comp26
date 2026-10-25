@@ -603,7 +603,7 @@ let rec gen_cexpr = function
     emit label end_label
   | CFun _ -> fail "unexpected function expression after lambda lifting"
   | CTuple _ -> fail "tuple generation is not implemented yet"
-  | CMatchFailure -> fail "match failure generation is not implemented yet"
+  | CMatchFailure -> emit call "match_failure"
 
 and gen_aexpr = function
   | ACExpr expr -> gen_cexpr expr

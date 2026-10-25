@@ -12,6 +12,11 @@ void division_by_zero(void) {
     exit(EXIT_FAILURE);
 }
 
+void match_failure(void) {
+    fputs("match failure: no case matched\n", stderr);
+    exit(EXIT_FAILURE);
+}
+
 void print_int(int64_t n) {
     printf("%ld", n >> 1);
     fflush(stdout);
