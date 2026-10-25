@@ -18,18 +18,7 @@ cc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
 
 if command -v riscv64-linux-gnu-gcc >/dev/null 2>&1 && \
    command -v qemu-riscv64 >/dev/null 2>&1; then
-    cross_pc="${RISCV_PKG_CONFIG_LIBDIR:-/usr/lib/riscv64-linux-gnu/pkgconfig}"
-    if ! PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --exists libffi; then
-        echo "RV64 tests require target libffi development files; set RISCV_PKG_CONFIG_LIBDIR" >&2
-        exit 1
-    fi
-    ffi_cflags=$(PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --cflags libffi)
-    ffi_libs=$(PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --libs --static libffi)
-    riscv64-linux-gnu-gcc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
-        -static -march=rv64gc \
-        $ffi_cflags -I ../../backend ../../backend/closure_runtime.c \
-        closure_runtime_tests.c -o closure_runtime_rv64.exe $ffi_libs
-    qemu-riscv64 ./closure_runtime_rv64.exe
+    sh run_riscv.sh runtime ../../backend
 else
     echo "skipped RV64 runtime execution: cross-compiler or QEMU not found"
 fi

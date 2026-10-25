@@ -15,7 +15,6 @@
    [riscv_tests.exe asm] prints the code of the functions of the program on
    stdin instead. *)
 
-(* TODO: tests run in docker *)
 open Shmel_lib
 open Shmel_middleend
 open Shmel_backend
@@ -152,21 +151,21 @@ let toolchain_available () =
 ;;
 
 (* Compiles the cases into one program, runs it, returns the printed lines. *)
-let run_on_qemu functions =
+let run_on_qemu ~docker functions =
   let code =
     ((Riscv.Directive ".text" :: ext_functions)
      @ List.concat (List.mapi (fun i (asm, args) -> asm @ entry i args) functions))
     @ table (List.length functions)
   in
   write_file "tests.s" (Format.asprintf "%a@." Riscv.pp_instrs code);
-  let commands =
-    [ "riscv64-linux-gnu-gcc -march=rv64gc harness.c tests.s -o tests.exe"
-    ; "qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu max ./tests.exe > tests.out"
-    ]
+  let command =
+    if docker
+    then "sh docker_runner.sh codegen > tests.out"
+    else "sh run_riscv.sh codegen > tests.out"
   in
-  match List.find_opt (fun c -> Sys.command c <> 0) commands with
-  | None -> Ok (In_channel.with_open_text "tests.out" In_channel.input_lines)
-  | Some failed -> Error (Printf.sprintf "command failed: %s" failed)
+  if Sys.command command = 0
+  then Ok (In_channel.with_open_text "tests.out" In_channel.input_lines)
+  else Error (Printf.sprintf "command failed: %s" command)
 ;;
 
 (* ---------- hand-written cases ---------- *)
@@ -379,7 +378,7 @@ let report case asm actual expected =
     asm
 ;;
 
-let check cases =
+let check ~docker cases =
   (* Cases the interpreter rejects (division by zero) are skipped, and so are
      the ones where ANF reduced [fun p q -> ext2 p q] to [ext2]: [f] then has
      no parameters and cannot be called with the arguments. *)
@@ -409,7 +408,7 @@ let check cases =
   let functions =
     List.map (fun (case, _, code) -> Result.value code ~default:[], case.args) compiled
   in
-  match errors, run_on_qemu functions with
+  match errors, run_on_qemu ~docker functions with
   | _ :: _, _ ->
     List.iter print_endline errors;
     false
@@ -451,15 +450,23 @@ let print_asm () =
     (Anf.of_program program)
 ;;
 
-let () =
-  match Array.to_list Sys.argv with
-  | [ _; "asm" ] -> print_asm ()
-  | _ when not (toolchain_available ()) ->
-    print_endline "skipped: riscv64-linux-gnu-gcc or qemu-riscv64 not found"
-  | _ ->
+let run ~docker =
+  if (not docker) && not (toolchain_available ())
+  then print_endline "skipped: riscv64-linux-gnu-gcc or qemu-riscv64 not found"
+  else (
     let seed = Random.State.bits (Random.State.make_self_init ()) in
     Format.printf "random seed: %d@." seed;
     let rand = Random.State.make [| seed |] in
     let random = List.init 500 (fun i -> Gen.generate1 ~rand (gen_case i)) in
-    if not (check (unit_cases @ random)) then exit 1
+    if not (check ~docker (unit_cases @ random)) then exit 1)
+;;
+
+let () =
+  match Array.to_list Sys.argv with
+  | [ _; "asm" ] -> print_asm ()
+  | [ _ ] | [ _; "--runner"; "local" ] -> run ~docker:false
+  | [ _; "--runner"; "docker" ] -> run ~docker:true
+  | _ ->
+    prerr_endline "usage: riscv_tests.exe [asm | --runner local|docker]";
+    exit 2
 ;;

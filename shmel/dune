@@ -3,6 +3,11 @@
  (applies_to NewGVNtricky)
  (deps NewGVNtricky.ll))
 
+(alias
+ (name runtest-docker)
+ (deps
+  (alias test/riscv/runtest-docker)))
+
 (executable
  (public_name shmel)
  (package shmel)
