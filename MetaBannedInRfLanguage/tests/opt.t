@@ -203,3 +203,38 @@ tags its result in a0. Even this wrapper has no frame or runtime arithmetic call
     slli a0, a0, 1
     addi a0, a0, 1
     ret
+
+A direct print_int call uses the native C ABI. It needs no ML argument
+buffer, closure, apply helper, or print_int_closure adapter.
+The only stack adjustments are the frames of main and output itself.
+
+  $ cat > native_print.ml <<EOF
+  > let output n = print_int n
+  > EOF
+  $ ../driver/compiler.exe --stop-after riscv -o native_print.s native_print.ml
+  $ grep '^  call ' native_print.s
+    call print_int
+  $ grep '^  addi sp, sp,' native_print.s
+    addi sp, sp, -16
+    addi sp, sp, 16
+    addi sp, sp, -32
+    addi sp, sp, 32
+
+End-to-end simplification: ANF folds constants, substitutes the alias, and
+drops the unused pure multiplication. Codegen then uses a single addi.
+Compare the entire assembly against the minimal source, so extra instructions
+or extra local stack slots cannot be hidden by filtering the output.
+
+  $ cat > simplified.ml <<EOF
+  > let f x =
+  >   let unused = x * x in
+  >   let k = (2 + 3) * (9 - 1) in
+  >   let copy = x in
+  >   copy + k
+  > EOF
+  $ printf 'let f x = x + 40\n' > minimal.ml
+  $ ../driver/compiler.exe --stop-after riscv -o simplified.s simplified.ml
+  $ ../driver/compiler.exe --stop-after riscv -o minimal.s minimal.ml
+  $ diff -u minimal.s simplified.s
+  $ grep '^  addi a0,' simplified.s
+    addi a0, a0, 80
