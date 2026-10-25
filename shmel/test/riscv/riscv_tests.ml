@@ -7,9 +7,10 @@
 [@@@ocaml.text "/*"]
 
 (* Code generation for function bodies, checked under QEMU: every case is a
-   function [let f p1 ... pn = body] without calls, its result is compared
-   with the reference interpreter. All the cases go into one assembly file,
-   so QEMU starts once.
+   function [let f p1 ... pn = body], its result is compared with the
+   reference interpreter. The functions may call [ext1] and [ext2], written in
+   assembly so that they spoil every register a call may spoil. All the cases
+   go into one assembly file, so QEMU starts once.
 
    [riscv_tests.exe asm] prints the code of the functions of the program on
    stdin instead. *)
@@ -25,6 +26,63 @@ type case =
   ; args : int list
   }
 
+let parse source =
+  match Main.parse_program_with_comb source with
+  | Ok program -> program
+  | Error (`Parsing_error msg) -> [ Ast.DExpr (Ast.Var ("parse error: " ^ msg)) ]
+;;
+
+(* The functions the cases may call, for the interpreter. *)
+let externals = parse "let ext1 a = a + 1000\nlet ext2 a b = a * 31 + b"
+let arities = [ "ext1", 1; "ext2", 2 ]
+
+(* The same functions in assembly; afterwards every [t*] and [a*] but the
+   result is -1. *)
+let ext_functions =
+  let spoil =
+    List.map
+      (fun r -> Riscv.Li (r, -1))
+      (List.init 7 (fun i -> Riscv.T i) @ List.init 7 (fun i -> Riscv.A (i + 1)))
+  in
+  Riscv.([ Label "ext1"; I (Addi, A 0, A 0, 1000) ] @ spoil @ [ Ret ])
+  @ Riscv.(
+      [ Label "ext2"; Li (T 0, 31); R (Mul, A 0, A 0, T 0); R (Add, A 0, A 0, A 1) ]
+      @ spoil
+      @ [ Ret ])
+;;
+
+let all_ok results =
+  List.fold_right
+    (fun r acc ->
+       match r, acc with
+       | Ok x, Ok xs -> Ok (x :: xs)
+       | Error e, _ | _, Error e -> Error e)
+    results
+    (Ok [])
+;;
+
+(* Calls of [ext1] and [ext2] with all their arguments, following psABI. *)
+let hooks =
+  { Codegen.load_global =
+      (fun rd x ->
+        if List.mem_assoc x arities
+        then Ok [ Riscv.La (rd, x) ]
+        else Error (Printf.sprintf "unbound variable %s" x))
+  ; call =
+      (fun ~load f args ->
+        match f with
+        | Anf.ImmVar name
+          when Option.equal
+                 Int.equal
+                 (List.assoc_opt name arities)
+                 (Some (List.length args)) ->
+          Result.map
+            (fun loads -> List.concat loads @ [ Riscv.Call name ])
+            (all_ok (List.mapi (fun i a -> load (Riscv.A i) a) args))
+        | _ -> Error "only full calls of ext1 and ext2 are supported in the tests")
+  }
+;;
+
 let call_f args =
   Ast.DExpr (List.fold_left (fun f a -> Ast.App (f, Ast.Const a)) (Ast.Var "f") args)
 ;;
@@ -32,7 +90,7 @@ let call_f args =
 (* [None] when the program fails (division by zero) or the number is so big
    that 63-bit OCaml integers and 64-bit registers may disagree. *)
 let expected case =
-  match (Eval.run (case.program @ [ call_f case.args ])).result with
+  match (Eval.run (externals @ case.program @ [ call_f case.args ])).result with
   | Ok (Eval.VInt n) when abs n < 1 lsl 40 -> Some n
   | Ok (Eval.VBool b) -> Some (Bool.to_int b)
   | Ok _ | Error _ -> None
@@ -50,17 +108,21 @@ let function_of program =
 let compile ~name program =
   match function_of program with
   | None -> Error "no function f"
-  | Some (params, body) -> Codegen.compile_function Codegen.no_calls ~name ~params body
+  | Some (params, body) -> Codegen.compile_function hooks ~name ~params body
 ;;
 
-(* The caller side of cdecl: the arguments go on the stack. *)
+(* The caller side of psABI: 8 arguments in [a0] .. [a7], the rest on the
+   stack. *)
 let entry i args =
   let open Riscv in
-  let space = ((8 * List.length args) + 15) / 16 * 16 in
+  let in_regs = List.filteri (fun k _ -> k < 8) args in
+  let on_stack = List.filteri (fun k _ -> k >= 8) args in
+  let space = ((8 * List.length on_stack) + 15) / 16 * 16 in
   let adjust n = if n = 0 then [] else [ I (Addi, Sp, Sp, n) ] in
   [ Label (Printf.sprintf "entry%d" i); I (Addi, Sp, Sp, -16); Sd (Ra, 8, Sp) ]
   @ adjust (-space)
-  @ List.concat (List.mapi (fun k a -> [ Li (T 0, a); Sd (T 0, 8 * k, Sp) ]) args)
+  @ List.concat (List.mapi (fun k a -> [ Li (T 0, a); Sd (T 0, 8 * k, Sp) ]) on_stack)
+  @ List.mapi (fun k a -> Li (A k, a)) in_regs
   @ [ Call (Printf.sprintf "f%d" i) ]
   @ adjust space
   @ [ Ld (Ra, 8, Sp); I (Addi, Sp, Sp, 16); Ret ]
@@ -91,8 +153,8 @@ let toolchain_available () =
 (* Compiles the cases into one program, runs it, returns the printed lines. *)
 let run_on_qemu functions =
   let code =
-    (Riscv.Directive ".text"
-     :: List.concat (List.mapi (fun i (asm, args) -> asm @ entry i args) functions))
+    ((Riscv.Directive ".text" :: ext_functions)
+     @ List.concat (List.mapi (fun i (asm, args) -> asm @ entry i args) functions))
     @ table (List.length functions)
   in
   write_file "tests.s" (Format.asprintf "%a@." Riscv.pp_instrs code);
@@ -107,12 +169,6 @@ let run_on_qemu functions =
 ;;
 
 (* ---------- hand-written cases ---------- *)
-
-let parse source =
-  match Main.parse_program_with_comb source with
-  | Ok program -> program
-  | Error (`Parsing_error msg) -> [ Ast.DExpr (Ast.Var ("parse error: " ^ msg)) ]
-;;
 
 (* Every variable lives until the sum at the end, so the frame is bigger than
    2 KiB and the far slots need a computed address. *)
@@ -171,6 +227,35 @@ let unit_cases =
     ; "shadowing", "let f a = let a = a + 1 in let a = a * 2 in a", [ 4 ]
     ; "wildcard", "let f a = let _ = a + 1 in a", [ 6 ]
     ; "many live variables", many_live_variables 300, [ 1 ]
+    ; "parameters in registers", "let f a b = b - a", [ 3; 10 ]
+    ; "first parameter later", "let f a b = let x = b * 2 in x + a", [ 3; 10 ]
+    ; ( "eight parameters"
+      , "let f a b c d e g h i = a - b + c - d + e - g + h - i"
+      , [ 1; 2; 3; 4; 5; 6; 7; 8 ] )
+    ; ( "nine parameters"
+      , "let f a b c d e g h i j = a + b * c - d + e * g - h + i * j"
+      , [ 1; 2; 3; 4; 5; 6; 7; 8; 9 ] )
+    ; ( "ten parameters"
+      , "let f a b c d e g h i j k = j * 100 + k - a + i"
+      , [ 1; 2; 3; 4; 5; 6; 7; 8; 9; 10 ] )
+    ; "shadowed parameter", "let f a b = let b = a + 1 in a * b", [ 4; 100 ]
+    ; "call", "let f a = ext1 a + 1", [ 5 ]
+    ; "tail call", "let f a = ext1 (a * 2)", [ 21 ]
+    ; "parameter after call", "let f a b = let x = ext1 a in x + b", [ 5; 7 ]
+    ; "first parameter after call", "let f a b = let x = ext1 b in x - a", [ 5; 7 ]
+    ; "two arguments", "let f a b = ext2 b a", [ 2; 3 ]
+    ; "nested calls", "let f a b = ext2 (ext1 a) (ext1 b)", [ 1; 2 ]
+    ; "call in condition", "let f a = if ext1 a > 1005 then ext2 a a else a", [ 9 ]
+    ; "call in one branch", "let f a b = if a < b then ext1 a + b else b - a", [ 1; 9 ]
+    ; ( "call in the other branch"
+      , "let f a b = if a < b then ext1 a + b else b - a"
+      , [ 9; 1 ] )
+    ; ( "variable across a call"
+      , "let f a = let x = a * 3 in let y = ext1 x in x + y"
+      , [ 4 ] )
+    ; ( "parameter on the stack after call"
+      , "let f a b c d e g h i j = let x = ext1 j in x + j + a"
+      , [ 1; 2; 3; 4; 5; 6; 7; 8; 9 ] )
     ]
 ;;
 
@@ -215,6 +300,8 @@ let rec gen_int env size =
         ; 3, return `If
         ; 2, return `Let
         ; 1, return `Let_cond
+        ; 1, return `Call1
+        ; 1, return `Call2
         ]
     in
     match kind with
@@ -245,6 +332,12 @@ let rec gen_int env size =
       let+ t = smaller env
       and+ e = smaller env in
       Ast.Let (c, cond, Ast.If (Ast.Var c, t, e))
+    | `Call1 -> map (fun a -> Ast.App (Ast.Var "ext1", a)) (smaller env)
+    | `Call2 ->
+      map2
+        (fun a b -> Ast.App (Ast.App (Ast.Var "ext2", a), b))
+        (smaller env)
+        (smaller env)
 
 and gen_bool env size =
   let open Gen in
@@ -262,7 +355,7 @@ and gen_bool env size =
 
 let gen_case i =
   let open Gen in
-  let* arity = int_range 0 3 in
+  let* arity = oneof_weighted [ 6, int_range 0 3; 1, int_range 4 10 ] in
   let params = List.init arity (Printf.sprintf "p%d") in
   let* size = int_range 1 12 in
   let* body = gen_int (List.map (fun p -> p, Int) params) size in
@@ -286,41 +379,54 @@ let report case asm actual expected =
 ;;
 
 let check cases =
-  (* Cases the interpreter rejects (division by zero) are skipped. *)
-  let compiled =
+  (* Cases the interpreter rejects (division by zero) are skipped, and so are
+     the ones where ANF reduced [fun p q -> ext2 p q] to [ext2]: [f] then has
+     no parameters and cannot be called with the arguments. *)
+  let arity_matches case =
+    match function_of case.program with
+    | Some (params, _) -> List.compare_lengths params case.args = 0
+    | None -> true
+  in
+  let runnable =
     List.filter_map
-      (fun case ->
-         match expected case, compile ~name:"fN" case.program with
-         | Some e, Ok _ -> Some (case, e)
-         | None, _ -> None
-         | Some _, Error msg ->
-           Format.printf "FAIL %s: %s@." case.name msg;
-           None)
+      (fun c -> if arity_matches c then Option.map (fun e -> c, e) (expected c) else None)
       cases
   in
-  let functions =
+  let compiled =
     List.mapi
-      (fun i (case, _) ->
-         ( Result.value (compile ~name:(Printf.sprintf "f%d" i) case.program) ~default:[]
-         , case.args ))
+      (fun i (case, e) -> case, e, compile ~name:(Printf.sprintf "f%d" i) case.program)
+      runnable
+  in
+  let errors =
+    List.filter_map
+      (fun (case, _, code) ->
+         match code with
+         | Ok _ -> None
+         | Error msg -> Some (Format.asprintf "FAIL %s: %s" case.name msg))
       compiled
   in
-  match run_on_qemu functions with
-  | Error msg ->
+  let functions =
+    List.map (fun (case, _, code) -> Result.value code ~default:[], case.args) compiled
+  in
+  match errors, run_on_qemu functions with
+  | _ :: _, _ ->
+    List.iter print_endline errors;
+    false
+  | [], Error msg ->
     Format.printf "FAIL: %s@." msg;
     false
-  | Ok lines when List.compare_lengths lines compiled <> 0 ->
+  | [], Ok lines when List.compare_lengths lines compiled <> 0 ->
     Format.printf
       "FAIL: %d results for %d cases@."
       (List.length lines)
       (List.length compiled);
     false
-  | Ok lines ->
+  | [], Ok lines ->
     let failures =
-      List.filteri
-        (fun i ((case, e), line) ->
+      List.filter
+        (fun ((case, e, code), line) ->
            let ok = String.equal line (string_of_int e) in
-           if not ok then report case (fst (List.nth functions i)) line e;
+           if not ok then report case (Result.value code ~default:[]) line e;
            not ok)
         (List.combine compiled lines)
     in
@@ -337,7 +443,7 @@ let print_asm () =
   List.iter
     (function
       | Anf.DLet (name, params, body) | Anf.DLetRec (name, params, body) ->
-        (match Codegen.compile_function Codegen.no_calls ~name ~params body with
+        (match Codegen.compile_function hooks ~name ~params body with
          | Ok code -> Format.printf "%a@.@." Riscv.pp_instrs code
          | Error msg -> Format.printf "%s: %s@." name msg)
       | Anf.DExpr _ -> ())
