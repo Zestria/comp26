@@ -19,7 +19,7 @@ type location =
 
 type state =
   { env : location SMap.t
-  ; arities : int SMap.t
+  ; functions : (string * int) SMap.t (* assembly symbol and arity *)
   ; stack_offset : int (* lowest allocated offset for locals *)
   ; next_label : int
   ; code_rev : asm (* accumulated assembly, reversed *)
@@ -46,13 +46,21 @@ module StateResult = struct
   let put state _old_state = Ok ((), state)
   let modify f state = Ok ((), f state)
   let run initial_state computation = computation initial_state
+
+  let rec map_m f = function
+    | [] -> return []
+    | value :: rest ->
+      let* value = f value in
+      let+ rest = map_m f rest in
+      value :: rest
+  ;;
 end
 
 open StateResult
 
 let initial_state =
   { env = SMap.empty
-  ; arities = SMap.empty
+  ; functions = SMap.empty
   ; stack_offset = -16 (* fp - 8 and fp - 16 hold saved ra and fp. *)
   ; next_label = 0
   ; code_rev = []
@@ -96,8 +104,13 @@ let fresh_label =
 
 (* ---------- Variables ---------- *)
 
+(* Shadow any function with the same name. *)
 let bind_var name location =
-  modify (fun state -> { state with env = SMap.add name location state.env })
+  modify (fun state ->
+    { state with
+      env = SMap.add name location state.env
+    ; functions = SMap.remove name state.functions
+    })
 ;;
 
 let lookup_var name =
@@ -115,6 +128,7 @@ let alloc_local name =
       { state with
         stack_offset = offset
       ; env = SMap.add name (On_stack offset) state.env
+      ; functions = SMap.remove name state.functions
       }
   in
   return offset
@@ -122,15 +136,20 @@ let alloc_local name =
 
 (* ---------- Functions ---------- *)
 
-let get_function_arity name =
+let lookup_function name =
   let* state = get in
-  return (SMap.find_opt name state.arities)
+  return (SMap.find_opt name state.functions)
 ;;
 
-let register_function name ~arity =
+let register_function name ~symbol ~arity =
   if arity < 0
   then fail (Printf.sprintf "negative arity for function %S" name)
-  else modify (fun state -> { state with arities = SMap.add name arity state.arities })
+  else
+    modify (fun state ->
+      { state with
+        functions = SMap.add name (symbol, arity) state.functions
+      ; env = SMap.remove name state.env
+      })
 ;;
 
 (* ---------- Frame layout ---------- *)
@@ -188,6 +207,28 @@ let epilogue ~frame_size =
 
 (* ---------- Operands ---------- *)
 
+let load_word ~dst ~base offset =
+  if offset >= -2048 && offset <= 2047
+  then emit ld dst { offset; base }
+  else (
+    let address = if dst <> base then dst else if dst = t0 then t1 else t0 in
+    let* () = emit li address offset in
+    let* () = emit add address base address in
+    emit ld dst { offset = 0; base = address })
+;;
+
+let store_word ~src ~base offset =
+  if offset >= -2048 && offset <= 2047
+  then emit sd src { offset; base }
+  else (
+    let address =
+      if src <> t0 && base <> t0 then t0 else if src <> t1 && base <> t1 then t1 else t2
+    in
+    let* () = emit li address offset in
+    let* () = emit add address base address in
+    emit sd src { offset = 0; base = address })
+;;
+
 (* ML values are tagged words: integers use 2*n+1, false/unit use 1, true
    uses 3. Heap values are aligned pointers with the low bit clear.
    Raw machine quantities such as frame sizes and offsets are not tagged. *)
@@ -204,27 +245,25 @@ let gen_imm ~dst = function
   | ImmBool b -> emit li dst (if b then 3 else 1)
   | ImmUnit -> emit li dst 1
   | ImmVar name ->
-    let* location = lookup_var name in
-    (match location with
-     | In_reg src -> if src = dst then return () else emit mv dst src
-     | On_stack offset ->
-       if offset >= -2048 && offset <= 2047
-       then emit ld dst { offset; base = fp }
-       else
-         let* () = emit li dst offset in
-         let* () = emit add dst fp dst in
-         emit ld dst { offset = 0; base = dst }
-     | Global name ->
-       let* () = emit la dst name in
-       emit ld dst { offset = 0; base = dst })
+    let* fn = lookup_function name in
+    (match fn with
+     | Some _ -> fail (Printf.sprintf "function %S as a value requires closures" name)
+     | None ->
+       let* location = lookup_var name in
+       (match location with
+        | In_reg src -> if src = dst then return () else emit mv dst src
+        | On_stack offset -> load_word ~dst ~base:fp offset
+        | Global name ->
+          let* () = emit la dst name in
+          emit ld dst { offset = 0; base = dst }))
 ;;
 
 let get_imm_register = function
   | ImmVar name ->
-    let* location = lookup_var name in
-    (match location with
-     | In_reg reg -> return (Some reg)
-     | On_stack _ | Global _ -> return None)
+    let+ state = get in
+    (match SMap.find_opt name state.env with
+     | Some (In_reg reg) -> Some reg
+     | Some (On_stack _ | Global _) | None -> None)
   | ImmInt _ | ImmBool _ | ImmUnit -> return None
 ;;
 
@@ -383,14 +422,42 @@ let gen_logic ~dst op args =
 
 (* ---------- ANF expressions ---------- *)
 
-let store_local ~src offset =
-  if offset >= -2048 && offset <= 2047
-  then emit sd src { offset; base = fp }
-  else (
-    let scratch = if src = t0 then t1 else t0 in
-    let* () = emit li scratch offset in
-    let* () = emit add scratch fp scratch in
-    emit sd src { offset = 0; base = scratch })
+let store_local ~src offset = store_word ~src ~base:fp offset
+
+(* Calling convention:
+   Caller:
+   - passes a0 = pointer to a contiguous array of tagged arguments on its stack,
+     aligned to 16 bytes, and releases it after the call.
+   Callee:
+   - saves ra/fp, copies parameters into its own frame before evaluating the
+     body; returns the result in a0.
+   - no live ML values depend on caller-saved registers.
+   C runtime calls (e.g. print_int) use the usual RISC-V calling convention. *)
+
+let adjust_sp bytes =
+  if bytes = 0
+  then return ()
+  else if bytes >= -2048 && bytes <= 2047
+  then emit addi sp sp bytes
+  else
+    let* () = emit li t0 bytes in
+    emit add sp sp t0
+;;
+
+let gen_direct_call ~symbol args =
+  let arg_size = ((8 * List.length args) + 15) / 16 * 16 in
+  let rec store_args offset = function
+    | [] -> return ()
+    | arg :: rest ->
+      let* () = gen_imm ~dst:t0 arg in
+      let* () = store_word ~src:t0 ~base:sp offset in
+      store_args (offset + 8) rest
+  in
+  let* () = adjust_sp (-arg_size) in
+  let* () = store_args 0 args in
+  let* () = emit mv a0 sp in
+  let* () = emit call symbol in
+  adjust_sp arg_size
 ;;
 
 (* Each expression leaves its result in a0. Values that must survive a call
@@ -399,20 +466,24 @@ let rec gen_cexpr = function
   | CImm imm -> gen_imm ~dst:a0 imm
   | CApp (ImmVar name, args) ->
     let* state = get in
-    if SMap.mem name state.env
-    then
-      fail (Printf.sprintf "calls to user-defined functions are not implemented: %S" name)
-    else (
-      match name, args with
-      | ("+" | "-" | "*" | "/"), _ -> gen_arithmetic ~dst:a0 name args
-      | ("not" | "&&" | "||" | "<" | "<=" | ">" | ">=" | "=" | "<>"), _ ->
-        gen_logic ~dst:a0 name args
-      | "print_int", [ arg ] ->
-        let* () = gen_imm ~dst:a0 arg in
-        let* () = emit call "print_int" in
-        emit li a0 1 (* The C function returns void; the ML result is unit. *)
-      | "print_int", _ -> fail "print_int expects one argument"
-      | _ -> fail (Printf.sprintf "unsupported function %S" name))
+    (match SMap.find_opt name state.functions with
+     | Some (symbol, arity) when arity = List.length args -> gen_direct_call ~symbol args
+     | Some _ ->
+       fail (Printf.sprintf "partial or over-application of %S requires closures" name)
+     | None ->
+       if SMap.mem name state.env
+       then fail (Printf.sprintf "indirect call to %S requires closures" name)
+       else (
+         match name, args with
+         | ("+" | "-" | "*" | "/"), _ -> gen_arithmetic ~dst:a0 name args
+         | ("not" | "&&" | "||" | "<" | "<=" | ">" | ">=" | "=" | "<>"), _ ->
+           gen_logic ~dst:a0 name args
+         | "print_int", [ arg ] ->
+           let* () = gen_imm ~dst:a0 arg in
+           let* () = emit call "print_int" in
+           emit li a0 1 (* The C function returns void; the ML result is unit. *)
+         | "print_int", _ -> fail "print_int expects one argument"
+         | _ -> fail (Printf.sprintf "unsupported function %S" name)))
   | CApp _ -> fail "indirect function calls are not implemented yet"
   | CIte (ImmBool true, then_branch, _) -> gen_aexpr then_branch
   | CIte (ImmBool false, _, else_branch) -> gen_aexpr else_branch
@@ -440,25 +511,84 @@ and gen_aexpr = function
     let* offset = alloc_local name in
     let* () = store_local ~src:a0 offset in
     let* () = gen_aexpr body in
-    modify (fun state -> { state with env = outer.env })
+    modify (fun state -> { state with env = outer.env; functions = outer.functions })
   | ALetTuple _ -> fail "tuple destructuring is not implemented yet"
   | ALetRec _ -> fail "recursive function definitions are not implemented yet"
 ;;
 
+(* Both main and ML functions get a frame sized from the generated body. *)
+let emit_function ~symbol ~frame_size body_rev =
+  let* () = emit label symbol in
+  let* () = prologue ~frame_size in
+  let* () = modify (fun state -> { state with code_rev = body_rev @ state.code_rev }) in
+  epilogue ~frame_size
+;;
+
+let gen_function ~symbol params body =
+  let* outer = get in
+  let* () = put { outer with code_rev = []; stack_offset = initial_state.stack_offset } in
+  let rec bind_params offset = function
+    | [] -> return ()
+    | name :: rest ->
+      let* () = load_word ~dst:t0 ~base:a0 offset in
+      let* local = alloc_local name in
+      let* () = store_local ~src:t0 local in
+      bind_params (offset + 8) rest
+  in
+  let* () = bind_params 0 params in
+  let* () = gen_aexpr body in
+  let* frame_size = get_frame_size in
+  let* body_state = get in
+  let* () = put { body_state with code_rev = [] } in
+  let* () = emit_function ~symbol ~frame_size body_state.code_rev in
+  let* generated = get in
+  (* Keep the caller's environment and frame, but never reuse generated labels. *)
+  let* () = put { outer with next_label = generated.next_label } in
+  return generated.code_rev
+;;
+
+let declare_function name params =
+  let* symbol = fresh_label in
+  let* () = register_function name ~symbol ~arity:(List.length params) in
+  return symbol
+;;
+
 let rec gen_items = function
-  | [] -> return []
+  | [] -> return ([], [])
+  | AValue (name, ACExpr (CFun (params, body))) :: rest ->
+    let* symbol = fresh_label in
+    (* A non-recursive body sees the previous binding of its own name. *)
+    let* code = gen_function ~symbol params body in
+    let* () = register_function name ~symbol ~arity:(List.length params) in
+    let+ globals, functions = gen_items rest in
+    globals, code :: functions
   | AValue (name, body) :: rest ->
     let* () = gen_aexpr body in
     let* symbol = fresh_label in
     let* () = emit la t0 symbol in
     let* () = emit sd a0 { offset = 0; base = t0 } in
     let* () = bind_var name (Global symbol) in
-    let+ globals = gen_items rest in
-    symbol :: globals
+    let+ globals, functions = gen_items rest in
+    symbol :: globals, functions
   | AEval body :: rest ->
     let* () = gen_aexpr body in
     gen_items rest
-  | ARec _ :: _ -> fail "recursive function definitions are not implemented yet"
+  | ARec bindings :: rest ->
+    (* Every member is visible while compiling any body of a recursive group. *)
+    let* declared =
+      map_m
+        (function
+          | name, CFun (params, body) ->
+            let+ symbol = declare_function name params in
+            symbol, params, body
+          | _ -> fail "a recursive binding must define a function")
+        bindings
+    in
+    let* code =
+      map_m (fun (symbol, params, body) -> gen_function ~symbol params body) declared
+    in
+    let+ globals, functions = gen_items rest in
+    globals, code @ functions
 ;;
 
 let rec gen_globals = function
@@ -480,7 +610,9 @@ let run computation =
 let gen_program (program : Anf.program) =
   let generate =
     (* Generate the body first to learn how much frame space it needs. *)
-    let* globals = gen_items program in
+    let* globals, functions = gen_items program in
+    (* C main returns an untagged exit status. *)
+    let* () = emit li a0 0 in
     let* frame_size = get_frame_size in
     let* body = get in
     let* () = put { body with code_rev = [] } in
@@ -494,16 +626,9 @@ let gen_program (program : Anf.program) =
     in
     let* () = emit_directive (Section Text) in
     let* () = emit_directive (Globl "main") in
-    let* () = emit label "main" in
-    let* () = prologue ~frame_size in
-    let* () =
-      modify (fun state -> { state with code_rev = body.code_rev @ state.code_rev })
-    in
-    let* () =
-      emit li a0 0
-      (* C main returns an untagged exit status. *)
-    in
-    epilogue ~frame_size
+    let* () = emit_function ~symbol:"main" ~frame_size body.code_rev in
+    modify (fun state ->
+      { state with code_rev = List.concat (List.rev functions) @ state.code_rev })
   in
   Result.map snd (run generate)
 ;;
