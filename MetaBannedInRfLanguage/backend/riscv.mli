@@ -109,6 +109,7 @@ type directive =
 type asm_item =
   | Instruction of instr
   | Directive of directive
+  | Comment of string
 
 type asm = asm_item list
 

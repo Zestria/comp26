@@ -142,6 +142,7 @@ type directive =
 type asm_item =
   | Instruction of instr
   | Directive of directive
+  | Comment of string
 
 type asm = asm_item list
 
@@ -226,6 +227,8 @@ let pp_directive = function
 let pp_asm_item = function
   | Instruction instr -> pp_instr instr
   | Directive directive -> pp_directive directive
+  | Comment text ->
+    String.concat "\n" (List.map (fun line -> "  # " ^ line) (String.split_on_char '\n' text))
 ;;
 
 let pp_asm (asm : asm) =
