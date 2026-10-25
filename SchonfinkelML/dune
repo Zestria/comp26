@@ -7,6 +7,7 @@
   SchonfinkelML_frontend
   top_down
   bottom_up
-  SchonfinkelML_middleend)
+  SchonfinkelML_middleend
+  SchonfinkelML_backend)
  (instrumentation
   (backend bisect_ppx_ng)))

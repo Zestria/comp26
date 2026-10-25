@@ -108,5 +108,11 @@ let get_rtl anf =
        | Anf.CAbstr _ -> error (Unsupported "applications"))
   in
   let dst = alloc () in
-  run (compile_aexpr [] dst anf)
+  run
+    (let* () = start in
+     let* () = compile_aexpr [] dst anf in
+     let* () = emit (li A7 94) in
+     let* () = emit (mv A0 dst) in
+     let* () = emit ecall in
+     return ())
 ;;
