@@ -67,6 +67,12 @@ let initial_state =
   }
 ;;
 
+let run computation =
+  Result.map
+    (fun (value, state) -> value, List.rev state.code_rev)
+    (StateResult.run initial_state computation)
+;;
+
 (* ---------- Code emission ---------- *)
 
 let emit ?(comm = "") instruction =
@@ -91,6 +97,14 @@ let emit_directive directive =
   | Zero bytes when bytes < 0 -> fail "negative zero-fill size"
   | _ ->
     modify (fun state -> { state with code_rev = Directive directive :: state.code_rev })
+;;
+
+let rec gen_globals = function
+  | [] -> return ()
+  | symbol :: rest ->
+    let* () = emit label symbol in
+    let* () = emit_directive (Quad 1) in
+    gen_globals rest
 ;;
 
 (* ---------- Labels ---------- *)
@@ -134,7 +148,7 @@ let alloc_local name =
   return offset
 ;;
 
-(* ---------- Functions ---------- *)
+(* ---------- Function bindings ---------- *)
 
 let lookup_function name =
   let* state = get in
@@ -152,6 +166,38 @@ let register_function name ~symbol ~arity =
       })
 ;;
 
+let declare_function name params =
+  let* symbol = fresh_label in
+  let* () = register_function name ~symbol ~arity:(List.length params) in
+  return symbol
+;;
+
+(* ---------- Memory accesses ---------- *)
+
+let load_word ~dst ~base offset =
+  if offset >= -2048 && offset <= 2047
+  then emit ld dst { offset; base }
+  else (
+    let address = if dst <> base then dst else if dst = t0 then t1 else t0 in
+    let* () = emit li address offset in
+    let* () = emit add address base address in
+    emit ld dst { offset = 0; base = address })
+;;
+
+let store_word ~src ~base offset =
+  if offset >= -2048 && offset <= 2047
+  then emit sd src { offset; base }
+  else (
+    let address =
+      if src <> t0 && base <> t0 then t0 else if src <> t1 && base <> t1 then t1 else t2
+    in
+    let* () = emit li address offset in
+    let* () = emit add address base address in
+    emit sd src { offset = 0; base = address })
+;;
+
+let store_local ~src offset = store_word ~src ~base:fp offset
+
 (* ---------- Frame layout ---------- *)
 
 let get_frame_size =
@@ -164,6 +210,16 @@ let check_frame_size frame_size =
   if frame_size < 16 || frame_size mod 16 <> 0
   then fail "frame size must be a multiple of 16 and at least 16"
   else return ()
+;;
+
+let adjust_sp bytes =
+  if bytes = 0
+  then return ()
+  else if bytes >= -2048 && bytes <= 2047
+  then emit addi sp sp bytes
+  else
+    let* () = emit li t0 bytes in
+    emit add sp sp t0
 ;;
 
 (* fp is the caller's sp. Saved ra is at fp - 8, saved fp at fp - 16,
@@ -205,29 +261,15 @@ let epilogue ~frame_size =
   emit ret
 ;;
 
+(* Both main and ML functions get a frame sized from the generated body. *)
+let emit_function ~symbol ~frame_size body_rev =
+  let* () = emit label symbol in
+  let* () = prologue ~frame_size in
+  let* () = modify (fun state -> { state with code_rev = body_rev @ state.code_rev }) in
+  epilogue ~frame_size
+;;
+
 (* ---------- Operands ---------- *)
-
-let load_word ~dst ~base offset =
-  if offset >= -2048 && offset <= 2047
-  then emit ld dst { offset; base }
-  else (
-    let address = if dst <> base then dst else if dst = t0 then t1 else t0 in
-    let* () = emit li address offset in
-    let* () = emit add address base address in
-    emit ld dst { offset = 0; base = address })
-;;
-
-let store_word ~src ~base offset =
-  if offset >= -2048 && offset <= 2047
-  then emit sd src { offset; base }
-  else (
-    let address =
-      if src <> t0 && base <> t0 then t0 else if src <> t1 && base <> t1 then t1 else t2
-    in
-    let* () = emit li address offset in
-    let* () = emit add address base address in
-    emit sd src { offset = 0; base = address })
-;;
 
 (* ML values are tagged words: integers use 2*n+1, false/unit use 1, true
    uses 3. Heap values are aligned pointers with the low bit clear.
@@ -310,6 +352,14 @@ let untag_operands left_reg right_reg =
     emit srai t1 right_reg 1
 ;;
 
+let gen_add_immediate ~dst value n =
+  if n = 0
+  then gen_imm ~dst value
+  else
+    let* src = gen_operand ~scratch:dst value in
+    emit addi dst src (2 * n)
+;;
+
 let gen_negation ~dst arg =
   let* src = gen_operand ~scratch:dst arg in
   let* () = emit sub dst x0 src in
@@ -347,14 +397,6 @@ let gen_binop ~dst op left right =
   | _ -> fail (Printf.sprintf "unsupported arithmetic operator %S" op)
 ;;
 
-let gen_add_immediate ~dst value n =
-  if n = 0
-  then gen_imm ~dst value
-  else
-    let* src = gen_operand ~scratch:dst value in
-    emit addi dst src (2 * n)
-;;
-
 let gen_arithmetic ~dst op args =
   match op, args with
   | "+", [ arg ] -> gen_imm ~dst arg
@@ -374,6 +416,12 @@ let gen_arithmetic ~dst op args =
 ;;
 
 (* ---------- Comparisons and booleans ---------- *)
+
+let gen_not ~dst arg =
+  let* src = gen_operand ~scratch:dst arg in
+  let* () = emit sub dst x0 src in
+  emit addi dst dst 4 (* not false = 4 - 1; not true = 4 - 3 *)
+;;
 
 let gen_comparison ~dst op left right =
   let* left_reg, right_reg = gen_binary_operands left right in
@@ -398,12 +446,6 @@ let gen_comparison ~dst op left right =
   tag_result dst
 ;;
 
-let gen_not ~dst arg =
-  let* src = gen_operand ~scratch:dst arg in
-  let* () = emit sub dst x0 src in
-  emit addi dst dst 4 (* not false = 4 - 1; not true = 4 - 3 *)
-;;
-
 let gen_logic ~dst op args =
   match op, args with
   | "not", [ arg ] -> gen_not ~dst arg
@@ -420,9 +462,7 @@ let gen_logic ~dst op args =
   | _ -> fail (Printf.sprintf "unsupported logical operator %S" op)
 ;;
 
-(* ---------- ANF expressions ---------- *)
-
-let store_local ~src offset = store_word ~src ~base:fp offset
+(* ---------- Function calls ---------- *)
 
 (* Calling convention:
    Caller:
@@ -433,16 +473,6 @@ let store_local ~src offset = store_word ~src ~base:fp offset
      body; returns the result in a0.
    - no live ML values depend on caller-saved registers.
    C runtime calls (e.g. print_int) use the usual RISC-V calling convention. *)
-
-let adjust_sp bytes =
-  if bytes = 0
-  then return ()
-  else if bytes >= -2048 && bytes <= 2047
-  then emit addi sp sp bytes
-  else
-    let* () = emit li t0 bytes in
-    emit add sp sp t0
-;;
 
 let gen_direct_call ~symbol args =
   let arg_size = ((8 * List.length args) + 15) / 16 * 16 in
@@ -459,6 +489,8 @@ let gen_direct_call ~symbol args =
   let* () = emit call symbol in
   adjust_sp arg_size
 ;;
+
+(* ---------- ANF expressions ---------- *)
 
 (* Each expression leaves its result in a0. Values that must survive a call
    are stored in the frame or in globals. *)
@@ -516,13 +548,7 @@ and gen_aexpr = function
   | ALetRec _ -> fail "recursive function definitions are not implemented yet"
 ;;
 
-(* Both main and ML functions get a frame sized from the generated body. *)
-let emit_function ~symbol ~frame_size body_rev =
-  let* () = emit label symbol in
-  let* () = prologue ~frame_size in
-  let* () = modify (fun state -> { state with code_rev = body_rev @ state.code_rev }) in
-  epilogue ~frame_size
-;;
+(* ---------- Functions ---------- *)
 
 let gen_function ~symbol params body =
   let* outer = get in
@@ -547,11 +573,7 @@ let gen_function ~symbol params body =
   return generated.code_rev
 ;;
 
-let declare_function name params =
-  let* symbol = fresh_label in
-  let* () = register_function name ~symbol ~arity:(List.length params) in
-  return symbol
-;;
+(* ---------- Top-level items ---------- *)
 
 let rec gen_items = function
   | [] -> return ([], [])
@@ -591,21 +613,7 @@ let rec gen_items = function
     globals, code @ functions
 ;;
 
-let rec gen_globals = function
-  | [] -> return ()
-  | symbol :: rest ->
-    let* () = emit label symbol in
-    let* () = emit_directive (Quad 1) in
-    gen_globals rest
-;;
-
 (* ---------- Entry point ---------- *)
-
-let run computation =
-  Result.map
-    (fun (value, state) -> value, List.rev state.code_rev)
-    (StateResult.run initial_state computation)
-;;
 
 let gen_program (program : Anf.program) =
   let generate =
