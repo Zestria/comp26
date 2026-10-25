@@ -516,7 +516,7 @@ let gen_logic ~dst op args =
    - no live ML values depend on caller-saved registers.
    C runtime calls (e.g. print_int) use the usual RISC-V calling convention. *)
 
-let gen_args args =
+let with_call_frame args body =
   let arg_size = ((8 * List.length args) + 15) / 16 * 16 in
   let rec store_args offset = function
     | [] -> return ()
@@ -527,32 +527,31 @@ let gen_args args =
   in
   let* () = adjust_sp (-arg_size) in
   let* () = store_args 0 args in
-  return arg_size
+  let* () = body in
+  adjust_sp arg_size
 ;;
 
 let gen_direct_call ~symbol args =
-  let* arg_size = gen_args args in
-  let* () = emit mv a0 sp in
-  let* () = emit call symbol in
-  adjust_sp arg_size
+  with_call_frame
+    args
+    (let* () = emit mv a0 sp in
+     emit call symbol)
 ;;
 
 let gen_partial_application ~symbol ~arity args =
-  let* arg_size = gen_args args in
   let received = List.length args in
-  let* () = alloc_closure ~symbol ~arity:(arity - received) ~received in
-  adjust_sp arg_size
+  with_call_frame args (alloc_closure ~symbol ~arity:(arity - received) ~received)
 ;;
 
 let gen_apply fn args =
-  (* Building arguments may allocate closures and clobber a0, so load the
-     callee only after the argument array is complete. *)
-  let* arg_size = gen_args args in
-  let* () = gen_imm ~dst:a0 fn in
-  let* () = emit li a1 (List.length args) in
-  let* () = emit mv a2 sp in
-  let* () = emit call "apply" in
-  adjust_sp arg_size
+  with_call_frame
+    args
+    (* Building arguments may allocate closures and clobber a0, so load the
+       callee only after the argument array is complete. *)
+    (let* () = gen_imm ~dst:a0 fn in
+     let* () = emit li a1 (List.length args) in
+     let* () = emit mv a2 sp in
+     emit call "apply")
 ;;
 
 (* ---------- ANF expressions ---------- *)
