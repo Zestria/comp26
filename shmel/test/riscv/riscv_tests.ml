@@ -15,6 +15,7 @@
    [riscv_tests.exe asm] prints the code of the functions of the program on
    stdin instead. *)
 
+(* TODO: tests run in docker *)
 open Shmel_lib
 open Shmel_middleend
 open Shmel_backend

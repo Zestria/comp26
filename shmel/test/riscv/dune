@@ -1,8 +1,15 @@
 (test
  (name riscv_tests)
+ (modules riscv_tests)
  (package shmel)
  (libraries qcheck shmel.Lib shmel.Middleend shmel.Backend)
  (deps harness.c))
+
+(test
+ (name closure_layout_tests)
+ (modules closure_layout_tests)
+ (package shmel)
+ (libraries shmel.Backend))
 
 (cram
  (package shmel)
