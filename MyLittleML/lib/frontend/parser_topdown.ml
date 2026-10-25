@@ -90,19 +90,22 @@ let fail_at msg =
 ;;
 
 let line_col_of_offset source off =
-  let line = ref 1 and col = ref 0 in
+  let line = ref 1
+  and col = ref 0 in
   (try
      String.iteri
        (fun i c ->
-         if i >= off
-         then raise Exit
-         else (
-           if c = '\n'
-           then (incr line; col := 0)
-           else incr col))
+          if i >= off
+          then raise Exit
+          else if c = '\n'
+          then (
+            incr line;
+            col := 0)
+          else incr col)
        source
-   with Exit -> ());
-  (!line, !col + 1)
+   with
+   | Exit -> ());
+  !line, !col + 1
 ;;
 
 (* Whitespace and comments -------------------------------------------- *)
@@ -117,17 +120,17 @@ let line_col_of_offset source off =
 let comment =
   string "(*"
   *> fix (fun loop ->
-         peek_char
-         >>= (function
-           | None -> fail_at "unterminated comment"
-           | Some '*' ->
-             tracked (advance 1)
-             >>= fun () ->
-             peek_char
-             >>= (function
-               | Some ')' -> tracked (advance 1) *> return ()
-               | _ -> tracked (advance 1) *> loop)
-           | Some _ -> tracked (advance 1) *> loop))
+    peek_char
+    >>= function
+    | None -> fail_at "unterminated comment"
+    | Some '*' ->
+      tracked (advance 1)
+      >>= fun () ->
+      peek_char
+      >>= (function
+       | Some ')' -> tracked (advance 1) *> return ()
+       | _ -> tracked (advance 1) *> loop)
+    | Some _ -> tracked (advance 1) *> loop)
 ;;
 
 (** Optional top-level separator [";;"] (phrase terminator, matching the
@@ -139,8 +142,7 @@ let semi = tracked (string ";;")
 
 let skip_ws =
   fix (fun skip_ws ->
-      tracked
-        (skip_many (satisfy is_ws) *> (comment *> skip_ws <|> return ())))
+    tracked (skip_many (satisfy is_ws) *> (comment *> skip_ws <|> return ())))
 ;;
 
 (* Tokens -------------------------------------------------------------- *)
@@ -158,27 +160,22 @@ let kw ~sticky s =
   then return ()
   else
     peek_char
-    >>= (function
-      | Some c when is_id_char c ->
-        fail_at (s ^ " is a keyword and cannot start an identifier")
-      | _ -> return ())
+    >>= function
+    | Some c when is_id_char c ->
+      fail_at (s ^ " is a keyword and cannot start an identifier")
+    | _ -> return ()
 ;;
 
 let keyword ~sticky s = skip_ws *> kw ~sticky s
-
 let sym s = skip_ws *> tracked (string s)
-
-let keywords =
-  [ "let"; "rec"; "in"; "fun"; "if"; "then"; "else"; "mod"; "true"; "false" ]
-;;
+let keywords = [ "let"; "rec"; "in"; "fun"; "if"; "then"; "else"; "mod"; "true"; "false" ]
 
 (** Identifier.  The bare keywords are rejected in both modes.  In sticky
     mode the flag only controls *where* identifiers may be reached: a
     keyword match wins first in expression position, while a keyword-prefixed
     name like [letx] is still a valid identifier wherever {!ident} is used
     directly (binding names, parameters). *)
-let ident ~sticky =
-  ignore sticky;
+let ident =
   tracked (take_while1 is_id_char)
   >>= fun s ->
   if List.mem s keywords
@@ -234,71 +231,71 @@ let program ~sticky =
   skip_ws
   *> many
        (fix (fun expr ->
-            let parens = sym "(" *> expr <* skip_ws <* tracked (char ')') in
-            let atom =
-              skip_ws
-              *> choice
-                   [ (int_lit >>| fun n -> Ast.Int n)
-                   ; (keyword ~sticky "true" *> return (Ast.Bool true))
-                   ; (keyword ~sticky "false" *> return (Ast.Bool false))
-                   ; (ident ~sticky >>| fun x -> Ast.Var x)
-                   ; parens ]
-            in
-            let app =
-              atom
-              >>= fun f ->
-              many atom
-              >>= fun args ->
-              return (List.fold_left (fun acc a -> Ast.App (acc, a)) f args)
-            in
-            let unary =
-              fix (fun unary ->
-                  (skip_ws *> tracked (char '-') *> unary >>| fun e -> Ast.Neg e)
-                  <|> app)
-            in
-            let binop =
-              prio unary
-                [| [ (eq_op, fun l r -> Ast.Binop (Ast.Eq, l, r))
-                   ; (neq_op, fun l r -> Ast.Binop (Ast.Neq, l, r))
-                   ; (lt_op, fun l r -> Ast.Binop (Ast.Lt, l, r))
-                   ; (le_op, fun l r -> Ast.Binop (Ast.Le, l, r))
-                   ; (gt_op, fun l r -> Ast.Binop (Ast.Gt, l, r))
-                   ; (ge_op, fun l r -> Ast.Binop (Ast.Ge, l, r)) ]
-                 ; [ (plus_op, fun l r -> Ast.Binop (Ast.Add, l, r))
-                   ; (minus_op, fun l r -> Ast.Binop (Ast.Sub, l, r)) ]
-                 ; [ (star_op, fun l r -> Ast.Binop (Ast.Mul, l, r))
-                   ; (slash_op, fun l r -> Ast.Binop (Ast.Div, l, r))
-                   ; (mod_op ~sticky, fun l r -> Ast.Binop (Ast.Mod, l, r)) ] |]
-            in
-            let let_parser =
-              keyword ~sticky "let"
-              *> option false (keyword ~sticky "rec" *> return true)
-              >>= fun rec_ ->
-              skip_ws *> ident ~sticky
-              >>= fun name ->
-              many (skip_ws *> ident ~sticky)
-              >>= fun params ->
-              sym "=" *> expr
-              >>= fun body ->
-              option None (keyword ~sticky "in" *> expr >>| fun e -> Some e)
-              >>= fun cont ->
-              return (Ast.Let ({ Ast.rec_; name; params; body }, cont))
-            in
-            let fun_parser =
-              keyword ~sticky "fun"
-              *> many1 (skip_ws *> ident ~sticky)
-              >>= fun params ->
-              sym "->" *> expr >>| fun body -> Ast.Fun (params, body)
-            in
-            let if_parser =
-              keyword ~sticky "if" *> expr
-              >>= fun cond ->
-              keyword ~sticky "then" *> expr
-              >>= fun thn ->
-              keyword ~sticky "else" *> expr >>| fun els -> Ast.If (cond, thn, els)
-            in
-            let item = choice [ let_parser; fun_parser; if_parser; binop ] in
-            item <* (semi *> return () <|> return ())))
+          let parens = sym "(" *> expr <* skip_ws <* tracked (char ')') in
+          let atom =
+            skip_ws
+            *> choice
+                 [ (int_lit >>| fun n -> Ast.Int n)
+                 ; keyword ~sticky "true" *> return (Ast.Bool true)
+                 ; keyword ~sticky "false" *> return (Ast.Bool false)
+                 ; (ident >>| fun x -> Ast.Var x)
+                 ; parens
+                 ]
+          in
+          let app =
+            atom
+            >>= fun f ->
+            many atom
+            >>= fun args -> return (List.fold_left (fun acc a -> Ast.App (acc, a)) f args)
+          in
+          let unary =
+            fix (fun unary ->
+              skip_ws *> tracked (char '-') *> unary >>| (fun e -> Ast.Neg e) <|> app)
+          in
+          let binop =
+            prio
+              unary
+              [| [ (eq_op, fun l r -> Ast.Binop (Ast.Eq, l, r))
+                 ; (neq_op, fun l r -> Ast.Binop (Ast.Neq, l, r))
+                 ; (lt_op, fun l r -> Ast.Binop (Ast.Lt, l, r))
+                 ; (le_op, fun l r -> Ast.Binop (Ast.Le, l, r))
+                 ; (gt_op, fun l r -> Ast.Binop (Ast.Gt, l, r))
+                 ; (ge_op, fun l r -> Ast.Binop (Ast.Ge, l, r))
+                 ]
+               ; [ (plus_op, fun l r -> Ast.Binop (Ast.Add, l, r))
+                 ; (minus_op, fun l r -> Ast.Binop (Ast.Sub, l, r))
+                 ]
+               ; [ (star_op, fun l r -> Ast.Binop (Ast.Mul, l, r))
+                 ; (slash_op, fun l r -> Ast.Binop (Ast.Div, l, r))
+                 ; (mod_op ~sticky, fun l r -> Ast.Binop (Ast.Mod, l, r))
+                 ]
+              |]
+          in
+          let let_parser =
+            keyword ~sticky "let" *> option false (keyword ~sticky "rec" *> return true)
+            >>= fun rec_ ->
+            skip_ws *> ident
+            >>= fun name ->
+            many (skip_ws *> ident)
+            >>= fun params ->
+            sym "=" *> expr
+            >>= fun body ->
+            option None (keyword ~sticky "in" *> expr >>| fun e -> Some e)
+            >>= fun cont -> return (Ast.Let ({ Ast.rec_; name; params; body }, cont))
+          in
+          let fun_parser =
+            keyword ~sticky "fun" *> many1 (skip_ws *> ident)
+            >>= fun params -> sym "->" *> expr >>| fun body -> Ast.Fun (params, body)
+          in
+          let if_parser =
+            keyword ~sticky "if" *> expr
+            >>= fun cond ->
+            keyword ~sticky "then" *> expr
+            >>= fun thn ->
+            keyword ~sticky "else" *> expr >>| fun els -> Ast.If (cond, thn, els)
+          in
+          let item = choice [ let_parser; fun_parser; if_parser; binop ] in
+          item <* (semi *> return () <|> return ())))
   <* skip_ws
 ;;
 
@@ -310,8 +307,8 @@ let parse_prog ~sticky source =
   | Error _ ->
     let off, msg =
       match !best_fail with
-      | Some (n, m) when n >= !max_pos -> (n, m)
-      | _ -> (!max_pos, "syntax error")
+      | Some (n, m) when n >= !max_pos -> n, m
+      | _ -> !max_pos, "syntax error"
     in
     let line, col = line_col_of_offset source off in
     Error (Format.sprintf "%d:%d: %s" line col msg)

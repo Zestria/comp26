@@ -57,9 +57,9 @@ let many_decls n =
 ;;
 
 let rows =
-  [ ("deep-let", deep_chain, [ 100; 400; 900 ])
-  ; ("flat-sum", flat_sum, [ 1_000; 10_000; 30_000 ])
-  ; ("many-decls", many_decls, [ 500; 2_000; 4_000 ])
+  [ "deep-let", deep_chain, [ 100; 400; 900 ]
+  ; "flat-sum", flat_sum, [ 1_000; 10_000; 30_000 ]
+  ; "many-decls", many_decls, [ 500; 2_000; 4_000 ]
   ]
 ;;
 
@@ -74,11 +74,16 @@ let time_parse ~iterations kind text =
     match Parse.parse kind opts text with
     | Ok _ -> ()
     | Error msg ->
-      failwith (Format.sprintf "%s parser rejected benchmark input: %s"
-                  (match kind with
-                   | Parse.Topdown -> "topdown"
-                   | Parse.Bottomup -> "bottomup")
-                  msg)
+      (* Reaching this line means a benchmark input generator is broken,
+         not that user input is invalid. *)
+      raise
+        (Invalid_argument
+           (Format.sprintf
+              "%s parser rejected benchmark input: %s"
+              (match kind with
+               | Parse.Topdown -> "topdown"
+               | Parse.Bottomup -> "bottomup")
+              msg))
   done;
   Sys.time () -. t0
 ;;
@@ -89,13 +94,19 @@ let () =
   Printf.printf "input          size    bytes   topdown(s)  bottomup(s)  ratio(td/bu)\n";
   List.iter
     (fun (label, gen, sizes) ->
-      List.iter
-        (fun size ->
-          let text = gen size in
-          let td = time_parse ~iterations:default_iterations Parse.Topdown text in
-          let bu = time_parse ~iterations:default_iterations Parse.Bottomup text in
-          Printf.printf "%-12s %8d %8d %12.6f %12.6f %9.2f\n"
-            label size (String.length text) td bu (td /. bu))
-        sizes)
+       List.iter
+         (fun size ->
+            let text = gen size in
+            let td = time_parse ~iterations:default_iterations Parse.Topdown text in
+            let bu = time_parse ~iterations:default_iterations Parse.Bottomup text in
+            Printf.printf
+              "%-12s %8d %8d %12.6f %12.6f %9.2f\n"
+              label
+              size
+              (String.length text)
+              td
+              bu
+              (td /. bu))
+         sizes)
     rows
 ;;

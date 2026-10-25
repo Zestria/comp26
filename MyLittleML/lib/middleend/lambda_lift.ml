@@ -43,7 +43,8 @@ type state =
 let make_state (prog : aprogram) : state =
   let rec names_aexp acc = function
     | ACexp c -> names_cexp acc c
-    | ALet (_, name, rhs, rest) -> names_aexp (names_aexp (Names.StringSet.add name acc) rest) rhs
+    | ALet (_, name, rhs, rest) ->
+      names_aexp (names_aexp (Names.StringSet.add name acc) rest) rhs
   and names_cexp acc = function
     | CAtom (AVar v) -> Names.StringSet.add v acc
     | CAtom _ -> acc
@@ -66,8 +67,7 @@ let make_state (prog : aprogram) : state =
 ;;
 
 (** Generate a fresh [ll_f<i>] name for a hoisted lambda. *)
-let fresh_ll (st : state) : string =
-  Names.fresh st.names "ll_f"
+let fresh_ll (st : state) : string = Names.fresh st.names "ll_f"
 
 (** Hoist one lambda: remember it as a top-level declaration, return the
     atom that replaces the original occurrence. *)
@@ -86,12 +86,14 @@ let rec lift_aexp (st : state) : aexp -> aexp = function
     (* A nested recursive lambda keeps its place (see the module doc);
        lambdas inside its right-hand side and the continuation still lift. *)
     ALet (Rec, name, lift_rec_rhs st rhs, lift_aexp st rest)
-  | ALet (Nonrec, name, rhs, rest) -> ALet (Nonrec, name, lift_aexp st rhs, lift_aexp st rest)
+  | ALet (Nonrec, name, rhs, rest) ->
+    ALet (Nonrec, name, lift_aexp st rhs, lift_aexp st rest)
 
 and lift_rec_rhs (st : state) : aexp -> aexp = function
   | ACexp (CFun (params, body)) -> ACexp (CFun (params, lift_aexp st body))
   | ACexp c -> ACexp (lift_cexp st c)
-  | ALet (flag, name, rhs, rest) -> ALet (flag, name, lift_rec_rhs st rhs, lift_aexp st rest)
+  | ALet (flag, name, rhs, rest) ->
+    ALet (flag, name, lift_rec_rhs st rhs, lift_aexp st rest)
 
 and lift_cexp (st : state) : cexp -> cexp = function
   | CIf (c, t, f) -> CIf (c, lift_aexp st t, lift_aexp st f)
@@ -100,7 +102,7 @@ and lift_cexp (st : state) : cexp -> cexp = function
     (* Unreachable: both [lift_aexp] and the declaration handler intercept
        every [CFun] in [ACexp] position, so only fun-free cexps flow
        through here. *)
-    assert false
+    raise (Invalid_argument "Lambda_lift.lift_cexp: unreachable CFun")
 ;;
 
 let lift_item (st : state) : item -> item list = function
@@ -141,8 +143,7 @@ let lift_prog (prog : aprogram) : aprogram =
 let is_lifted (prog : aprogram) : bool =
   let rec ok_aexp ~in_rec_rhs = function
     | ACexp c -> ok_cexp ~in_rec_rhs c
-    | ALet (Rec, _, rhs, rest) ->
-      ok_rec_rhs rhs && ok_aexp ~in_rec_rhs rest
+    | ALet (Rec, _, rhs, rest) -> ok_rec_rhs rhs && ok_aexp ~in_rec_rhs rest
     | ALet (Nonrec, _, rhs, rest) -> ok_aexp ~in_rec_rhs rhs && ok_aexp ~in_rec_rhs rest
   and ok_rec_rhs = function
     | ACexp (CFun (_, body)) -> ok_aexp ~in_rec_rhs:true body

@@ -49,6 +49,7 @@ Options:
 
 If FILE is omitted, the program is read from standard input.
 |}
+;;
 
 let fail_usage msg =
   prerr_endline ("compiler: " ^ msg);
@@ -68,65 +69,59 @@ let parse_stop_after = function
   | "anf" -> Anf
   | "closure-conversion" -> Closure
   | "lambda-lifting" -> Lambda
-  | s -> fail_usage ("unknown stage: " ^ s ^ " (expected 'parsing', 'anf', 'closure-conversion' or 'lambda-lifting')")
+  | s ->
+    fail_usage
+      ("unknown stage: "
+       ^ s
+       ^ " (expected 'parsing', 'anf', 'closure-conversion' or 'lambda-lifting')")
 ;;
 
 let parse_args argv =
-  let parser_kind = ref Mylittleml.Frontend.Parse.Topdown in
-  let sticky = ref false in
-  let stop_after = ref Lambda in
-  let output = ref None in
-  let file = ref None in
-  let set_parser s =
-    parser_kind := parse_parser_kind s
-  in
-  let rec loop = function
-    | [] -> ()
+  let rec loop ~parser_kind ~sticky ~stop_after ~output ~file = function
+    | [] -> file, { parser_kind; sticky; stop_after; output }
     | ("-parsing" | "--parser") :: k :: rest ->
-      set_parser k;
-      loop rest
+      loop ~parser_kind:(parse_parser_kind k) ~sticky ~stop_after ~output ~file rest
     | ("-parsing" | "--parser") :: [] ->
       fail_usage "option '-parsing' requires an argument ('topdown' or 'menhir')"
-    | "--sticky" :: rest ->
-      sticky := true;
-      loop rest
+    | "--sticky" :: rest -> loop ~parser_kind ~sticky:true ~stop_after ~output ~file rest
     | "--stop-after" :: stage :: rest ->
-      stop_after := parse_stop_after stage;
-      loop rest
+      loop ~parser_kind ~sticky ~stop_after:(parse_stop_after stage) ~output ~file rest
     | "--stop-after" :: [] -> fail_usage "option '--stop-after' requires an argument"
     | "-o" :: path :: rest ->
-      output := Some path;
-      loop rest
+      loop ~parser_kind ~sticky ~stop_after ~output:(Some path) ~file rest
     | "-o" :: [] -> fail_usage "option '-o' requires an argument"
     | ("--ast" | "--dump-ast") :: rest ->
-      stop_after := Frontend;
-      loop rest
+      loop ~parser_kind ~sticky ~stop_after:Frontend ~output ~file rest
     | "--help" :: _ ->
       print_string usage;
       exit 0
     | a :: rest when String.length a > 0 && a.[0] = '-' ->
       fail_usage ("unrecognized option: " ^ a)
     | f :: rest ->
-      (match !file with
-       | None -> file := Some f
-       | Some _ -> fail_usage "too many arguments");
-      loop rest
+      (match file with
+       | None -> loop ~parser_kind ~sticky ~stop_after ~output ~file:(Some f) rest
+       | Some _ -> fail_usage "too many arguments")
   in
-  loop argv;
-  !file, { parser_kind = !parser_kind; sticky = !sticky; stop_after = !stop_after; output = !output }
+  loop
+    ~parser_kind:Mylittleml.Frontend.Parse.Topdown
+    ~sticky:false
+    ~stop_after:Lambda
+    ~output:None
+    ~file:None
+    argv
 ;;
 
 let read_input = function
   | None -> In_channel.input_all In_channel.stdin
-  | Some path -> (
-    match In_channel.open_bin path with
-    | ch ->
-      Fun.protect
-        (fun () -> In_channel.input_all ch)
-        ~finally:(fun () -> In_channel.close ch)
-    | exception Sys_error msg ->
-      prerr_endline ("compiler: cannot open file: " ^ msg);
-      exit 1)
+  | Some path ->
+    (match In_channel.open_bin path with
+     | ch ->
+       Fun.protect
+         (fun () -> In_channel.input_all ch)
+         ~finally:(fun () -> In_channel.close ch)
+     | exception Sys_error msg ->
+       prerr_endline ("compiler: cannot open file: " ^ msg);
+       exit 1)
 ;;
 
 let run opts source =
@@ -143,23 +138,26 @@ let run opts source =
     | Frontend -> Mylittleml.Frontend.Pp.to_string prog
     | Anf -> Mylittleml.Middleend.Anf.to_string (Mylittleml.Middleend.Anf.anf_prog prog)
     | Closure ->
-      Mylittleml.Middleend.Anf.to_string (Mylittleml.Middleend.Closure.convert_prog (Mylittleml.Middleend.Anf.anf_prog prog))
+      Mylittleml.Middleend.Anf.to_string
+        (Mylittleml.Middleend.Closure.convert_prog
+           (Mylittleml.Middleend.Anf.anf_prog prog))
     | Lambda ->
       Mylittleml.Middleend.Anf.to_string
         (Mylittleml.Middleend.Lambda_lift.lift_prog
-           (Mylittleml.Middleend.Closure.convert_prog (Mylittleml.Middleend.Anf.anf_prog prog)))
+           (Mylittleml.Middleend.Closure.convert_prog
+              (Mylittleml.Middleend.Anf.anf_prog prog)))
   in
-  (match opts.output with
-   | None | Some "-" -> print_endline output
-   | Some path ->
-     (match Out_channel.open_bin path with
-      | ch ->
-        Fun.protect
-          (fun () -> Out_channel.output_string ch (output ^ "\n"))
-          ~finally:(fun () -> Out_channel.close ch)
-      | exception Sys_error msg ->
-        prerr_endline ("compiler: cannot open output file: " ^ msg);
-        exit 1))
+  match opts.output with
+  | None | Some "-" -> print_endline output
+  | Some path ->
+    (match Out_channel.open_bin path with
+     | ch ->
+       Fun.protect
+         (fun () -> Out_channel.output_string ch (output ^ "\n"))
+         ~finally:(fun () -> Out_channel.close ch)
+     | exception Sys_error msg ->
+       prerr_endline ("compiler: cannot open output file: " ^ msg);
+       exit 1)
 ;;
 
 let () =

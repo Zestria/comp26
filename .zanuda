@@ -14,3 +14,9 @@ ignore SchonfinkelML/frontend/bottom_up_parser/parser_gen.mli
 forward mutability_check ignore SchonfinkelML/frontend/config.ml,SchonfinkelML/frontend/config.mli
 forward mutability_check ignore SchonfinkelML/frontend/top_down_parser/parser.ml,SchonfinkelML/frontend/top_down_parser/parser.mli,
 forward mutability_check ignore SchonfinkelML/bench/gen_benchmarks.ml,SchonfinkelML/bench/gen_benchmarks.mli
+ignore MyLittleML/lib/frontend/parser.ml
+ignore MyLittleML/lib/frontend/parser.mli
+forward mutability_check ignore MyLittleML/lib/frontend/parser_topdown.ml
+forward mutability_check ignore MyLittleML/lib/middleend/eval.ml,MyLittleML/lib/middleend/eval.mli
+forward mutability_check ignore MyLittleML/lib/middleend/names.ml,MyLittleML/lib/middleend/names.mli
+forward mutability_check ignore MyLittleML/lib/middleend/lambda_lift.ml

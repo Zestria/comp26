@@ -90,10 +90,8 @@ let free_vars (e : aexp) : Names.StringSet.t =
       let bound' = Names.StringSet.add name bound in
       Names.StringSet.union (aexp bound' rhs) (aexp bound' rest)
   and cexp bound = function
-    | CAtom (AVar v) ->
-      if Names.StringSet.mem v bound
-      then Names.StringSet.empty
-      else Names.StringSet.singleton v
+    | CAtom (AVar v) when Names.StringSet.mem v bound -> Names.StringSet.empty
+    | CAtom (AVar v) -> Names.StringSet.singleton v
     | CAtom _ -> Names.StringSet.empty
     | CBinop (_, a, b) -> Names.StringSet.union (atom bound a) (atom bound b)
     | CNeg a -> atom bound a
@@ -106,10 +104,8 @@ let free_vars (e : aexp) : Names.StringSet.t =
       let bound' = List.fold_left (fun s v -> Names.StringSet.add v s) bound params in
       aexp bound' body
   and atom bound = function
-    | AVar v ->
-      if Names.StringSet.mem v bound
-      then Names.StringSet.empty
-      else Names.StringSet.singleton v
+    | AVar v when Names.StringSet.mem v bound -> Names.StringSet.empty
+    | AVar v -> Names.StringSet.singleton v
     | _ -> Names.StringSet.empty
   in
   aexp Names.StringSet.empty e
@@ -180,7 +176,7 @@ and convert_cexp (st : state) : cexp -> cexp = function
   | CFun _ ->
     (* Unreachable: [convert_aexp] intercepts every [CFun] in [ACexp]
        position, so only fun-free cexps flow through here. *)
-    assert false
+    raise (Invalid_argument "Closure.convert_cexp: unreachable CFun")
   | (CAtom _ | CBinop _ | CNeg _ | CApp _) as c -> c
 ;;
 
