@@ -59,8 +59,6 @@ type instr =
   (* Control flow *)
   | Beq of reg * reg * string
   | Bne of reg * reg * string
-  | Blt of reg * reg * string
-  | Bge of reg * reg * string
   | Label of string
   (* Assembler pseudoinstructions *)
   | J of string
@@ -87,8 +85,6 @@ val ld : (instr -> 'a) -> reg -> mem -> 'a
 val sd : (instr -> 'a) -> reg -> mem -> 'a
 val beq : (instr -> 'a) -> reg -> reg -> string -> 'a
 val bne : (instr -> 'a) -> reg -> reg -> string -> 'a
-val blt : (instr -> 'a) -> reg -> reg -> string -> 'a
-val bge : (instr -> 'a) -> reg -> reg -> string -> 'a
 val j : (instr -> 'a) -> string -> 'a
 val call : (instr -> 'a) -> string -> 'a
 val ret : (instr -> 'a) -> 'a

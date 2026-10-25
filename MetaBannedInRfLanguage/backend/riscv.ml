@@ -92,8 +92,6 @@ type instr =
   (* Control flow *)
   | Beq of reg * reg * string
   | Bne of reg * reg * string
-  | Blt of reg * reg * string
-  | Bge of reg * reg * string
   | Label of string
   (* Assembler pseudoinstructions *)
   | J of string
@@ -120,8 +118,6 @@ let ld k rd mem = k (Ld (rd, mem))
 let sd k rs mem = k (Sd (rs, mem))
 let beq k rs1 rs2 label = k (Beq (rs1, rs2, label))
 let bne k rs1 rs2 label = k (Bne (rs1, rs2, label))
-let blt k rs1 rs2 label = k (Blt (rs1, rs2, label))
-let bge k rs1 rs2 label = k (Bge (rs1, rs2, label))
 let j k label = k (J label)
 let call k label = k (Call label)
 let ret k = k Ret
@@ -193,8 +189,6 @@ let pp_instr = function
   | Sd (rs, mem) -> pp_mem "sd" rs mem
   | Beq (rs1, rs2, label) -> pp_branch "beq" rs1 rs2 label
   | Bne (rs1, rs2, label) -> pp_branch "bne" rs1 rs2 label
-  | Blt (rs1, rs2, label) -> pp_branch "blt" rs1 rs2 label
-  | Bge (rs1, rs2, label) -> pp_branch "bge" rs1 rs2 label
   | J label -> Printf.sprintf "  j %s" label
   | Call label -> Printf.sprintf "  call %s" label
   | Ret -> "  ret"
