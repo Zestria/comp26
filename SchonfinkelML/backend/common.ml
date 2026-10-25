@@ -101,6 +101,8 @@ type instr =
   | SLLW of reg * reg * reg
   | SRLW of reg * reg * reg
   | SRAW of reg * reg * reg
+  (* ecall *)
+  | ECALL
   (* Pseudoinstructions *)
   | MV of reg * reg
   | LI of reg * int
@@ -116,6 +118,19 @@ type error =
       }
   | Invalid_label of string
   | Unsupported of string
+
+let pp_error fmt = function
+  | Invalid_immediate { instruction; value; min; max } ->
+    Format.fprintf
+      fmt
+      "Invalid immediate for %s: %d (expected %d..%d)"
+      instruction
+      value
+      min
+      max
+  | Invalid_label label -> Format.fprintf fmt "Invalid label: %S" label
+  | Unsupported message -> Format.fprintf fmt "Unsupported: %s" message
+;;
 
 type 'a checked = ('a, error) result
 
@@ -189,6 +204,7 @@ let subw rd rs1 rs2 = ok (SUBW (rd, rs1, rs2))
 let sllw rd rs1 rs2 = ok (SLLW (rd, rs1, rs2))
 let srlw rd rs1 rs2 = ok (SRLW (rd, rs1, rs2))
 let sraw rd rs1 rs2 = ok (SRAW (rd, rs1, rs2))
+let ecall = ok ECALL
 let mv rd rs = ok (MV (rd, rs))
 let li rd imm = ok (LI (rd, imm))
 let nop = ok NOP

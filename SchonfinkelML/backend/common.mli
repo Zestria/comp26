@@ -93,6 +93,7 @@ type instr =
   | SLLW of reg * reg * reg (** sllw *)
   | SRLW of reg * reg * reg (** srlw *)
   | SRAW of reg * reg * reg (** sraw *)
+  | ECALL (** ecall *)
   | MV of reg * reg (** mv *)
   | LI of reg * int (** li *)
   | NOP (** nop *)
@@ -104,9 +105,11 @@ type error =
       ; value : int
       ; min : int
       ; max : int
-      } (** Immediate is not in range *)
-  | Invalid_label of string (** Label should not be empty *)
-  | Unsupported of string (** Generic error of unsupported features *)
+      }
+  | Invalid_label of string
+  | Unsupported of string
+
+val pp_error : Format.formatter -> error -> unit
 
 type 'a checked = ('a, error) result
 
@@ -170,6 +173,7 @@ val subw : reg -> reg -> reg -> (instr, 'a) result
 val sllw : reg -> reg -> reg -> (instr, 'a) result
 val srlw : reg -> reg -> reg -> (instr, 'a) result
 val sraw : reg -> reg -> reg -> (instr, 'a) result
+val ecall : (instr, 'a) result
 val mv : reg -> reg -> (instr, 'a) result
 val li : reg -> int -> (instr, 'a) result
 val nop : (instr, 'a) result
