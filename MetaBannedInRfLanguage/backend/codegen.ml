@@ -252,13 +252,15 @@ let prologue ~frame_size =
   let* () = check_frame_size frame_size in
   if frame_size <= 2032
   then
-    let* () = emit addi sp sp (-frame_size) in
+    let* () =
+      emit addi sp sp (-frame_size) ~comm:"frame: saved ra at fp-8, saved fp at fp-16"
+    in
     let* () = emit sd ra { offset = frame_size - 8; base = sp } in
     let* () = emit sd fp { offset = frame_size - 16; base = sp } in
     emit addi fp sp frame_size
   else
     (* A large frame does not fit in addi's signed 12-bit immediate. *)
-    let* () = emit li t0 frame_size in
+    let* () = emit li t0 frame_size ~comm:"frame: saved ra at fp-8, saved fp at fp-16" in
     let* () = emit sub sp sp t0 in
     let* () = emit add t0 sp t0 in
     let* () = emit sd ra { offset = -8; base = t0 } in
@@ -296,7 +298,17 @@ let emit_function ~symbol ~frame_size body_rev =
 (* ---------- Closure allocation ---------- *)
 
 let alloc_closure ~symbol ~arity ~received =
-  let* () = emit la a0 symbol in
+  let* () =
+    emit
+      la
+      a0
+      symbol
+      ~comm:
+        (Printf.sprintf
+           "closure: %d captured arguments, %d still expected"
+           received
+           arity)
+  in
   let* () = emit li a1 arity in
   let* () = emit li a2 received in
   let* () = if received = 0 then emit li A3 0 else emit mv A3 sp in
@@ -375,7 +387,7 @@ let gen_binary_operands left right =
 (* ---------- Arithmetic ---------- *)
 
 let tag_result dst =
-  let* () = emit slli dst dst 1 in
+  let* () = emit slli dst dst 1 ~comm:"tag result: 2*n + 1" in
   emit addi dst dst 1
 ;;
 
@@ -404,7 +416,7 @@ let gen_add_immediate ~dst value n =
 
 let gen_negation ~dst arg =
   let* src = gen_operand ~scratch:dst arg in
-  let* () = emit sub dst x0 src in
+  let* () = emit sub dst x0 src ~comm:"tag(-x) = 2 - tag(x)" in
   emit addi dst dst 2 (* tag(-n) = 2 - tag(n) *)
 ;;
 
@@ -415,10 +427,10 @@ let gen_binop ~dst op left right =
   match op with
   | "+" ->
     let* () = emit add dst left_reg right_reg in
-    emit addi dst dst (-1)
+    emit addi dst dst (-1) ~comm:"tag(x+y) = tag(x) + tag(y) - 1"
   | "-" ->
     let* () = emit sub dst left_reg right_reg in
-    emit addi dst dst 1
+    emit addi dst dst 1 ~comm:"tag(x-y) = tag(x) - tag(y) + 1"
   | "*" ->
     let* () = untag_operands left_reg right_reg in
     let* () = emit mul dst t0 t1 in
@@ -461,7 +473,7 @@ let gen_arithmetic ~dst op args =
 
 let gen_not ~dst arg =
   let* src = gen_operand ~scratch:dst arg in
-  let* () = emit sub dst x0 src in
+  let* () = emit sub dst x0 src ~comm:"not b = 4 - b; false=1, true=3" in
   emit addi dst dst 4 (* not false = 4 - 1; not true = 4 - 3 *)
 ;;
 
@@ -534,7 +546,13 @@ let with_call_frame args body =
 let gen_direct_call ~symbol args =
   with_call_frame
     args
-    (let* () = emit mv a0 sp in
+    (let* () =
+       emit
+         mv
+         a0
+         sp
+         ~comm:(Printf.sprintf "ML call: a0 points to %d arguments" (List.length args))
+     in
      emit call symbol)
 ;;
 
@@ -551,7 +569,7 @@ let gen_apply fn args =
     (let* () = gen_imm ~dst:a0 fn in
      let* () = emit li a1 (List.length args) in
      let* () = emit mv a2 sp in
-     emit call "apply")
+     emit call "apply" ~comm:"a0 = closure, a1 = argument count, a2 = argument buffer")
 ;;
 
 (* ---------- ANF expressions ---------- *)
@@ -583,7 +601,7 @@ let rec gen_cexpr = function
             | "print_int", [ arg ] ->
               let* () = gen_imm ~dst:a0 arg in
               let* () = emit call "print_int" in
-              emit li a0 1 (* The C function returns void; the ML result is unit. *)
+              emit li a0 1 ~comm:"print_int returns void; ML result is tagged unit"
             | "print_int", _ -> fail "print_int expects one argument"
             | _ -> fail (Printf.sprintf "unsupported function %S" name))))
   | CApp (fn, args) -> gen_apply fn args
@@ -594,7 +612,7 @@ let rec gen_cexpr = function
     let* end_label = fresh_label in
     let* () = gen_imm ~dst:a0 cond in
     (* Tagged false is 1, not zero. *)
-    let* () = emit li t0 1 in
+    let* () = emit li t0 1 ~comm:"tagged false is 1" in
     let* () = emit beq a0 t0 else_label in
     let* () = gen_aexpr then_branch in
     let* () = emit j end_label in

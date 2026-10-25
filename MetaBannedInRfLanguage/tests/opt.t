@@ -64,7 +64,7 @@ with no frame, parameter spills, or redundant register moves.
   $ ../driver/compiler.exe --stop-after riscv -o wrappers.s wrappers.ml
   $ grep -c '^  add a0, t0, t1$' wrappers.s
   1
-  $ tail -n 5 wrappers.s
+  $ sed '/^  # /d' wrappers.s | tail -n 5
     ld t0, 0(a0)
     ld t1, 8(a0)
     add a0, t0, t1
@@ -107,7 +107,8 @@ Only the selected branches' additions of +2 and -2 to the tagged value remain.
     addi a0, a0, 2
     addi a0, a0, -2
 
-Inspect complete wrapper bodies, excluding main and generated labels.
+Inspect complete wrapper instruction sequences, excluding main, generated labels,
+and explanatory comments.
 These programs contain exactly one wrapper after main's ret, so extra frame
 instructions, spills, moves, or helper calls would all appear in the output.
 
@@ -118,7 +119,7 @@ two arithmetic instructions on the tagged value, with no decoding or branches.
   >   printf 'let op = (%s)\n' "$op" > unary.ml
   >   ../driver/compiler.exe --stop-after riscv -o unary.s unary.ml || break
   >   printf '%s:\n' "$op"
-  >   sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d' unary.s
+  >   sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d; /^  # /d' unary.s
   > done
   ~+:
     ld t0, 0(a0)
@@ -143,7 +144,7 @@ All three return a tagged boolean without allocating memory.
   >   printf 'let op = (%s)\n' "$op" > comparison.ml
   >   ../driver/compiler.exe --stop-after riscv -o comparison.s comparison.ml || break
   >   printf '%s:\n' "$op"
-  >   sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d' comparison.s
+  >   sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d; /^  # /d' comparison.s
   > done
   <:
     ld t0, 0(a0)
@@ -176,7 +177,7 @@ Source-level short-circuit semantics are checked in ops.t and codegen.t.
   >   printf 'let op = (%s)\n' "$op" > boolean.ml
   >   ../driver/compiler.exe --stop-after riscv -o boolean.s boolean.ml || break
   >   printf '%s:\n' "$op"
-  >   sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d' boolean.s
+  >   sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d; /^  # /d' boolean.s
   > done
   &&:
     ld t0, 0(a0)
@@ -194,7 +195,7 @@ tags its result in a0. Even this wrapper has no frame or runtime arithmetic call
 
   $ printf 'let op = ( * )\n' > multiplication.ml
   $ ../driver/compiler.exe --stop-after riscv -o multiplication.s multiplication.ml
-  $ sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d' multiplication.s
+  $ sed '1,/^  ret$/d; /^\.L[0-9][0-9]*:$/d; /^  # /d' multiplication.s
     ld t0, 0(a0)
     ld t1, 8(a0)
     srai t0, t0, 1
