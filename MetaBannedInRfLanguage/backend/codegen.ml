@@ -381,6 +381,82 @@ let gen_logic ~dst op args =
   | _ -> fail (Printf.sprintf "unsupported logical operator %S" op)
 ;;
 
+(* ---------- ANF expressions ---------- *)
+
+let store_local ~src offset =
+  if offset >= -2048 && offset <= 2047
+  then emit sd src { offset; base = fp }
+  else (
+    let scratch = if src = t0 then t1 else t0 in
+    let* () = emit li scratch offset in
+    let* () = emit add scratch fp scratch in
+    emit sd src { offset = 0; base = scratch })
+;;
+
+(* Each expression leaves its result in a0. Values that must survive a call
+   are stored in the frame or in globals. *)
+let gen_cexpr = function
+  | CImm imm -> gen_imm ~dst:a0 imm
+  | CApp (ImmVar name, args) ->
+    let* state = get in
+    if SMap.mem name state.env
+    then
+      fail (Printf.sprintf "calls to user-defined functions are not implemented: %S" name)
+    else (
+      match name, args with
+      | ("+" | "-" | "*" | "/"), _ -> gen_arithmetic ~dst:a0 name args
+      | ("not" | "&&" | "||" | "<" | "<=" | ">" | ">=" | "=" | "<>"), _ ->
+        gen_logic ~dst:a0 name args
+      | "print_int", [ arg ] ->
+        let* () = gen_imm ~dst:a0 arg in
+        let* () = emit call "print_int" in
+        emit li a0 1 (* The C function returns void; the ML result is unit. *)
+      | "print_int", _ -> fail "print_int expects one argument"
+      | _ -> fail (Printf.sprintf "unsupported function %S" name))
+  | CApp _ -> fail "indirect function calls are not implemented yet"
+  | CIte _ -> fail "conditional expressions are not implemented yet"
+  | CFun _ -> fail "function definitions are not implemented yet"
+  | CTuple _ -> fail "tuple generation is not implemented yet"
+  | CMatchFailure -> fail "match failure generation is not implemented yet"
+;;
+
+let rec gen_aexpr = function
+  | ACExpr expr -> gen_cexpr expr
+  | ALet (name, value, body) ->
+    let* outer = get in
+    let* () = gen_cexpr value in
+    let* offset = alloc_local name in
+    let* () = store_local ~src:a0 offset in
+    let* () = gen_aexpr body in
+    modify (fun state -> { state with env = outer.env })
+  | ALetTuple _ -> fail "tuple destructuring is not implemented yet"
+  | ALetRec _ -> fail "recursive function definitions are not implemented yet"
+;;
+
+let rec gen_items = function
+  | [] -> return []
+  | AValue (name, body) :: rest ->
+    let* () = gen_aexpr body in
+    let* symbol = fresh_label in
+    let* () = emit la t0 symbol in
+    let* () = emit sd a0 { offset = 0; base = t0 } in
+    let* () = bind_var name (Global symbol) in
+    let+ globals = gen_items rest in
+    symbol :: globals
+  | AEval body :: rest ->
+    let* () = gen_aexpr body in
+    gen_items rest
+  | ARec _ :: _ -> fail "recursive function definitions are not implemented yet"
+;;
+
+let rec gen_globals = function
+  | [] -> return ()
+  | symbol :: rest ->
+    let* () = emit label symbol in
+    let* () = emit_directive (Quad 1) in
+    gen_globals rest
+;;
+
 (* ---------- Entry point ---------- *)
 
 let run computation =
@@ -389,6 +465,33 @@ let run computation =
     (StateResult.run initial_state computation)
 ;;
 
-let gen_program (_ : Anf.program) =
-  Result.map snd (run (fail "RISC-V program generation is not implemented yet"))
+let gen_program (program : Anf.program) =
+  let generate =
+    (* Generate the body first to learn how much frame space it needs. *)
+    let* globals = gen_items program in
+    let* frame_size = get_frame_size in
+    let* body = get in
+    let* () = put { body with code_rev = [] } in
+    let* () =
+      match globals with
+      | [] -> return ()
+      | _ ->
+        let* () = emit_directive (Section Data) in
+        let* () = emit_directive (P2align 3) in
+        gen_globals globals
+    in
+    let* () = emit_directive (Section Text) in
+    let* () = emit_directive (Globl "main") in
+    let* () = emit label "main" in
+    let* () = prologue ~frame_size in
+    let* () =
+      modify (fun state -> { state with code_rev = body.code_rev @ state.code_rev })
+    in
+    let* () =
+      emit li a0 0
+      (* C main returns an untagged exit status. *)
+    in
+    epilogue ~frame_size
+  in
+  Result.map snd (run generate)
 ;;
