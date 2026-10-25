@@ -62,15 +62,26 @@ let initial_state =
 
 let emit ?(comm = "") instruction =
   instruction (fun i ->
-    modify (fun state ->
-      let code_rev =
-        if String.equal comm "" then state.code_rev else Comment comm :: state.code_rev
-      in
-      { state with code_rev = Instruction i :: code_rev }))
+    match i with
+    | (Addi (_, _, n) | Ld (_, { offset = n; _ }) | Sd (_, { offset = n; _ }))
+      when n < -2048 || n > 2047 ->
+      fail "instruction immediate or offset is outside [-2048, 2047]"
+    | (Slli (_, _, n) | Srai (_, _, n)) when n < 0 || n > 63 ->
+      fail "shift amount is outside [0, 63]"
+    | _ ->
+      modify (fun state ->
+        let code_rev =
+          if String.equal comm "" then state.code_rev else Comment comm :: state.code_rev
+        in
+        { state with code_rev = Instruction i :: code_rev }))
 ;;
 
 let emit_directive directive =
-  modify (fun state -> { state with code_rev = Directive directive :: state.code_rev })
+  match directive with
+  | P2align n when n < 0 -> fail "negative alignment exponent"
+  | Zero bytes when bytes < 0 -> fail "negative zero-fill size"
+  | _ ->
+    modify (fun state -> { state with code_rev = Directive directive :: state.code_rev })
 ;;
 
 (* ---------- Labels ---------- *)

@@ -146,13 +146,6 @@ type asm_item =
 
 type asm = asm_item list
 
-let check_imm12 name imm =
-  if imm < -2048 || imm > 2047
-  then
-    invalid_arg
-      (Printf.sprintf "Riscv.%s: immediate %d is outside [-2048, 2047]" name imm)
-;;
-
 let pp_rrr name rd rs1 rs2 =
   Printf.sprintf
     "  %s %s, %s, %s"
@@ -167,12 +160,10 @@ let pp_rr name rd rs =
 ;;
 
 let pp_rri name rd rs imm =
-  check_imm12 name imm;
   Printf.sprintf "  %s %s, %s, %d" name (reg_to_string rd) (reg_to_string rs) imm
 ;;
 
 let pp_mem name reg { offset; base } =
-  check_imm12 name offset;
   Printf.sprintf "  %s %s, %d(%s)" name (reg_to_string reg) offset (reg_to_string base)
 ;;
 
@@ -215,13 +206,9 @@ let pp_directive = function
      | Bss -> "  .bss"
      | Rodata -> "  .section .rodata")
   | Globl label -> Printf.sprintf "  .globl %s" label
-  | P2align n ->
-    if n < 0 then invalid_arg "Riscv.pp_directive: negative alignment exponent";
-    Printf.sprintf "  .p2align %d" n
-  | Quad n -> Printf.sprintf "  .quad %Ld" n
-  | Zero bytes ->
-    if bytes < 0 then invalid_arg "Riscv.pp_directive: negative zero-fill size";
-    Printf.sprintf "  .zero %d" bytes
+  | P2align n -> Printf.sprintf "  .p2align %d" n
+  | Quad n -> Printf.sprintf "  .quad %d" n
+  | Zero bytes -> Printf.sprintf "  .zero %d" bytes
 ;;
 
 let pp_asm_item = function
