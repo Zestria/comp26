@@ -5,6 +5,6 @@
 #include <stdio.h>
 
 void print_int(int64_t n) {
-    putchar(n);
+    printf("%ld", n >> 1);
     fflush(stdout);
 }
