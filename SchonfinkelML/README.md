@@ -19,6 +19,14 @@ sudo apt install -y \
    binutils-riscv64-linux-gnu qemu-user gcc
 ```
 
+The compiler returns assembly file as a result, to get complete riscv64 executable run these commands:
+``` bash
+# Your input is `input.S`
+riscv64-linux-gnu-as -march=rv64gc input.S -o temp.o
+riscv64-linux-gnu-ld temp.o -o file.exe
+qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./a.out
+```
+
 
 ## How to run
 
