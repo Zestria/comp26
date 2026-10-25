@@ -11,25 +11,34 @@ open Shmel_middleend
 (** Code generation for the body of a function (the output of lambda lifting,
     so the body has no [fun] and no local [let rec]).
 
-    The frame follows the calling convention of the project (cdecl): the
-    caller passes the arguments on the stack, so parameter [i] is at
-    [8*i(s0)]; [s0] is the frame pointer, [ra] and the old [s0] are saved at
-    [-8(s0)] and [-16(s0)]; every local variable gets a stack slot at
-    [-24(s0)], [-32(s0)], ... The value of every expression is computed into
-    [a0], temporaries [t0], [t1] hold the operands. *)
+    The calling convention is the standard one of RISC-V (psABI): the first 8
+    arguments come in [a0] .. [a7], the others on the stack, at [0(s0)],
+    [8(s0)], ...; the result is returned in [a0]; [t*] and [a*] are not
+    preserved by calls. [s0] is the frame pointer, [ra] and the old [s0] are
+    saved at [-8(s0)] and [-16(s0)]; stack slots for variables are at
+    [-24(s0)], [-32(s0)], ...
+
+    The value of every expression is computed into [a0], temporaries [t0],
+    [t1] hold the operands, [t6] addresses far slots. A parameter is read
+    straight from its register while the register still holds it ([a0] until
+    the first computation, [a1] .. [a7] until the first call); only the
+    parameters needed later are saved to slots when the function starts. *)
 
 (** What the body needs from the code for calls and closures (part 2). *)
 type hooks =
   { load_global : Riscv.reg -> string -> (Riscv.instr list, string) result
     (** loads a name that is neither a parameter nor a local, e.g. a top-level
-        function or value, into the register *)
+        function or value, into the register; it must not change any other
+        register, the parameters may still be in [a1] .. [a7] *)
   ; call :
       load:(Riscv.reg -> Anf.imm -> (Riscv.instr list, string) result)
       -> Anf.imm
       -> Anf.imm list
       -> (Riscv.instr list, string) result
     (** applies the function to the arguments, the result is in [a0]; [load]
-        puts the value of a parameter, local or global into a register *)
+        puts the value of a parameter, local or global into a register (it
+        reads only stack slots and globals, so the argument registers can be
+        filled in any order) *)
   }
 
 (** Hooks for code without calls and global names: both are errors. *)
