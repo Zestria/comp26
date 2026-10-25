@@ -17,6 +17,12 @@ void print_int(int64_t n) {
     fflush(stdout);
 }
 
+/* Adapter to the ML argument-buffer convention when print_int is a value. */
+int64_t print_int_closure(int64_t *args) {
+    print_int(args[0]);
+    return 1; /* tagged unit */
+}
+
 /* ========== Closure ========== */
 
 /* Typed function pointer: checked by the compiler, unlike void*. */
@@ -39,7 +45,7 @@ int64_t *closure_get_env(int64_t cf) {
 
 /*
  * Allocate a closure capturing env_len values from env.
- * code is the entry point, arity is the number of expected arguments.
+ * code is the entry point, arity is the number of arguments still expected.
  */
 int64_t closure_alloc(int64_t code, int64_t arity, int64_t env_len, int64_t *env) {
     closure *cl = (closure *)malloc(sizeof(closure) + (size_t)env_len * sizeof(int64_t));
@@ -71,6 +77,10 @@ int64_t closure_call(int64_t cf, int64_t nargs, int64_t *args) {
     size_t total = (size_t)received + (size_t)nargs;
     int64_t *packed;
     int64_t res;
+
+    if (received == 0) {
+        return code(args);
+    }
 
     packed = (int64_t *)malloc(total * sizeof(int64_t));
     if (!packed) {

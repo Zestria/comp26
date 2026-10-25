@@ -269,6 +269,16 @@ let emit_function ~symbol ~frame_size body_rev =
   epilogue ~frame_size
 ;;
 
+(* ---------- Closure allocation ---------- *)
+
+let alloc_closure ~symbol ~arity ~received =
+  let* () = emit la a0 symbol in
+  let* () = emit li a1 arity in
+  let* () = emit li a2 received in
+  let* () = if received = 0 then emit li A3 0 else emit mv A3 sp in
+  emit call "closure_alloc"
+;;
+
 (* ---------- Operands ---------- *)
 
 (* ML values are tagged words: integers use 2*n+1, false/unit use 1, true
@@ -288,8 +298,17 @@ let gen_imm ~dst = function
   | ImmUnit -> emit li dst 1
   | ImmVar name ->
     let* fn = lookup_function name in
+    let* state = get in
+    let fn =
+      match fn with
+      | None when String.equal name "print_int" && not (SMap.mem name state.env) ->
+        Some ("print_int_closure", 1)
+      | _ -> fn
+    in
     (match fn with
-     | Some _ -> fail (Printf.sprintf "function %S as a value requires closures" name)
+     | Some (symbol, arity) ->
+       let* () = alloc_closure ~symbol ~arity ~received:0 in
+       if dst = a0 then return () else emit mv dst a0
      | None ->
        let* location = lookup_var name in
        (match location with
@@ -474,7 +493,7 @@ let gen_logic ~dst op args =
    - no live ML values depend on caller-saved registers.
    C runtime calls (e.g. print_int) use the usual RISC-V calling convention. *)
 
-let gen_direct_call ~symbol args =
+let gen_args args =
   let arg_size = ((8 * List.length args) + 15) / 16 * 16 in
   let rec store_args offset = function
     | [] -> return ()
@@ -485,8 +504,31 @@ let gen_direct_call ~symbol args =
   in
   let* () = adjust_sp (-arg_size) in
   let* () = store_args 0 args in
+  return arg_size
+;;
+
+let gen_direct_call ~symbol args =
+  let* arg_size = gen_args args in
   let* () = emit mv a0 sp in
   let* () = emit call symbol in
+  adjust_sp arg_size
+;;
+
+let gen_partial_application ~symbol ~arity args =
+  let* arg_size = gen_args args in
+  let received = List.length args in
+  let* () = alloc_closure ~symbol ~arity:(arity - received) ~received in
+  adjust_sp arg_size
+;;
+
+let gen_apply fn args =
+  (* Building arguments may allocate closures and clobber a0, so load the
+     callee only after the argument array is complete. *)
+  let* arg_size = gen_args args in
+  let* () = gen_imm ~dst:a0 fn in
+  let* () = emit li a1 (List.length args) in
+  let* () = emit mv a2 sp in
+  let* () = emit call "apply" in
   adjust_sp arg_size
 ;;
 
@@ -500,11 +542,12 @@ let rec gen_cexpr = function
     let* state = get in
     (match SMap.find_opt name state.functions with
      | Some (symbol, arity) when arity = List.length args -> gen_direct_call ~symbol args
-     | Some _ ->
-       fail (Printf.sprintf "partial or over-application of %S requires closures" name)
+     | Some (symbol, arity) when List.length args < arity ->
+       gen_partial_application ~symbol ~arity args
+     | Some _ -> gen_apply (ImmVar name) args
      | None ->
        if SMap.mem name state.env
-       then fail (Printf.sprintf "indirect call to %S requires closures" name)
+       then gen_apply (ImmVar name) args
        else (
          match name, args with
          | ("+" | "-" | "*" | "/"), _ -> gen_arithmetic ~dst:a0 name args
@@ -516,7 +559,7 @@ let rec gen_cexpr = function
            emit li a0 1 (* The C function returns void; the ML result is unit. *)
          | "print_int", _ -> fail "print_int expects one argument"
          | _ -> fail (Printf.sprintf "unsupported function %S" name)))
-  | CApp _ -> fail "indirect function calls are not implemented yet"
+  | CApp (fn, args) -> gen_apply fn args
   | CIte (ImmBool true, then_branch, _) -> gen_aexpr then_branch
   | CIte (ImmBool false, _, else_branch) -> gen_aexpr else_branch
   | CIte (cond, then_branch, else_branch) ->
