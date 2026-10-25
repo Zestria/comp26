@@ -137,6 +137,124 @@ Nested lambdas: LL lifts the inner one first, then the outer
   let g y = 10 + y;;
   let main = g 1;;
 
+Recursive calls pass captures explicitly before lambda lifting
+
+  $ cat > capture.ml <<EOF
+  > let make n =
+  >   let rec loop x = if x = 0 then n else loop (x - 1) in
+  >   loop
+  > ;;
+  > let result = make 42 3
+  > EOF
+  $ ../driver/compiler.exe --stop-after cc capture.ml
+  let make n =
+    let rec loop n x =
+      let t1 = x = 0 in
+      if t1
+      then n
+      else
+        let t2 = x - 1 in
+        loop n t2
+    in
+    loop n
+  ;;
+  let result = make 42 3;;
+
+  $ ../driver/compiler.exe --stop-after ll capture.ml
+  let rec loop n x =
+    let t1 = x = 0 in
+    if t1
+    then n
+    else
+      let t2 = x - 1 in
+      loop n t2
+  ;;
+  let make n = loop n;;
+  let result = make 42 3;;
+  $ ./interp_check.exe capture.ml
+  result = 42
+  $ ../driver/compiler.exe --stop-after riscv -o capture.s capture.ml
+
+Mutually recursive functions receive the captures of the whole group
+
+  $ cat > mutual.ml <<EOF
+  > let make a b =
+  >   let rec even n = if n = 0 then a else odd (n - 1)
+  >   and odd n = if n = 0 then b else even (n - 1) in
+  >   even
+  > ;;
+  > let result = make 40 42 3
+  > EOF
+  $ ../driver/compiler.exe --stop-after ll mutual.ml
+  let rec even a b n =
+    let t1 = n = 0 in
+    if t1
+    then a
+    else
+      let t2 = n - 1 in
+      odd a b t2
+  and odd a b n =
+    let t3 = n = 0 in
+    if t3
+    then b
+    else
+      let t4 = n - 1 in
+      even a b t4
+  ;;
+  let make a b = even a b;;
+  let result = make 40 42 3;;
+  $ ./interp_check.exe mutual.ml
+  result = 42
+  $ ../driver/compiler.exe --stop-after riscv -o mutual.s mutual.ml
+
+Parameters and local bindings preserve the captured value
+
+  $ cat > shadow.ml <<EOF
+  > let make k =
+  >   let rec f n =
+  >     if n = 0 then k else let k = n + 1 in f (n - 1) + k
+  >   in f
+  > ;;
+  > let result = make 1 2
+  > EOF
+  $ ./interp_check.exe shadow.ml
+  result = 6
+  $ ../driver/compiler.exe --stop-after riscv -o shadow.s shadow.ml
+
+  $ cat > parameter.ml <<EOF
+  > let make k =
+  >   let rec f k = k + 1 and g x = k + f x in g
+  > ;;
+  > let result = make 40 1
+  > EOF
+  $ ./interp_check.exe parameter.ml
+  result = 42
+  $ ../driver/compiler.exe --stop-after riscv -o parameter.s parameter.ml
+
+Lifting a local print_int preserves the standard function outside its scope
+
+  $ cat > primitive.ml <<EOF
+  > let make base =
+  >   let rec print_int n = if n = 0 then base else print_int (n - 1) in
+  >   print_int
+  > ;;
+  > let result = make 42 3
+  > EOF
+  $ ../driver/compiler.exe --stop-after ll primitive.ml
+  let rec print_int__ll1 base n =
+    let t1 = n = 0 in
+    if t1
+    then base
+    else
+      let t2 = n - 1 in
+      print_int__ll1 base t2
+  ;;
+  let make base = print_int__ll1 base;;
+  let result = make 42 3;;
+  $ ./interp_check.exe primitive.ml
+  result = 42
+  $ ../driver/compiler.exe --stop-after riscv -o primitive.s primitive.ml
+
 The output of lambda lifting parses back
 
   $ ../driver/compiler.exe -parsing topdown --stop-after ll fac_cps.ml > ll_fac.ml

@@ -7,4 +7,4 @@
 
 (cram
  (package MetaBannedInRfLanguage)
- (deps ../driver/compiler.exe ./interp_check.exe))
+ (deps ../driver/compiler.exe ./interp_check.exe ../backend/runtime.c))
