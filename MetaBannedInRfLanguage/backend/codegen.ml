@@ -334,6 +334,53 @@ let gen_arithmetic ~dst op args =
   | _ -> fail (Printf.sprintf "unsupported arithmetic operator %S" op)
 ;;
 
+(* ---------- Comparisons and booleans ---------- *)
+
+let gen_comparison ~dst op left right =
+  let* left_reg, right_reg = gen_binary_operands left right in
+  let* () =
+    match op with
+    | "<" -> emit slt dst left_reg right_reg
+    | ">" -> emit slt dst right_reg left_reg
+    | "<=" ->
+      let* () = emit slt dst right_reg left_reg in
+      emit seqz dst dst
+    | ">=" ->
+      let* () = emit slt dst left_reg right_reg in
+      emit seqz dst dst
+    | "=" ->
+      let* () = emit xor dst left_reg right_reg in
+      emit seqz dst dst
+    | "<>" ->
+      let* () = emit xor dst left_reg right_reg in
+      emit snez dst dst
+    | _ -> fail (Printf.sprintf "unsupported comparison operator %S" op)
+  in
+  tag_result dst
+;;
+
+let gen_not ~dst arg =
+  let* src = gen_operand ~scratch:dst arg in
+  let* () = emit sub dst x0 src in
+  emit addi dst dst 4 (* not false = 4 - 1; not true = 4 - 3 *)
+;;
+
+let gen_logic ~dst op args =
+  match op, args with
+  | "not", [ arg ] -> gen_not ~dst arg
+  | ("&&" | "||"), [ left; right ] ->
+    (* For false = 1 and true = 3, bitwise and/or preserve the boolean tag. *)
+    let* left_reg, right_reg = gen_binary_operands left right in
+    if String.equal op "&&"
+    then emit and_ dst left_reg right_reg
+    else emit or_ dst left_reg right_reg
+  | ("<" | "<=" | ">" | ">=" | "=" | "<>"), [ left; right ] ->
+    gen_comparison ~dst op left right
+  | ("not" | "&&" | "||" | "<" | "<=" | ">" | ">=" | "=" | "<>"), _ ->
+    fail (Printf.sprintf "wrong number of arguments to %S: %d" op (List.length args))
+  | _ -> fail (Printf.sprintf "unsupported logical operator %S" op)
+;;
+
 (* ---------- Entry point ---------- *)
 
 let run computation =
