@@ -8,12 +8,16 @@
 
 open Common
 
+type item =
+  | Instruction of instr
+  | Label of string
+
 module Monad = struct
-  type 'a t = instr list -> ('a * instr list, error) result
+  type 'a t = item list -> ('a * item list, error) result
 
-  let return x = fun code -> Ok (x, code)
+  let return (x : 'a) : 'a t = fun code -> Ok (x, code)
 
-  let bind m f =
+  let bind (m : 'a t) (f : 'a -> 'b t) : 'b t =
     fun code ->
     match m code with
     | Error e -> Error e
@@ -26,10 +30,20 @@ module Monad = struct
     fun code ->
     match instruction with
     | Error e -> Error e
-    | Ok instruction -> Ok ((), instruction :: code)
+    | Ok instruction -> Ok ((), Instruction instruction :: code)
   ;;
 
-  let run (program : unit t) : (instr list, error) result =
+  let label (name : string) : unit t =
+    fun code ->
+    if String.trim name = ""
+    then Error (Invalid_label name)
+    else Ok ((), Label name :: code)
+  ;;
+
+  let start : unit t = label "_start"
+  let function_label (name : string) : unit t = label name
+
+  let run (program : unit t) : (item list, error) result =
     match program [] with
     | Error e -> Error e
     | Ok ((), reversed_code) -> Ok (List.rev reversed_code)

@@ -1,28 +1,16 @@
-[@@@ocaml.text "/*"]
-
-(** Copyright 2023-2025, Kakadu and contributors *)
-
-(** SPDX-License-Identifier: LGPL-3.0-or-later *)
-
-[@@@ocaml.text "/*"]
+type item =
+  | Instruction of Common.instr (** An instruction *)
+  | Label of string (** A label *)
 
 module Monad : sig
-  type 'a t = Common.instr list -> ('a * Common.instr list, Common.error) result
+  type 'a t = item list -> ('a * item list, Common.error) result
 
-  val return : 'a -> 'b -> ('a * 'b, 'c) result
-
-  val bind
-    :  ('a -> ('b * 'c, 'd) result)
-    -> ('b -> 'c -> ('e, 'd) result)
-    -> 'a
-    -> ('e, 'd) result
-
-  val ( let* )
-    :  ('a -> ('b * 'c, 'd) result)
-    -> ('b -> 'c -> ('e, 'd) result)
-    -> 'a
-    -> ('e, 'd) result
-
+  val return : 'a -> 'a t
+  val bind : 'a t -> ('a -> 'b t) -> 'b t
+  val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
   val emit : Common.instr Common.checked -> unit t
-  val run : unit t -> (Common.instr list, Common.error) result
+  val label : string -> unit t
+  val start : unit t
+  val function_label : string -> unit t
+  val run : unit t -> (item list, Common.error) result
 end
