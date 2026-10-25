@@ -20,6 +20,7 @@ type location =
 type state =
   { env : location SMap.t
   ; functions : (string * int) SMap.t (* assembly symbol and arity *)
+  ; wrappers : (string * int) SMap.t (* builtin wrappers requested by the program *)
   ; stack_offset : int (* lowest allocated offset for locals *)
   ; next_label : int
   ; code_rev : asm (* accumulated assembly, reversed *)
@@ -61,6 +62,7 @@ open StateResult
 let initial_state =
   { env = SMap.empty
   ; functions = SMap.empty
+  ; wrappers = SMap.empty
   ; stack_offset = -16 (* fp - 8 and fp - 16 hold saved ra and fp. *)
   ; next_label = 0
   ; code_rev = []
@@ -170,6 +172,28 @@ let declare_function name params =
   let* symbol = fresh_label in
   let* () = register_function name ~symbol ~arity:(List.length params) in
   return symbol
+;;
+
+let get_builtin_wrapper name ~arity =
+  let* state = get in
+  match SMap.find_opt name state.wrappers with
+  | Some (symbol, _) -> return symbol
+  | None ->
+    let* symbol = fresh_label in
+    let* () =
+      modify (fun state ->
+        { state with wrappers = SMap.add name (symbol, arity) state.wrappers })
+    in
+    return symbol
+;;
+
+let lookup_builtin name =
+  match Value.primitive_arity name with
+  | Some arity ->
+    let+ symbol = get_builtin_wrapper name ~arity in
+    Some (symbol, arity)
+  | None when String.equal name "print_int" -> return (Some ("print_int_closure", 1))
+  | None -> return None
 ;;
 
 (* ---------- Memory accesses ---------- *)
@@ -299,11 +323,10 @@ let gen_imm ~dst = function
   | ImmVar name ->
     let* fn = lookup_function name in
     let* state = get in
-    let fn =
+    let* fn =
       match fn with
-      | None when String.equal name "print_int" && not (SMap.mem name state.env) ->
-        Some ("print_int_closure", 1)
-      | _ -> fn
+      | None when not (SMap.mem name state.env) -> lookup_builtin name
+      | _ -> return fn
     in
     (match fn with
      | Some (symbol, arity) ->
@@ -418,8 +441,8 @@ let gen_binop ~dst op left right =
 
 let gen_arithmetic ~dst op args =
   match op, args with
-  | "+", [ arg ] -> gen_imm ~dst arg
-  | "-", [ arg ] -> gen_negation ~dst arg
+  | "~+", [ arg ] -> gen_imm ~dst arg
+  | "~-", [ arg ] -> gen_negation ~dst arg
   | "+", [ value; ImmInt n ] when n >= -1024 && n <= 1023 ->
     gen_add_immediate ~dst value n
   | "+", [ ImmInt n; value ] when n >= -1024 && n <= 1023 ->
@@ -429,7 +452,7 @@ let gen_arithmetic ~dst op args =
   | "/", [ value; ImmInt 1 ] -> gen_imm ~dst value
   | "/", [ value; ImmInt -1 ] -> gen_negation ~dst value
   | ("+" | "-" | "*" | "/"), [ left; right ] -> gen_binop ~dst op left right
-  | ("+" | "-" | "*" | "/"), _ ->
+  | ("+" | "-" | "*" | "/" | "~+" | "~-"), _ ->
     fail (Printf.sprintf "wrong number of arguments to %S: %d" op (List.length args))
   | _ -> fail (Printf.sprintf "unsupported arithmetic operator %S" op)
 ;;
@@ -549,16 +572,21 @@ let rec gen_cexpr = function
        if SMap.mem name state.env
        then gen_apply (ImmVar name) args
        else (
-         match name, args with
-         | ("+" | "-" | "*" | "/"), _ -> gen_arithmetic ~dst:a0 name args
-         | ("not" | "&&" | "||" | "<" | "<=" | ">" | ">=" | "=" | "<>"), _ ->
-           gen_logic ~dst:a0 name args
-         | "print_int", [ arg ] ->
-           let* () = gen_imm ~dst:a0 arg in
-           let* () = emit call "print_int" in
-           emit li a0 1 (* The C function returns void; the ML result is unit. *)
-         | "print_int", _ -> fail "print_int expects one argument"
-         | _ -> fail (Printf.sprintf "unsupported function %S" name)))
+         match Value.primitive_arity name with
+         | Some arity when List.length args < arity ->
+           let* symbol = get_builtin_wrapper name ~arity in
+           gen_partial_application ~symbol ~arity args
+         | _ ->
+           (match name, args with
+            | ("+" | "-" | "*" | "/" | "~+" | "~-"), _ -> gen_arithmetic ~dst:a0 name args
+            | ("not" | "&&" | "||" | "<" | "<=" | ">" | ">=" | "=" | "<>"), _ ->
+              gen_logic ~dst:a0 name args
+            | "print_int", [ arg ] ->
+              let* () = gen_imm ~dst:a0 arg in
+              let* () = emit call "print_int" in
+              emit li a0 1 (* The C function returns void; the ML result is unit. *)
+            | "print_int", _ -> fail "print_int expects one argument"
+            | _ -> fail (Printf.sprintf "unsupported function %S" name))))
   | CApp (fn, args) -> gen_apply fn args
   | CIte (ImmBool true, then_branch, _) -> gen_aexpr then_branch
   | CIte (ImmBool false, _, else_branch) -> gen_aexpr else_branch
@@ -612,8 +640,30 @@ let gen_function ~symbol params body =
   let* () = emit_function ~symbol ~frame_size body_state.code_rev in
   let* generated = get in
   (* Keep the caller's environment and frame, but never reuse generated labels. *)
-  let* () = put { outer with next_label = generated.next_label } in
+  let* () =
+    put { outer with next_label = generated.next_label; wrappers = generated.wrappers }
+  in
   return generated.code_rev
+;;
+
+(* A wrapper has the usual ML argument-buffer convention. Its body uses the
+   primitive directly, even if a user binding shadows that name later. *)
+let gen_builtin_wrappers =
+  let* outer = get in
+  let* () = put { outer with env = SMap.empty; functions = SMap.empty } in
+  let* code =
+    map_m
+      (fun (name, (symbol, arity)) ->
+         let params = List.init arity (fun index -> Printf.sprintf "arg%d" index) in
+         let args = List.map (fun name -> ImmVar name) params in
+         gen_function ~symbol params (ACExpr (CApp (ImmVar name, args))))
+      (SMap.bindings outer.wrappers)
+  in
+  let* generated = get in
+  let* () =
+    put { outer with next_label = generated.next_label; wrappers = generated.wrappers }
+  in
+  return code
 ;;
 
 (* ---------- Top-level items ---------- *)
@@ -662,6 +712,7 @@ let gen_program (program : Anf.program) =
   let generate =
     (* Generate the body first to learn how much frame space it needs. *)
     let* globals, functions = gen_items program in
+    let* wrappers = gen_builtin_wrappers in
     (* C main returns an untagged exit status. *)
     let* () = emit li a0 0 in
     let* frame_size = get_frame_size in
@@ -679,7 +730,9 @@ let gen_program (program : Anf.program) =
     let* () = emit_directive (Globl "main") in
     let* () = emit_function ~symbol:"main" ~frame_size body.code_rev in
     modify (fun state ->
-      { state with code_rev = List.concat (List.rev functions) @ state.code_rev })
+      { state with
+        code_rev = List.concat (List.rev (functions @ wrappers)) @ state.code_rev
+      })
   in
   Result.map snd (run generate)
 ;;
