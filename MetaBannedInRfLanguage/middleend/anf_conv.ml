@@ -251,7 +251,12 @@ let rec to_cexpr ctx env expr (k : cexpr -> aexpr m) : aexpr m =
   | EIdent name -> k (CImm (lookup env name))
   | EApply _ ->
     let fn, args = collect_args expr [] in
-    to_imms ctx env args (fun args -> apply ctx env fn args k)
+    (match fn, args with
+     | EIdent "&&", [ left; right ] when is_prim ctx "&&" ->
+       to_cexpr ctx env (EIf (left, right, Some (EConst (CBool false)))) k
+     | EIdent "||", [ left; right ] when is_prim ctx "||" ->
+       to_cexpr ctx env (EIf (left, EConst (CBool true), Some right)) k
+     | _ -> to_imms ctx env args (fun args -> apply ctx env fn args k))
   | EFun _ | EFunction _ ->
     let* fn = lambda ctx env expr in
     k fn

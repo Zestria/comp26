@@ -80,13 +80,19 @@ let rec eval_expr env expr fuel =
       , fuel )
   | Ast.EApply _ ->
     let fn_expr, arg_exprs = collect_args expr [] in
-    let* args, fuel = eval_list env arg_exprs fuel in
-    (match fn_expr with
-     | Ast.EIdent name when (not (SMap.mem name env)) && Value.is_primitive name ->
-       with_fuel fuel (Value.apply_primitive name args)
+    (match fn_expr, arg_exprs with
+     | Ast.EIdent "&&", [ left; right ] when not (SMap.mem "&&" env) ->
+       eval_expr env (Ast.EIf (left, right, Some (Ast.EConst (Ast.CBool false)))) fuel
+     | Ast.EIdent "||", [ left; right ] when not (SMap.mem "||" env) ->
+       eval_expr env (Ast.EIf (left, Ast.EConst (Ast.CBool true), Some right)) fuel
      | _ ->
-       let* fn_val, fuel = eval_expr env fn_expr fuel in
-       apply_curried fn_val args fuel)
+       let* args, fuel = eval_list env arg_exprs fuel in
+       (match fn_expr with
+        | Ast.EIdent name when (not (SMap.mem name env)) && Value.is_primitive name ->
+          with_fuel fuel (Value.apply_primitive name args)
+        | _ ->
+          let* fn_val, fuel = eval_expr env fn_expr fuel in
+          apply_curried fn_val args fuel))
   | Ast.ETuple (first, second, rest) ->
     let* first, fuel = eval_expr env first fuel in
     let* second, fuel = eval_expr env second fuel in
