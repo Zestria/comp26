@@ -14,3 +14,14 @@
 (cram
  (package shmel)
  (deps riscv_tests.exe))
+
+(rule
+ (alias runtest)
+ (package shmel)
+ (deps
+  check_closure_runtime.sh
+  closure_runtime_tests.c
+  ../../backend/closure_runtime.h
+  ../../backend/closure_runtime.c)
+ (action
+  (run sh %{dep:check_closure_runtime.sh})))
