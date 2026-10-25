@@ -184,7 +184,10 @@ let parse_expr_prefix table atom application =
       (List.map operators ~f:(fun (name, arity) ->
          p_operator_token name >>| fun _ -> name, arity))
   in
-  let p_applied name = application >>| fun operand -> EApply (EIdent name, operand) in
+  let p_applied name =
+    let name = Syntax.prefix_name name ~arity:1 in
+    application >>| fun operand -> EApply (EIdent name, operand)
+  in
   let p_arity name arity =
     let rec go n operands =
       if n = 0

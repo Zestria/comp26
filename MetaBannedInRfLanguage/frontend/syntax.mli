@@ -28,7 +28,13 @@ val apply_infix_overrides : (string * int * assoc) list -> table -> table
 val apply_prefix_overrides : (string * int) list -> table -> table
 val infix_entries : table -> entry list
 val prefix_entries : table -> entry list
+
+(** AST name for a prefix token; unary [+] and [-] become [~+] and [~-]. *)
+val prefix_name : string -> arity:int -> string
+
+(** Names usable as operator values, including canonical unary names. *)
 val operator_names : table -> string list
+
 val lookup_infix : table -> string -> (int * assoc) option
 val lookup_prefix : table -> string -> (int * int) option
 val is_operator : table -> string -> bool

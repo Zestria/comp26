@@ -9,7 +9,9 @@
 open Anf
 module SSet = Set.Make (String)
 
-let pure_prims = [ "+"; "-"; "*"; "<"; "<="; ">"; ">="; "="; "<>"; "&&"; "||"; "not" ]
+let pure_prims =
+  [ "+"; "-"; "~+"; "~-"; "*"; "<"; "<="; ">"; ">="; "="; "<>"; "&&"; "||"; "not" ]
+;;
 
 let fv_imm = function
   | ImmVar name -> SSet.singleton name

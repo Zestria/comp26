@@ -65,6 +65,8 @@ rule token = parse
   | "=" { EQ }
   | "+" { PLUS }
   | "-" { MINUS }
+  | "~+" { UPLUS }
+  | "~-" { UMINUS }
   | "*" { STAR }
   | "/" { SLASH }
   | eof { EOF }

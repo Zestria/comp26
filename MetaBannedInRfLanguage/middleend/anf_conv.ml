@@ -191,8 +191,8 @@ let fold_app ctx fn args =
   | ImmVar "-", [ ImmInt a; ImmInt b ] -> CImm (ImmInt (a - b))
   | ImmVar "*", [ ImmInt a; ImmInt b ] -> CImm (ImmInt (a * b))
   | ImmVar "/", [ ImmInt a; ImmInt b ] when b <> 0 -> CImm (ImmInt (a / b))
-  | ImmVar "-", [ ImmInt a ] -> CImm (ImmInt (-a))
-  | ImmVar "+", [ (ImmInt _ as a) ] -> CImm a
+  | ImmVar "~-", [ ImmInt a ] -> CImm (ImmInt (-a))
+  | ImmVar "~+", [ (ImmInt _ as a) ] -> CImm a
   | ImmVar "<", [ ImmInt a; ImmInt b ] -> CImm (ImmBool (a < b))
   | ImmVar "<=", [ ImmInt a; ImmInt b ] -> CImm (ImmBool (a <= b))
   | ImmVar ">", [ ImmInt a; ImmInt b ] -> CImm (ImmBool (a > b))

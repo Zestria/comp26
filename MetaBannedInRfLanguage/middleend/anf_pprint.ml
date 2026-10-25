@@ -47,9 +47,11 @@ and is_simple_aexpr = function
 
 let rec pp_cexpr ppf = function
   | CImm imm -> pp_imm ppf imm
+  | CApp (ImmVar (("~+" | "~-") as op), [ arg ]) -> fprintf ppf "%c %a" op.[1] pp_imm arg
   | CApp (ImmVar op, [ left; right ]) when is_infix op ->
     fprintf ppf "%a %s %a" pp_imm left op pp_imm right
-  | CApp (ImmVar op, [ arg ]) when is_prefix op -> fprintf ppf "%s %a" op pp_imm arg
+  | CApp (ImmVar op, [ arg ]) when is_prefix op && not (is_infix op) ->
+    fprintf ppf "%s %a" op pp_imm arg
   | CApp (fn, args) ->
     fprintf ppf "@[<hov 2>%a@ %a@]" pp_imm fn (pp_list "@ " pp_imm) args
   | CTuple (first, second, rest) -> pp_tuple ppf (first :: second :: rest)

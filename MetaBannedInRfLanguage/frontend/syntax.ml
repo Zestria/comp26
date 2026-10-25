@@ -120,8 +120,20 @@ let apply_prefix_overrides overrides table =
 let infix_entries table = table.infix
 let prefix_entries table = table.prefix
 
+let prefix_name name ~arity =
+  match name, arity with
+  | "+", 1 -> "~+"
+  | "-", 1 -> "~-"
+  | _ -> name
+;;
+
 let operator_names table =
-  List.concat_map (fun entry -> entry.operators) (table.infix @ table.prefix)
+  List.concat_map
+    (fun entry ->
+       match entry.fixity with
+       | Infix _ -> entry.operators
+       | Prefix arity -> List.map (fun name -> prefix_name name ~arity) entry.operators)
+    (table.infix @ table.prefix)
 ;;
 
 let lookup_infix table name =
@@ -148,6 +160,4 @@ let lookup_prefix table name =
     table.prefix
 ;;
 
-let is_operator table name =
-  Option.is_some (lookup_infix table name) || Option.is_some (lookup_prefix table name)
-;;
+let is_operator table name = List.exists (String.equal name) (operator_names table)

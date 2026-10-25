@@ -32,7 +32,13 @@ let curry patterns body =
 %token OROR ANDAND
 %token EQ NEQ LE GE LT GT
 %token PLUS MINUS STAR SLASH
+%token UPLUS UMINUS
 %token EOF
+
+(* At the start of an expression, [not f x] keeps its prefix meaning.
+   In an argument position or on its own, [not] is a function value. *)
+%nonassoc not_value
+%nonassoc INT TRUE FALSE LPAREN IDENT NOT
 
 (* Open constructs ([match], [function], [if]) extend as far to the right as
    possible, like the top-down parser: a nested [match] takes all following
@@ -123,10 +129,11 @@ infix_expr:
 (* Prefix ops bind tighter than infix but looser than application:
    [-a * b] is [(-a) * b], while [-f x] is [-(f x)]. *)
 prefix_expr:
-  | op = prefix_op; operand = application { EApply (EIdent op, operand) }
+  | op = prefix_op; operand = application
+    { EApply (EIdent (Syntax.prefix_name op ~arity:1), operand) }
   | e = application { e }
 
-prefix_op:
+%inline prefix_op:
   | PLUS { "+" }
   | MINUS { "-" }
   | NOT { "not" }
@@ -138,6 +145,7 @@ application:
 atom:
   | c = constant { EConst c }
   | name = IDENT { EIdent name }
+  | NOT %prec not_value { EIdent "not" }
   | LPAREN; op = operator; RPAREN { EIdent op }
   | LPAREN; e = expr; RPAREN { e }
   | LPAREN; first = expr; COMMA; second = expr; rest = list(preceded(COMMA, expr)); RPAREN
@@ -145,7 +153,8 @@ atom:
 
 operator:
   | op = binop { op }
-  | NOT { "not" }
+  | UPLUS { "~+" }
+  | UMINUS { "~-" }
 
 constant:
   | n = INT { CInt n }
@@ -181,6 +190,7 @@ case:
 pattern:
   | UNDERSCORE { PAny }
   | name = IDENT { PVar name }
+  | NOT { PVar "not" }
   | c = constant { PConstant c }
   | LPAREN; p = pattern; RPAREN { p }
   | LPAREN; first = pattern; COMMA; second = pattern;

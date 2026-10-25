@@ -23,8 +23,9 @@ let rec equal a b =
   | VTuple (a1, a2, arest), VTuple (b1, b2, brest) ->
     equal a1 b1
     && equal a2 b2
-    && (try List.for_all2 equal arest brest with
-        | Invalid_argument _ -> false)
+    &&
+      (try List.for_all2 equal arest brest with
+      | Invalid_argument _ -> false)
   | VClosure _, VClosure _ -> true
   | _ -> false
 ;;
@@ -38,30 +39,43 @@ let rec to_string = function
   | VClosure _ -> "<closure>"
 ;;
 
-let is_primitive = function
-  | "+" | "-" | "*" | "/" | "&&" | "||" | "=" | "<>" | "<" | "<=" | ">" | ">=" | "not" ->
-    true
-  | _ -> false
+let primitive_arity = function
+  | "~+" | "~-" | "not" -> Some 1
+  | "+" | "-" | "*" | "/" | "&&" | "||" | "=" | "<>" | "<" | "<=" | ">" | ">=" -> Some 2
+  | _ -> None
 ;;
 
-let apply_primitive name args =
-  match name, args with
-  | "+", [ VInt a ] -> Ok (VInt a)
-  | "+", [ VInt a; VInt b ] -> Ok (VInt (a + b))
-  | "-", [ VInt a ] -> Ok (VInt (-a))
-  | "-", [ VInt a; VInt b ] -> Ok (VInt (a - b))
-  | "*", [ VInt a; VInt b ] -> Ok (VInt (a * b))
-  | "/", [ VInt _; VInt 0 ] -> Error "division by zero"
-  | "/", [ VInt a; VInt b ] -> Ok (VInt (a / b))
-  | "<", [ VInt a; VInt b ] -> Ok (VBool (a < b))
-  | "<=", [ VInt a; VInt b ] -> Ok (VBool (a <= b))
-  | ">", [ VInt a; VInt b ] -> Ok (VBool (a > b))
-  | ">=", [ VInt a; VInt b ] -> Ok (VBool (a >= b))
-  | "=", [ a; b ] -> Ok (VBool (equal a b))
-  | "<>", [ a; b ] -> Ok (VBool (not (equal a b)))
-  | "not", [ VBool a ] -> Ok (VBool (not a))
-  | "&&", [ VBool a; VBool b ] -> Ok (VBool (a && b))
-  | "||", [ VBool a; VBool b ] -> Ok (VBool (a || b))
-  | name, args ->
-    Error (Printf.sprintf "bad application of primitive %S (%d argument(s))" name (List.length args))
+let is_primitive name = Option.is_some (primitive_arity name)
+
+let rec apply_primitive name args =
+  match primitive_arity name with
+  | Some arity when List.length args < arity ->
+    Ok
+      (VClosure
+         (fun rest fuel ->
+           Result.map (fun value -> value, fuel) (apply_primitive name (args @ rest))))
+  | _ ->
+    (match name, args with
+     | "~+", [ VInt a ] -> Ok (VInt a)
+     | "+", [ VInt a; VInt b ] -> Ok (VInt (a + b))
+     | "~-", [ VInt a ] -> Ok (VInt (-a))
+     | "-", [ VInt a; VInt b ] -> Ok (VInt (a - b))
+     | "*", [ VInt a; VInt b ] -> Ok (VInt (a * b))
+     | "/", [ VInt _; VInt 0 ] -> Error "division by zero"
+     | "/", [ VInt a; VInt b ] -> Ok (VInt (a / b))
+     | "<", [ VInt a; VInt b ] -> Ok (VBool (a < b))
+     | "<=", [ VInt a; VInt b ] -> Ok (VBool (a <= b))
+     | ">", [ VInt a; VInt b ] -> Ok (VBool (a > b))
+     | ">=", [ VInt a; VInt b ] -> Ok (VBool (a >= b))
+     | "=", [ a; b ] -> Ok (VBool (equal a b))
+     | "<>", [ a; b ] -> Ok (VBool (not (equal a b)))
+     | "not", [ VBool a ] -> Ok (VBool (not a))
+     | "&&", [ VBool a; VBool b ] -> Ok (VBool (a && b))
+     | "||", [ VBool a; VBool b ] -> Ok (VBool (a || b))
+     | name, args ->
+       Error
+         (Printf.sprintf
+            "bad application of primitive %S (%d argument(s))"
+            name
+            (List.length args)))
 ;;

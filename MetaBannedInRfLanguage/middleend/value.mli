@@ -18,4 +18,7 @@ type value =
 val equal : value -> value -> bool
 val to_string : value -> string
 val is_primitive : string -> bool
+
+val primitive_arity : string -> int option
+
 val apply_primitive : string -> value list -> (value, string) result
