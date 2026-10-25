@@ -271,12 +271,6 @@ let untag_operands left_reg right_reg =
     emit srai t1 right_reg 1
 ;;
 
-let rec check_integer_operands = function
-  | [] -> return ()
-  | (ImmInt _ | ImmVar _) :: rest -> check_integer_operands rest
-  | (ImmBool _ | ImmUnit) :: _ -> fail "arithmetic expects an integer operand"
-;;
-
 let gen_negation ~dst arg =
   let* src = gen_operand ~scratch:dst arg in
   let* () = emit sub dst x0 src in
@@ -323,7 +317,6 @@ let gen_add_immediate ~dst value n =
 ;;
 
 let gen_arithmetic ~dst op args =
-  let* () = check_integer_operands args in
   match op, args with
   | "+", [ arg ] -> gen_imm ~dst arg
   | "-", [ arg ] -> gen_negation ~dst arg
