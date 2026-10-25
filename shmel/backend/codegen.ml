@@ -32,7 +32,7 @@ type body =
   }
 
 (* Compilation threads the number of labels used and the largest number of
-   local slots, and can fail. *)
+   stack slots, and can fail. *)
 type state =
   { labels : int
   ; slots : int
@@ -53,15 +53,15 @@ let fail msg _ = Error msg
 let fresh_label st = Ok (st.labels, { st with labels = st.labels + 1 })
 let use_slots n st = Ok ((), { st with slots = max st.slots n })
 
-(* Where the variables are: offsets from [s0], and how many locals are live.
-   [in_ret] is the variable whose value is still in [a0] right after its
-   [let], so the next instruction can take it from there instead of the
-   stack. *)
+(* Where the variables are: [in_regs] are the variables whose value is still
+   in a register (the parameters, the variable bound by the last [let]),
+   [vars] are the stack slots, as offsets from [s0]. [depth] is the number of
+   slots in use. *)
 type frame =
   { vars : int Env.t
+  ; in_regs : reg Env.t
   ; depth : int
   ; prefix : string
-  ; in_ret : string option
   }
 
 let ret = A 0
@@ -70,8 +70,11 @@ let tmp2 = T 1
 
 (* Address scratch register for offsets that do not fit into 12 bits. *)
 let addr = T 6
+let max_reg_args = 8
 let slot_offset depth = -24 - (8 * depth)
-let param_offset i = 8 * i
+
+(* Arguments after the eighth are on the stack, where [s0] points. *)
+let stack_arg_offset i = 8 * (i - max_reg_args)
 
 let load_slot rd off =
   if fits_imm12 off
@@ -85,22 +88,21 @@ let store_slot rs off =
   else [ Li (addr, off); R (Add, addr, addr, Fp); Sd (rs, 0, addr) ]
 ;;
 
-let in_ret frame x = Option.equal String.equal frame.in_ret (Some x)
-
 (* The code that puts the immediate into [rd]. *)
 let load hooks frame rd = function
   | Anf.ImmInt n -> Ok [ Li (rd, n) ]
-  | Anf.ImmVar x when in_ret frame x -> Ok (if rd = ret then [] else [ Mv (rd, ret) ])
   | Anf.ImmVar x ->
-    (match Env.find_opt x frame.vars with
-     | Some off -> Ok (load_slot rd off)
-     | None -> hooks.load_global rd x)
+    (match Env.find_opt x frame.in_regs, Env.find_opt x frame.vars with
+     | Some r, _ -> Ok (if r = rd then [] else [ Mv (rd, r) ])
+     | None, Some off -> Ok (load_slot rd off)
+     | None, None -> hooks.load_global rd x)
 ;;
 
-(* Like [load], but zero and a value already in [a0] need no extra register. *)
+(* Like [load], but zero and a value already in a register need no
+   instruction. *)
 let operand hooks frame rd = function
   | Anf.ImmInt 0 -> Ok ([], Zero)
-  | Anf.ImmVar x when in_ret frame x -> Ok ([], ret)
+  | Anf.ImmVar x when Env.mem x frame.in_regs -> Ok ([], Env.find x frame.in_regs)
   | imm -> Result.map (fun code -> code, rd) (load hooks frame rd imm)
 ;;
 
@@ -202,45 +204,72 @@ and cexpr_uses x = function
   | Anf.CFun (_, body) -> uses x body
 ;;
 
-(* Reads of [x] by the very next computation, which takes it from [a0]. *)
+let head = function
+  | Anf.AExpr c | Anf.ALet (_, c, _) -> Some c
+  | Anf.ALetRec _ -> None
+;;
+
+(* Reads of [x] by the very next computation, which can take it from a
+   register. A call reads its arguments from the stack slots. *)
 let next_uses x rest =
-  let head =
-    match rest with
-    | Anf.AExpr c | Anf.ALet (_, c, _) -> c
-    | Anf.ALetRec _ -> Anf.CImm (Anf.ImmInt 0)
+  match head rest with
+  | Some (Anf.CImm i | Anf.CNeg i) -> imm_uses x i
+  | Some (Anf.CBinOp (_, a, b)) -> imm_uses x a + imm_uses x b
+  | Some (Anf.CIf (c, _, _)) -> cond_uses x c
+  | Some (Anf.CApp _ | Anf.CFun _) | None -> 0
+;;
+
+(* Whether the code may call something, which destroys [a*] and [t*]. *)
+let rec has_call = function
+  | Anf.AExpr c -> cexpr_has_call c
+  | Anf.ALet (_, c, rest) -> cexpr_has_call c || has_call rest
+  | Anf.ALetRec _ -> true
+
+and cexpr_has_call = function
+  | Anf.CImm _ | Anf.CNeg _ | Anf.CBinOp _ -> false
+  | Anf.CApp _ | Anf.CFun _ -> true
+  | Anf.CIf (_, t, e) -> has_call t || has_call e
+;;
+
+(* What is left in the registers after computing [c] into [a0]. *)
+let after frame c =
+  let in_regs =
+    if cexpr_has_call c then Env.empty else Env.filter (fun _ r -> r <> ret) frame.in_regs
   in
-  match head with
-  | Anf.CImm i | Anf.CNeg i -> imm_uses x i
-  | Anf.CBinOp (_, a, b) -> imm_uses x a + imm_uses x b
-  | Anf.CIf (c, _, _) -> cond_uses x c
-  | Anf.CApp _ | Anf.CFun _ -> 0
+  { frame with in_regs }
+;;
+
+let new_slot frame x =
+  let off = slot_offset frame.depth in
+  let* () = use_slots (frame.depth + 1) in
+  return (off, { frame with vars = Env.add x off frame.vars; depth = frame.depth + 1 })
 ;;
 
 let rec expr hooks frame = function
   | Anf.AExpr c -> cexpr hooks frame c
   | Anf.ALet (x, c, rest) ->
     let* code = cexpr hooks frame c in
+    let frame = after frame c in
     if String.equal x "_"
     then
-      let* rest = expr hooks { frame with in_ret = None } rest in
-      return (code @ rest)
-    else if uses x rest = next_uses x rest
-    then
-      (* Only the next computation reads [x]: it stays in [a0], no slot. *)
-      let* rest = expr hooks { frame with in_ret = Some x } rest in
+      let* rest = expr hooks frame rest in
       return (code @ rest)
     else (
-      let off = slot_offset frame.depth in
-      let* () = use_slots (frame.depth + 1) in
       let frame =
         { frame with
-          vars = Env.add x off frame.vars
-        ; depth = frame.depth + 1
-        ; in_ret = Some x
+          vars = Env.remove x frame.vars
+        ; in_regs = Env.add x ret frame.in_regs
         }
       in
-      let* rest = expr hooks frame rest in
-      return (code @ store_slot ret off @ rest))
+      if uses x rest = next_uses x rest
+      then
+        (* Only the next computation reads [x]: it stays in [a0], no slot. *)
+        let* rest = expr hooks frame rest in
+        return (code @ rest)
+      else
+        let* off, frame = new_slot frame x in
+        let* rest = expr hooks frame rest in
+        return (code @ store_slot ret off @ rest))
   | Anf.ALetRec (f, _, _, _) ->
     fail (Printf.sprintf "local let rec %s must be lifted before code generation" f)
 
@@ -251,8 +280,8 @@ and cexpr hooks frame = function
     return (code @ [ Neg (ret, r) ])
   | Anf.CBinOp (op, a, b) -> binop hooks frame op a b
   | Anf.CApp (f, args) ->
-    (* The call may use [a0] while it puts the arguments in place. *)
-    lift (hooks.call ~load:(load hooks { frame with in_ret = None }) f args)
+    (* The call fills the argument registers, so it reads the stack only. *)
+    lift (hooks.call ~load:(load hooks { frame with in_regs = Env.empty }) f args)
   | Anf.CIf (c, t, e) ->
     let* n = fresh_label in
     let else_ = Printf.sprintf ".L%s_else%d" frame.prefix n in
@@ -275,18 +304,65 @@ let label_prefix name =
 
 let round16 n = (n + 15) / 16 * 16
 
+(* Reads of [x] before the first call, while [a1] .. [a7] still hold the
+   parameters. A call reads its own arguments from the stack slots; in an [if]
+   with a call only the condition is counted. *)
+let rec uses_before_call x = function
+  | Anf.AExpr c -> cexpr_uses_before_call x c
+  | Anf.ALet (y, c, rest) when not (cexpr_has_call c) ->
+    cexpr_uses x c + if String.equal x y then 0 else uses_before_call x rest
+  | Anf.ALet (_, c, _) -> cexpr_uses_before_call x c
+  | Anf.ALetRec _ -> 0
+
+and cexpr_uses_before_call x c =
+  match c with
+  | Anf.CIf (cond, _, _) when cexpr_has_call c -> cond_uses x cond
+  | c when cexpr_has_call c -> 0
+  | c -> cexpr_uses x c
+;;
+
+(* A parameter in [a0] lives until the first computation, the ones in [a1]
+   .. [a7] until the first call; a parameter read later is saved to a slot
+   when the function starts. *)
+let needs_slot body i p =
+  let read_from_register = if i = 0 then next_uses p body else uses_before_call p body in
+  uses p body > read_from_register
+;;
+
+let bind_param body (frame, spills) (i, p) =
+  if String.equal p "_"
+  then frame, spills
+  else if i >= max_reg_args
+  then (
+    let vars = Env.add p (stack_arg_offset i) frame.vars in
+    { frame with vars; in_regs = Env.remove p frame.in_regs }, spills)
+  else (
+    let frame =
+      { frame with
+        in_regs = Env.add p (A i) frame.in_regs
+      ; vars = Env.remove p frame.vars
+      }
+    in
+    if needs_slot body i p
+    then (
+      let off = slot_offset frame.depth in
+      let frame =
+        { frame with vars = Env.add p off frame.vars; depth = frame.depth + 1 }
+      in
+      frame, spills @ store_slot (A i) off)
+    else frame, spills)
+;;
+
 let compile_body hooks ~name ~params body =
-  let vars =
-    List.fold_left
-      (fun (vars, i) p -> Env.add p (param_offset i) vars, i + 1)
-      (Env.empty, 0)
-      params
-    |> fst
+  let empty =
+    { vars = Env.empty; in_regs = Env.empty; depth = 0; prefix = label_prefix name }
   in
-  let frame = { vars; depth = 0; prefix = label_prefix name; in_ret = None } in
+  let frame, spills =
+    List.fold_left (bind_param body) (empty, []) (List.mapi (fun i p -> i, p) params)
+  in
   Result.map
-    (fun (code, st) -> { code; locals = round16 (8 * st.slots) })
-    (expr hooks frame body { labels = 0; slots = 0 })
+    (fun (code, st) -> { code = spills @ code; locals = round16 (8 * st.slots) })
+    (expr hooks frame body { labels = 0; slots = frame.depth })
 ;;
 
 let adjust_sp delta =
