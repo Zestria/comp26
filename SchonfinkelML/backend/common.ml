@@ -115,6 +115,7 @@ type error =
       ; max : int
       }
   | Invalid_label of string
+  | Unsupported of string
 
 type 'a checked = ('a, error) result
 

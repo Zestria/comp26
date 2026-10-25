@@ -1,5 +1,5 @@
 (library
  (name backend)
- (modules emitter writer common)
- (libraries SchonfinkelML_frontend)
+ (modules emitter writer common allocator)
+ (libraries SchonfinkelML_middleend)
  (package SchonfinkelML))

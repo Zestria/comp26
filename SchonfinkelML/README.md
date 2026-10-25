@@ -8,25 +8,17 @@
 
 The compiler pipeline is `parsing -> closure conversion -> lambda lifting`.
 
-Closure conversion makes every abstraction closed: the free variables of a
-lambda become its leading parameters and the lambda is bound by a `let` that
-applies it to them.  Lambda lifting then hoists every abstraction that is not
-part of the right-hand side of a `let rec` to the front of the expression.  Its
-input is already closed, so lifting adds no parameters of its own and never
-partially applies a lifted function: a curried chain is lifted as one function,
-so the pass creates no closures.  A recursive function stays in place and calls
-itself directly; only the abstractions nested deeper inside it are lifted.
+## Prerequisites
+You need the following in order to use SchonfinkelML compiler:
+  - `qemu`, `riscv-binutils`
+  - `gcc` to compile runtime :) 
 
-A-normal form is a separate stage rather than a step of the pipeline; it can be
-inspected with `--stop-after anf`.
+Here how to install them if you are on Debian/Ubuntu:
+``` bash
+sudo apt install -y \
+   binutils-riscv64-linux-gnu qemu-user gcc
+```
 
-`--stop-after <stage>` stops the pipeline after one of the stages:
-
-* `parsing` --- the parsed AST;
-* `anf` --- A-normal form.
-
-Without `--stop-after` the pipeline runs to the end and prints the lifted
-program.
 
 ## How to run
 

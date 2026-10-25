@@ -106,6 +106,7 @@ type error =
       ; max : int
       } (** Immediate is not in range *)
   | Invalid_label of string (** Label should not be empty *)
+  | Unsupported of string (** Generic error of unsupported features *)
 
 type 'a checked = ('a, error) result
 
