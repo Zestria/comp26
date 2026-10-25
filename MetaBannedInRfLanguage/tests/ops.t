@@ -174,3 +174,107 @@ A prefix minus in parentheses is not an operator value
   $ ../driver/compiler.exe -parsing topdown paren.ml > topdown.txt
   $ ../driver/compiler.exe -parsing menhir paren.ml > menhir.txt
   $ diff topdown.txt menhir.txt
+
+Binary operator values and unary signs have different arities
+
+  $ cat > signs.ml <<EOF
+  > let inc = (+) 1;;
+  > let from_fifty = (-) 50;;
+  > let negate x = -x;;
+  > let identity x = +x
+  > EOF
+  $ ../driver/compiler.exe --stop-after anf signs.ml
+  let inc = ( + ) 1;;
+  let from_fifty = ( - ) 50;;
+  let negate x = - x;;
+  let identity x = + x;;
+
+Values, partial application, and passing operators to functions
+
+  $ cat > operators.ml <<EOF
+  > let inc = (+) 1;;
+  > let from_fifty = (-) 50;;
+  > let negate = (~-);;
+  > let positive = (~+);;
+  > let apply f x = f x;;
+  > let a = inc 41;;
+  > let b = from_fifty 8;;
+  > let c = apply negate (-42);;
+  > let d = apply positive 42;;
+  > let e = if apply not false then 42 else 0
+  > EOF
+  $ ../driver/compiler.exe -parsing topdown --stop-after parsing operators.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir --stop-after parsing operators.ml > menhir.txt
+  $ diff topdown.txt menhir.txt
+  $ ./interp_check.exe operators.ml
+  a = 42
+  b = 42
+  c = 42
+  d = 42
+  e = 42
+
+Wrappers retain the primitive when its name is rebound later
+
+  $ cat > shadow.ml <<EOF
+  > let choose b = if b then not else (fun x -> x);;
+  > let not x = x;;
+  > let f = choose true;;
+  > let result = if f false then 42 else 0
+  > EOF
+  $ ../driver/compiler.exe -parsing topdown --stop-after parsing shadow.ml > topdown.txt
+  $ ../driver/compiler.exe -parsing menhir --stop-after parsing shadow.ml > menhir.txt
+  $ diff topdown.txt menhir.txt
+  $ ./interp_check.exe shadow.ml
+  result = 42
+
+A boolean operator called through a variable evaluates both arguments
+
+  $ cat > eager.ml <<EOF
+  > let conjunction = (&&);;
+  > let result = conjunction false (1 / 0 = 0)
+  > EOF
+  $ ./interp_check.exe eager.ml
+  interp_check: AST evaluation error: division by zero
+  [1]
+
+  $ cat > lazy.ml <<EOF
+  > let result = false && (1 / 0 = 0)
+  > EOF
+  $ ./interp_check.exe lazy.ml
+  result = false
+
+The right-hand expression stays inside the conditional branch
+
+  $ cat > short_circuit.ml <<EOF
+  > let guarded_and a n = a && (1 / n = 0);;
+  > let guarded_or a n = a || (1 / n = 0);;
+  > let and_skip = guarded_and false 0;;
+  > let or_skip = guarded_or true 0;;
+  > let and_eval = guarded_and true 2;;
+  > let or_eval = guarded_or false 2;;
+  > let const_and = false && (1 / 0 = 0);;
+  > let const_or = true || (1 / 0 = 0)
+  > EOF
+  $ ./interp_check.exe short_circuit.ml
+  and_skip = false
+  or_skip = true
+  and_eval = true
+  or_eval = true
+  const_and = false
+  const_or = true
+
+The right-hand expression is evaluated when needed
+
+  $ cat > and_fail.ml <<EOF
+  > let result = true && (1 / 0 = 0)
+  > EOF
+  $ ./interp_check.exe and_fail.ml
+  interp_check: AST evaluation error: division by zero
+  [1]
+
+  $ cat > or_fail.ml <<EOF
+  > let result = false || (1 / 0 = 0)
+  > EOF
+  $ ./interp_check.exe or_fail.ml
+  interp_check: AST evaluation error: division by zero
+  [1]

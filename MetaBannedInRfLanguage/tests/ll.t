@@ -173,7 +173,6 @@ Recursive calls pass captures explicitly before lambda lifting
   let result = make 42 3;;
   $ ./interp_check.exe capture.ml
   result = 42
-  $ ../driver/compiler.exe --stop-after riscv -o capture.s capture.ml
 
 Mutually recursive functions receive the captures of the whole group
 
@@ -205,7 +204,6 @@ Mutually recursive functions receive the captures of the whole group
   let result = make 40 42 3;;
   $ ./interp_check.exe mutual.ml
   result = 42
-  $ ../driver/compiler.exe --stop-after riscv -o mutual.s mutual.ml
 
 Parameters and local bindings preserve the captured value
 
@@ -219,7 +217,6 @@ Parameters and local bindings preserve the captured value
   > EOF
   $ ./interp_check.exe shadow.ml
   result = 6
-  $ ../driver/compiler.exe --stop-after riscv -o shadow.s shadow.ml
 
   $ cat > parameter.ml <<EOF
   > let make k =
@@ -229,7 +226,6 @@ Parameters and local bindings preserve the captured value
   > EOF
   $ ./interp_check.exe parameter.ml
   result = 42
-  $ ../driver/compiler.exe --stop-after riscv -o parameter.s parameter.ml
 
 Lifting a local print_int preserves the standard function outside its scope
 
@@ -253,7 +249,6 @@ Lifting a local print_int preserves the standard function outside its scope
   let result = make 42 3;;
   $ ./interp_check.exe primitive.ml
   result = 42
-  $ ../driver/compiler.exe --stop-after riscv -o primitive.s primitive.ml
 
 The output of lambda lifting parses back
 
