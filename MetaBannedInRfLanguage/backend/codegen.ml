@@ -645,8 +645,32 @@ let gen_function ~symbol params body =
   return generated.code_rev
 ;;
 
-(* A wrapper has the usual ML argument-buffer convention. Its body uses the
-   primitive directly, even if a user binding shadows that name later. *)
+(* Leaf wrappers read arguments directly into temporaries and need no frame. *)
+let gen_leaf_builtin_wrapper ~symbol name params =
+  let* outer = get in
+  let* () = put { outer with code_rev = [] } in
+  let rec bind_params offset regs = function
+    | [] -> return ()
+    | name :: rest ->
+      (match regs with
+       | reg :: regs ->
+         let* () = load_word ~dst:reg ~base:a0 offset in
+         let* () = bind_var name (In_reg reg) in
+         bind_params (offset + 8) regs rest
+       | [] -> fail "a leaf builtin wrapper supports at most two arguments")
+  in
+  let* () = emit label symbol in
+  let* () = bind_params 0 [ t0; t1 ] params in
+  let args = List.map (fun name -> ImmVar name) params in
+  let* () = gen_cexpr (CApp (ImmVar name, args)) in
+  let* () = emit ret in
+  let* generated = get in
+  let* () = put { outer with next_label = generated.next_label } in
+  return generated.code_rev
+;;
+
+(* Wrappers use the ML argument-buffer convention and the original primitive,
+   even if a user binding shadows its name later. *)
 let gen_builtin_wrappers =
   let* outer = get in
   let* () = put { outer with env = SMap.empty; functions = SMap.empty } in
@@ -654,8 +678,12 @@ let gen_builtin_wrappers =
     map_m
       (fun (name, (symbol, arity)) ->
          let params = List.init arity (fun index -> Printf.sprintf "arg%d" index) in
-         let args = List.map (fun name -> ImmVar name) params in
-         gen_function ~symbol params (ACExpr (CApp (ImmVar name, args))))
+         if String.equal name "/"
+         then (
+           (* Division may call the runtime error handler, so keep its frame. *)
+           let args = List.map (fun name -> ImmVar name) params in
+           gen_function ~symbol params (ACExpr (CApp (ImmVar name, args))))
+         else gen_leaf_builtin_wrapper ~symbol name params)
       (SMap.bindings outer.wrappers)
   in
   let* generated = get in
