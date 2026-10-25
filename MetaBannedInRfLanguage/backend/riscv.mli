@@ -47,6 +47,8 @@ type instr =
   | Or of reg * reg * reg
   | Xor of reg * reg * reg
   | Addi of reg * reg * int
+  | Slli of reg * reg * int
+  | Srai of reg * reg * int
   (* Comparisons *)
   | Slt of reg * reg * reg
   | Seqz of reg * reg
@@ -76,6 +78,8 @@ val and_ : (instr -> 'a) -> reg -> reg -> reg -> 'a
 val or_ : (instr -> 'a) -> reg -> reg -> reg -> 'a
 val xor : (instr -> 'a) -> reg -> reg -> reg -> 'a
 val addi : (instr -> 'a) -> reg -> reg -> int -> 'a
+val slli : (instr -> 'a) -> reg -> reg -> int -> 'a
+val srai : (instr -> 'a) -> reg -> reg -> int -> 'a
 val slt : (instr -> 'a) -> reg -> reg -> reg -> 'a
 val seqz : (instr -> 'a) -> reg -> reg -> 'a
 val snez : (instr -> 'a) -> reg -> reg -> 'a
@@ -103,7 +107,7 @@ type directive =
   | Section of section
   | Globl of string
   | P2align of int (** Align to 2^n bytes *)
-  | Quad of int64
+  | Quad of int
   | Zero of int (** Reserve this many zero-initialized bytes *)
 
 type asm_item =

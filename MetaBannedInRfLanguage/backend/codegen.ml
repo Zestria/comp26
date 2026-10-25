@@ -7,6 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open Riscv
+open Anf
 module SMap = Map.Make (String)
 
 (* ---------- State monad ---------- *)
@@ -183,6 +184,161 @@ let epilogue ~frame_size =
       emit mv fp t0
   in
   emit ret
+;;
+
+(* ---------- Operands ---------- *)
+
+(* ML values are tagged words: integers use 2*n+1, false/unit use 1, true
+   uses 3. Heap values are aligned pointers with the low bit clear.
+   Raw machine quantities such as frame sizes and offsets are not tagged. *)
+
+let gen_imm ~dst = function
+  | ImmInt n ->
+    if n >= min_int / 2 && n <= max_int / 2
+    then emit li dst ((n lsl 1) lor 1)
+    else
+      (* Form a full-width tagged constant in the target register. *)
+      let* () = emit li dst n in
+      let* () = emit slli dst dst 1 in
+      emit addi dst dst 1
+  | ImmBool b -> emit li dst (if b then 3 else 1)
+  | ImmUnit -> emit li dst 1
+  | ImmVar name ->
+    let* location = lookup_var name in
+    (match location with
+     | In_reg src -> if src = dst then return () else emit mv dst src
+     | On_stack offset ->
+       if offset >= -2048 && offset <= 2047
+       then emit ld dst { offset; base = fp }
+       else
+         let* () = emit li dst offset in
+         let* () = emit add dst fp dst in
+         emit ld dst { offset = 0; base = dst }
+     | Global name ->
+       let* () = emit la dst name in
+       emit ld dst { offset = 0; base = dst })
+;;
+
+let get_imm_register = function
+  | ImmVar name ->
+    let* location = lookup_var name in
+    (match location with
+     | In_reg reg -> return (Some reg)
+     | On_stack _ | Global _ -> return None)
+  | ImmInt _ | ImmBool _ | ImmUnit -> return None
+;;
+
+(* Reuse a value's register when possible; otherwise load into scratch. *)
+let gen_operand ~scratch imm =
+  let* reg = get_imm_register imm in
+  match reg with
+  | Some reg -> return reg
+  | None ->
+    let* () = gen_imm ~dst:scratch imm in
+    return scratch
+;;
+
+(* Choose scratch registers without overwriting the other operand. Values
+   already in registers need no moves, even when they occupy t0 and t1. *)
+let gen_binary_operands left right =
+  let* right_reg = get_imm_register right in
+  let left_scratch = if right_reg = Some T0 then t1 else t0 in
+  let* left_reg = gen_operand ~scratch:left_scratch left in
+  let right_scratch = if left_reg = T1 then t0 else t1 in
+  let+ right_reg = gen_operand ~scratch:right_scratch right in
+  left_reg, right_reg
+;;
+
+(* ---------- Arithmetic ---------- *)
+
+let tag_result dst =
+  let* () = emit slli dst dst 1 in
+  emit addi dst dst 1
+;;
+
+(* Decode both inputs into t0/t1. *)
+let untag_operands left_reg right_reg =
+  match left_reg, right_reg with
+  | T1, T0 ->
+    let* () = emit mv t2 t0 in
+    let* () = emit srai t0 t1 1 in
+    emit srai t1 t2 1
+  | _, T0 ->
+    let* () = emit srai t1 t0 1 in
+    emit srai t0 left_reg 1
+  | _ ->
+    let* () = emit srai t0 left_reg 1 in
+    emit srai t1 right_reg 1
+;;
+
+let rec check_integer_operands = function
+  | [] -> return ()
+  | (ImmInt _ | ImmVar _) :: rest -> check_integer_operands rest
+  | (ImmBool _ | ImmUnit) :: _ -> fail "arithmetic expects an integer operand"
+;;
+
+let gen_negation ~dst arg =
+  let* src = gen_operand ~scratch:dst arg in
+  let* () = emit sub dst x0 src in
+  emit addi dst dst 2 (* tag(-n) = 2 - tag(n) *)
+;;
+
+(* Load operands, choose the operation, return a tagged result.
+  Addition and subtraction can work on tagged values directly. *)
+let gen_binop ~dst op left right =
+  let* left_reg, right_reg = gen_binary_operands left right in
+  match op with
+  | "+" ->
+    let* () = emit add dst left_reg right_reg in
+    emit addi dst dst (-1)
+  | "-" ->
+    let* () = emit sub dst left_reg right_reg in
+    emit addi dst dst 1
+  | "*" ->
+    let* () = untag_operands left_reg right_reg in
+    let* () = emit mul dst t0 t1 in
+    tag_result dst
+  | "/" ->
+    let* () = untag_operands left_reg right_reg in
+    let* () =
+      match right with
+      | ImmInt n when n <> 0 -> return ()
+      | _ ->
+        let* nonzero = fresh_label in
+        let* () = emit bne t1 x0 nonzero in
+        let* () = emit call "division_by_zero" in
+        emit label nonzero
+    in
+    let* () = emit div dst t0 t1 in
+    tag_result dst
+  | _ -> fail (Printf.sprintf "unsupported arithmetic operator %S" op)
+;;
+
+let gen_add_immediate ~dst value n =
+  if n = 0
+  then gen_imm ~dst value
+  else
+    let* src = gen_operand ~scratch:dst value in
+    emit addi dst src (2 * n)
+;;
+
+let gen_arithmetic ~dst op args =
+  let* () = check_integer_operands args in
+  match op, args with
+  | "+", [ arg ] -> gen_imm ~dst arg
+  | "-", [ arg ] -> gen_negation ~dst arg
+  | "+", [ value; ImmInt n ] when n >= -1024 && n <= 1023 ->
+    gen_add_immediate ~dst value n
+  | "+", [ ImmInt n; value ] when n >= -1024 && n <= 1023 ->
+    gen_add_immediate ~dst value n
+  | "-", [ value; ImmInt n ] when n >= -1023 && n <= 1024 ->
+    gen_add_immediate ~dst value (-n)
+  | "/", [ value; ImmInt 1 ] -> gen_imm ~dst value
+  | "/", [ value; ImmInt -1 ] -> gen_negation ~dst value
+  | ("+" | "-" | "*" | "/"), [ left; right ] -> gen_binop ~dst op left right
+  | ("+" | "-" | "*" | "/"), _ ->
+    fail (Printf.sprintf "wrong number of arguments to %S: %d" op (List.length args))
+  | _ -> fail (Printf.sprintf "unsupported arithmetic operator %S" op)
 ;;
 
 (* ---------- Entry point ---------- *)

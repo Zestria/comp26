@@ -80,6 +80,8 @@ type instr =
   | Or of reg * reg * reg
   | Xor of reg * reg * reg
   | Addi of reg * reg * int
+  | Slli of reg * reg * int
+  | Srai of reg * reg * int
   (* Comparisons *)
   | Slt of reg * reg * reg
   | Seqz of reg * reg
@@ -109,6 +111,8 @@ let and_ k rd rs1 rs2 = k (And (rd, rs1, rs2))
 let or_ k rd rs1 rs2 = k (Or (rd, rs1, rs2))
 let xor k rd rs1 rs2 = k (Xor (rd, rs1, rs2))
 let addi k rd rs imm = k (Addi (rd, rs, imm))
+let slli k rd rs amount = k (Slli (rd, rs, amount))
+let srai k rd rs amount = k (Srai (rd, rs, amount))
 let slt k rd rs1 rs2 = k (Slt (rd, rs1, rs2))
 let seqz k rd rs = k (Seqz (rd, rs))
 let snez k rd rs = k (Snez (rd, rs))
@@ -136,7 +140,7 @@ type directive =
   | Section of section
   | Globl of string
   | P2align of int (* Align to 2^n bytes *)
-  | Quad of int64
+  | Quad of int
   | Zero of int (* Reserve this many zero-initialized bytes *)
 
 type asm_item =
@@ -180,6 +184,8 @@ let pp_instr = function
   | Or (rd, rs1, rs2) -> pp_rrr "or" rd rs1 rs2
   | Xor (rd, rs1, rs2) -> pp_rrr "xor" rd rs1 rs2
   | Addi (rd, rs, imm) -> pp_rri "addi" rd rs imm
+  | Slli (rd, rs, amount) -> pp_rri "slli" rd rs amount
+  | Srai (rd, rs, amount) -> pp_rri "srai" rd rs amount
   | Slt (rd, rs1, rs2) -> pp_rrr "slt" rd rs1 rs2
   | Seqz (rd, rs) -> pp_rr "seqz" rd rs
   | Snez (rd, rs) -> pp_rr "snez" rd rs
