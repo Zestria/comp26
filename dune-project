@@ -184,4 +184,16 @@
   (ppx_deriving_qcheck :with-test)))
 
 
+(package
+ (name MLate)
+ (synopsis "A short LLVM MLate")
+ (depends
+  ocaml
+  dune
+  (angstrom
+   (= "0.16.0"))
+  qcheck
+  bisect_ppx_ng
+  ppx_deriving_qcheck))
+
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

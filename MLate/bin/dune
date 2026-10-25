@@ -1,0 +1,17 @@
+(library
+ (name LL)
+ (public_name MLate.LL)
+ (modules LL)
+ (wrapped false)
+ (libraries
+  llvm
+  llvm.analysis
+  llvm.executionengine
+  ;
+  )
+ (instrumentation
+  (backend bisect_ppx_ng)))
+
+(cram
+ (package MLate)
+ (deps ../compiler.exe runtime.c))
