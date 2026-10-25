@@ -8,6 +8,7 @@
 
 open Anf
 module SSet = Set.Make (String)
+module SMap = Map.Make (String)
 
 (* ---------- free variables ---------- *)
 
@@ -62,102 +63,142 @@ and fv_aexpr = function
 let ( let* ) = Fresh.( let* )
 let return = Fresh.return
 
-type ctx = { locals : SSet.t }
+type ctx =
+  { locals : SSet.t
+  ; recursive : imm list SMap.t
+  }
 
-let with_local ctx name = { locals = SSet.add name ctx.locals }
+let with_local ctx name =
+  { locals = SSet.add name ctx.locals; recursive = SMap.remove name ctx.recursive }
+;;
+
 let with_locals ctx names = List.fold_left with_local ctx names
 let imm_vars names = List.map (fun name -> ImmVar name) names
+let tail expr = return (ACExpr expr)
 
 let caps_of ctx ~params body =
   SSet.elements (SSet.inter (SSet.diff (fv_aexpr body) (SSet.of_list params)) ctx.locals)
 ;;
 
-let rec cc_cexpr ctx = function
+let recursive_args ctx = function
+  | ImmVar name -> Option.value (SMap.find_opt name ctx.recursive) ~default:[]
+  | ImmInt _ | ImmBool _ | ImmUnit -> []
+;;
+
+(* A recursive function used as a value needs its captured arguments applied.
+   Introduce a temporary only where ANF requires an immediate. *)
+let rec cc_imm ctx imm k =
+  match imm, recursive_args ctx imm with
+  | ImmVar name, (_ :: _ as captures) ->
+    cc_imms ctx captures (fun captures ->
+      let* temp = Fresh.name ~suffix:"__cc" name in
+      let* body = k (ImmVar temp) in
+      return (ALet (temp, CApp (imm, captures), body)))
+  | _ -> k imm
+
+and cc_imms ctx imms k =
+  match imms with
+  | [] -> k []
+  | imm :: rest ->
+    cc_imm ctx imm (fun imm -> cc_imms ctx rest (fun rest -> k (imm :: rest)))
+
+and cc_cexpr ctx expr k =
+  match expr with
+  | CImm imm ->
+    (match recursive_args ctx imm with
+     | [] -> k expr
+     | captures -> cc_imms ctx captures (fun captures -> k (CApp (imm, captures))))
+  | CApp (fn, args) ->
+    cc_imms ctx (recursive_args ctx fn @ args) (fun args -> k (CApp (fn, args)))
+  | CTuple (first, second, rest) ->
+    cc_imm ctx first (fun first ->
+      cc_imm ctx second (fun second ->
+        cc_imms ctx rest (fun rest -> k (CTuple (first, second, rest)))))
   | CIte (cond, then_branch, else_branch) ->
-    let* then_branch = cc_aexpr ctx then_branch in
-    let* else_branch = cc_aexpr ctx else_branch in
-    return (CIte (cond, then_branch, else_branch))
-  | (CImm _ | CApp _ | CTuple _ | CMatchFailure | CFun _) as cexpr ->
-    (* A lambda never gets here: [cc_aexpr] and [convert_rec] convert it first,
-       and ANF never puts a lambda in any other cexpr position. *)
-    return cexpr
+    cc_imm ctx cond (fun cond ->
+      let* then_branch = cc_aexpr ctx then_branch in
+      let* else_branch = cc_aexpr ctx else_branch in
+      k (CIte (cond, then_branch, else_branch)))
+  | CMatchFailure | CFun _ -> k expr
 
 and cc_aexpr ctx = function
   | ACExpr (CFun (params, body)) -> convert_tail ctx params body
-  | ACExpr cexpr ->
-    let* cexpr = cc_cexpr ctx cexpr in
-    return (ACExpr cexpr)
+  | ACExpr cexpr -> cc_cexpr ctx cexpr tail
   | ALet (name, CFun (params, value), body) -> convert_let ctx name params value body
   | ALet (name, value, body) ->
-    let* value = cc_cexpr ctx value in
-    let* body = cc_aexpr (with_local ctx name) body in
-    return (ALet (name, value, body))
+    cc_cexpr ctx value (fun value ->
+      let* body = cc_aexpr (with_local ctx name) body in
+      return (ALet (name, value, body)))
   | ALetTuple (names, subject, body) ->
-    let ctx =
-      List.fold_left
-        (fun ctx name ->
-           match name with
-           | Some name -> with_local ctx name
-           | None -> ctx)
-        ctx
-        names
-    in
-    let* body = cc_aexpr ctx body in
-    return (ALetTuple (names, subject, body))
+    cc_imm ctx subject (fun subject ->
+      let ctx = with_locals ctx (List.filter_map Fun.id names) in
+      let* body = cc_aexpr ctx body in
+      return (ALetTuple (names, subject, body)))
   | ALetRec (bindings, body) ->
-    let ctx_body = with_locals ctx (List.map fst bindings) in
-    let* bindings = convert_rec ctx bindings in
-    let* body = cc_aexpr ctx_body body in
+    let* ctx, bindings = convert_rec ctx bindings in
+    let* body = cc_aexpr ctx body in
     return (ALetRec (bindings, body))
 
 and convert_let ctx name params value body =
-  let* value' = cc_aexpr (with_locals ctx params) value in
+  let captures = caps_of ctx ~params value in
+  let* value' = cc_aexpr (with_locals ctx (captures @ params)) value in
   let* body' = cc_aexpr (with_local ctx name) body in
-  match caps_of ctx ~params value with
+  match captures with
   | [] -> return (ALet (name, CFun (params, value'), body'))
-  | caps ->
+  | _ ->
     let* helper = Fresh.name ~suffix:"__cc" name in
-    return
-      (ALet
-         ( helper
-         , CFun (caps @ params, value')
-         , ALet (name, CApp (ImmVar helper, imm_vars caps), body') ))
+    cc_imms ctx (imm_vars captures) (fun args ->
+      return
+        (ALet
+           ( helper
+           , CFun (captures @ params, value')
+           , ALet (name, CApp (ImmVar helper, args), body') )))
 
 and convert_tail ctx params value =
-  let* value' = cc_aexpr (with_locals ctx params) value in
-  match caps_of ctx ~params value with
+  let captures = caps_of ctx ~params value in
+  let* value' = cc_aexpr (with_locals ctx (captures @ params)) value in
+  match captures with
   | [] -> return (ACExpr (CFun (params, value')))
-  | caps ->
+  | _ ->
     let* helper = Fresh.name ~suffix:"__cc" "f" in
-    return
-      (ALet
-         ( helper
-         , CFun (caps @ params, value')
-         , ACExpr (CApp (ImmVar helper, imm_vars caps)) ))
+    cc_imms ctx (imm_vars captures) (fun args ->
+      return
+        (ALet
+           (helper, CFun (captures @ params, value'), ACExpr (CApp (ImmVar helper, args)))))
 
 and convert_rec ctx bindings =
-  let group =
-    List.fold_left (fun acc (name, _) -> SSet.add name acc) SSet.empty bindings
+  let names = List.map fst bindings in
+  let group = SSet.of_list names in
+  let free =
+    List.fold_left
+      (fun free (_, value) -> SSet.union free (fv_cexpr value))
+      SSet.empty
+      bindings
   in
-  let ctx_body = { locals = SSet.union ctx.locals group } in
-  let convert_binding (name, value) =
-    match value with
-    | CFun (params, value_body) ->
-      let* value_body' = cc_aexpr (with_locals ctx_body params) value_body in
-      (match caps_of ctx ~params value_body with
-       | [] -> return [ name, CFun (params, value_body') ]
-       | caps ->
-         let* helper = Fresh.name ~suffix:"__cc" name in
-         return
-           [ name, CFun (params, ACExpr (CApp (ImmVar helper, imm_vars (caps @ params))))
-           ; helper, CFun (caps @ params, value_body')
-           ])
-    | _ ->
-      let* value = cc_cexpr ctx_body value in
-      return [ name, value ]
+  (* All members receive the same captures, including values used only by
+     another member. Calls within the group can then pass them directly. *)
+  let captures = SSet.elements (SSet.inter ctx.locals (SSet.diff free group)) in
+  let ctx = with_locals ctx names in
+  let ctx =
+    { ctx with
+      recursive =
+        List.fold_left
+          (fun env name -> SMap.add name (imm_vars captures) env)
+          ctx.recursive
+          names
+    }
   in
-  let* converted = Fresh.map_list convert_binding bindings in
-  return (List.concat converted)
+  let* bindings =
+    Fresh.map_list
+      (fun (name, value) ->
+         match value with
+         | CFun (params, body) ->
+           let* body = cc_aexpr (with_locals ctx (captures @ params)) body in
+           return (name, CFun (captures @ params, body))
+         | _ -> return (name, value))
+      bindings
+  in
+  return (ctx, bindings)
 ;;
 
 let cc_item ctx = function
@@ -165,7 +206,7 @@ let cc_item ctx = function
     let* body = cc_aexpr ctx body in
     return (AValue (name, body))
   | ARec bindings ->
-    let* bindings = convert_rec ctx bindings in
+    let* _, bindings = convert_rec ctx bindings in
     return (ARec bindings)
   | AEval body ->
     let* body = cc_aexpr ctx body in
@@ -173,6 +214,6 @@ let cc_item ctx = function
 ;;
 
 let program program =
-  let ctx = { locals = SSet.empty } in
+  let ctx = { locals = SSet.empty; recursive = SMap.empty } in
   Fresh.run (Fresh.create_from_program program) (Fresh.map_list (cc_item ctx) program)
 ;;

@@ -99,14 +99,33 @@ let simplify_item = function
 let ( let* ) = Fresh.( let* )
 let return = Fresh.return
 
-type ctx = { counts : int SMap.t }
+type ctx =
+  { counts : int SMap.t
+  ; renames : string SMap.t
+  }
 
-let can_reuse ctx name = Option.value (SMap.find_opt name ctx.counts) ~default:0 = 1
+let can_reuse ctx name =
+  Option.value (SMap.find_opt name ctx.counts) ~default:0 = 1
+  && not (Value.is_primitive name || String.equal name "print_int")
+;;
+
+let without_names ctx names =
+  { ctx with
+    renames = List.fold_left (fun env name -> SMap.remove name env) ctx.renames names
+  }
+;;
+
+let rename_name ctx name = Option.value (SMap.find_opt name ctx.renames) ~default:name
+
+let rename_imm ctx = function
+  | ImmVar name -> ImmVar (rename_name ctx name)
+  | (ImmInt _ | ImmBool _ | ImmUnit) as imm -> imm
+;;
 
 let rec hoist_aexpr ctx = function
   | ALet (name, CFun (params, body), cont) ->
-    let* body', body_items = hoist_aexpr ctx body in
-    let* cont', cont_items = hoist_aexpr ctx cont in
+    let* body', body_items = hoist_aexpr (without_names ctx params) body in
+    let* cont', cont_items = hoist_aexpr (without_names ctx [ name ]) cont in
     let* lifted, binding =
       if can_reuse ctx name
       then return (name, cont')
@@ -119,10 +138,10 @@ let rec hoist_aexpr ctx = function
       , body_items @ [ AValue (lifted, ACExpr (CFun (params, body'))) ] @ cont_items )
   | ALet (name, value, cont) ->
     let* value', value_items = hoist_cexpr ctx value in
-    let* cont', cont_items = hoist_aexpr ctx cont in
+    let* cont', cont_items = hoist_aexpr (without_names ctx [ name ]) cont in
     return (ALet (name, value', cont'), value_items @ cont_items)
   | ACExpr (CFun (params, body)) ->
-    let* body', body_items = hoist_aexpr ctx body in
+    let* body', body_items = hoist_aexpr (without_names ctx params) body in
     let* fresh = Fresh.name ~suffix:"__ll" "f" in
     return
       ( ACExpr (CImm (ImmVar fresh))
@@ -131,33 +150,59 @@ let rec hoist_aexpr ctx = function
     let* value', value_items = hoist_cexpr ctx value in
     return (ACExpr value', value_items)
   | ALetTuple (names, subject, cont) ->
-    let* cont', cont_items = hoist_aexpr ctx cont in
-    return (ALetTuple (names, subject, cont'), cont_items)
+    let* cont', cont_items =
+      hoist_aexpr (without_names ctx (List.filter_map Fun.id names)) cont
+    in
+    return (ALetTuple (names, rename_imm ctx subject, cont'), cont_items)
   | ALetRec (bindings, cont) ->
+    let* renames =
+      Fresh.map_list
+        (fun (name, _) ->
+           let* lifted =
+             if can_reuse ctx name then return name else Fresh.name ~suffix:"__ll" name
+           in
+           return (name, lifted))
+        bindings
+    in
+    let ctx =
+      { ctx with
+        renames =
+          List.fold_left
+            (fun env (name, lifted) -> SMap.add name lifted env)
+            ctx.renames
+            renames
+      }
+    in
     let* bindings', body_items = hoist_bindings ctx bindings in
     let* cont', cont_items = hoist_aexpr ctx cont in
-    return (ALetRec (bindings', cont'), body_items @ cont_items)
+    return (cont', body_items @ [ ARec bindings' ] @ cont_items)
 
 and hoist_cexpr ctx = function
   | CIte (cond, then_branch, else_branch) ->
     let* then_branch', then_items = hoist_aexpr ctx then_branch in
     let* else_branch', else_items = hoist_aexpr ctx else_branch in
-    return (CIte (cond, then_branch', else_branch'), then_items @ else_items)
-  | (CImm _ | CApp _ | CTuple _ | CMatchFailure | CFun _) as value ->
-    (* A lambda never gets here: [hoist_aexpr] and [hoist_bindings] lift it
-       first, and ANF never puts a lambda in any other cexpr position. *)
-    return (value, [])
+    return
+      (CIte (rename_imm ctx cond, then_branch', else_branch'), then_items @ else_items)
+  | CImm imm -> return (CImm (rename_imm ctx imm), [])
+  | CApp (fn, args) ->
+    return (CApp (rename_imm ctx fn, List.map (rename_imm ctx) args), [])
+  | CTuple (first, second, rest) ->
+    return
+      ( CTuple
+          (rename_imm ctx first, rename_imm ctx second, List.map (rename_imm ctx) rest)
+      , [] )
+  | (CMatchFailure | CFun _) as value -> return (value, [])
 
-(* Don't touch the group, just hoist what's inside its bodies. *)
+(* The whole recursive group is lifted together; all members see its new names. *)
 and hoist_bindings ctx bindings =
   let hoist_binding (name, value) =
     match value with
     | CFun (params, body) ->
-      let* body', items = hoist_aexpr ctx body in
-      return ((name, CFun (params, body')), items)
+      let* body', items = hoist_aexpr (without_names ctx params) body in
+      return ((rename_name ctx name, CFun (params, body')), items)
     | _ ->
       let* value', items = hoist_cexpr ctx value in
-      return ((name, value'), items)
+      return ((rename_name ctx name, value'), items)
   in
   let* hoisted = Fresh.map_list hoist_binding bindings in
   return (List.map fst hoisted, List.concat_map snd hoisted)
@@ -165,7 +210,7 @@ and hoist_bindings ctx bindings =
 
 let hoist_item ctx = function
   | AValue (name, ACExpr (CFun (params, body))) ->
-    let* body', items = hoist_aexpr ctx body in
+    let* body', items = hoist_aexpr (without_names ctx params) body in
     return (items @ [ AValue (name, ACExpr (CFun (params, body'))) ])
   | AValue (name, body) ->
     let* body', items = hoist_aexpr ctx body in
@@ -180,7 +225,7 @@ let hoist_item ctx = function
 
 let program program =
   let program = List.map simplify_item program in
-  let ctx = { counts = binder_counts program } in
+  let ctx = { counts = binder_counts program; renames = SMap.empty } in
   let hoisted =
     Fresh.run
       (Fresh.create_from_program program)

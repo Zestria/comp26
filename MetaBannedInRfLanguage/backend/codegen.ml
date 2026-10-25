@@ -574,7 +574,7 @@ let rec gen_cexpr = function
     let* () = emit label else_label in
     let* () = gen_aexpr else_branch in
     emit label end_label
-  | CFun _ -> fail "function definitions are not implemented yet"
+  | CFun _ -> fail "unexpected function expression after lambda lifting"
   | CTuple _ -> fail "tuple generation is not implemented yet"
   | CMatchFailure -> fail "match failure generation is not implemented yet"
 
@@ -588,7 +588,7 @@ and gen_aexpr = function
     let* () = gen_aexpr body in
     modify (fun state -> { state with env = outer.env; functions = outer.functions })
   | ALetTuple _ -> fail "tuple destructuring is not implemented yet"
-  | ALetRec _ -> fail "recursive function definitions are not implemented yet"
+  | ALetRec _ -> fail "unexpected local recursive binding after lambda lifting"
 ;;
 
 (* ---------- Functions ---------- *)
