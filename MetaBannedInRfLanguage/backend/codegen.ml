@@ -395,7 +395,7 @@ let store_local ~src offset =
 
 (* Each expression leaves its result in a0. Values that must survive a call
    are stored in the frame or in globals. *)
-let gen_cexpr = function
+let rec gen_cexpr = function
   | CImm imm -> gen_imm ~dst:a0 imm
   | CApp (ImmVar name, args) ->
     let* state = get in
@@ -414,13 +414,25 @@ let gen_cexpr = function
       | "print_int", _ -> fail "print_int expects one argument"
       | _ -> fail (Printf.sprintf "unsupported function %S" name))
   | CApp _ -> fail "indirect function calls are not implemented yet"
-  | CIte _ -> fail "conditional expressions are not implemented yet"
+  | CIte (ImmBool true, then_branch, _) -> gen_aexpr then_branch
+  | CIte (ImmBool false, _, else_branch) -> gen_aexpr else_branch
+  | CIte (cond, then_branch, else_branch) ->
+    let* else_label = fresh_label in
+    let* end_label = fresh_label in
+    let* () = gen_imm ~dst:a0 cond in
+    (* Tagged false is 1, not zero. *)
+    let* () = emit li t0 1 in
+    let* () = emit beq a0 t0 else_label in
+    let* () = gen_aexpr then_branch in
+    let* () = emit j end_label in
+    let* () = emit label else_label in
+    let* () = gen_aexpr else_branch in
+    emit label end_label
   | CFun _ -> fail "function definitions are not implemented yet"
   | CTuple _ -> fail "tuple generation is not implemented yet"
   | CMatchFailure -> fail "match failure generation is not implemented yet"
-;;
 
-let rec gen_aexpr = function
+and gen_aexpr = function
   | ACExpr expr -> gen_cexpr expr
   | ALet (name, value, body) ->
     let* outer = get in
