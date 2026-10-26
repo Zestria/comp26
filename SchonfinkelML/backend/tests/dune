@@ -5,6 +5,15 @@
   (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. ../gc.c gc_test.c -o %{targets})))
 
 (rule
+ (targets tuple_test.exe)
+ (deps tuple_test.c ../gc.c ../gc.h ../tuple.c ../tuple.h)
+ (action
+  (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. ../gc.c ../tuple.c tuple_test.c -o %{targets})))
+
+(rule
  (alias runtest)
  (package SchonfinkelML)
- (action (run ./gc_test.exe)))
+ (action
+  (progn
+   (run ./gc_test.exe)
+   (run ./tuple_test.exe))))
