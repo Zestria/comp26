@@ -11,12 +11,12 @@ The compiler pipeline is `parsing -> closure conversion -> lambda lifting`.
 ## Prerequisites
 You need the following in order to use SchonfinkelML compiler:
   - `qemu`, `riscv-binutils`
-  - `gcc` to compile runtime :) 
+  - `gcc` for native runtime tests, `gcc-riscv64-linux-gnu` for the RISC-V runtime
 
 Here how to install them if you are on Debian/Ubuntu:
 ``` bash
 sudo apt install -y \
-   binutils-riscv64-linux-gnu qemu-user gcc
+   binutils-riscv64-linux-gnu qemu-user gcc gcc-riscv64-linux-gnu
 ```
 
 The compiler returns assembly file as a result, to get complete riscv64 executable run these commands:
@@ -24,8 +24,16 @@ The compiler returns assembly file as a result, to get complete riscv64 executab
 # Your input is `input.S`
 riscv64-linux-gnu-as -march=rv64gc input.S -o temp.o
 riscv64-linux-gnu-ld temp.o -o file.exe
-qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./a.out
+qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./file.exe
 ```
+
+## Managed runtime
+
+The runtime provides a nonmoving mark-and-sweep collector with explicit roots,
+custom tracers for closures and other objects, and managed tuples. See
+[the runtime integration guide](backend/RUNTIME.md) for the allocation contract,
+root placement, and RISC-V build commands. The current emitter does not yet
+emit runtime calls or root registration.
 
 
 ## How to run

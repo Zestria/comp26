@@ -15,3 +15,7 @@
  (section lib)
  (files libschoml_runtime.a runtime.h gc.h tuple.h runtime.c gc.c tuple.c))
 
+(install
+ (package SchonfinkelML)
+ (section doc)
+ (files (RUNTIME.md as backend/RUNTIME.md)))
