@@ -69,8 +69,7 @@ static void test_integer_is_not_a_reference(void) {
   schoml_gc_shutdown();
 }
 
-/* This is a test-only closure layout. The real closure representation and
- * application machinery belong to the separate closure-runtime task. */
+/* This is a test-only closure layout. */
 typedef struct {
   uintptr_t (*code)(schoml_tuple *environment, uintptr_t argument);
   schoml_tuple *environment;
