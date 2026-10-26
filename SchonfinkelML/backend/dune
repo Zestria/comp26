@@ -1,6 +1,6 @@
 (library
  (name SchonfinkelML_backend)
- (modules emitter writer common allocator)
+ (modules emitter writer common allocator closures)
  (libraries SchonfinkelML_middleend)
  (package SchonfinkelML))
 
