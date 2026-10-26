@@ -3,3 +3,15 @@
  (modules emitter writer common allocator)
  (libraries SchonfinkelML_middleend)
  (package SchonfinkelML))
+
+(foreign_library
+ (archive_name schoml_runtime)
+ (language c)
+ (names runtime gc tuple)
+ (flags (:standard -std=c11 -Wall -Wextra -Werror -pedantic)))
+
+(install
+ (package SchonfinkelML)
+ (section lib)
+ (files libschoml_runtime.a runtime.h gc.h tuple.h runtime.c gc.c tuple.c))
+
