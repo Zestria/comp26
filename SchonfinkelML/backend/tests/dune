@@ -17,10 +17,17 @@
   (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. runtime_error_test.c ../libschoml_runtime.a -o %{targets})))
 
 (rule
+ (targets closure_test.exe)
+ (deps closure_test.c ../gc.h ../tuple.h ../closure.h ../libschoml_runtime.a)
+ (action
+  (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. closure_test.c ../libschoml_runtime.a -o %{targets})))
+
+(rule
  (alias runtest)
  (package SchonfinkelML)
  (action
   (progn
    (run ./gc_test.exe)
    (run ./tuple_test.exe)
-   (run ./runtime_error_test.exe))))
+   (run ./runtime_error_test.exe)
+   (run ./closure_test.exe))))
