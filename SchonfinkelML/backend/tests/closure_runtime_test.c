@@ -56,6 +56,6 @@ int main(void) {
     test_managed_capture();
     test_immediate_capture();
     test_unreachable_freed();
-    printf("closure_test: OK\n");
+    printf("closure_test: passed\n");
     return 0;
 }
