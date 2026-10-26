@@ -1,0 +1,10 @@
+(rule
+ (targets gc_test.exe)
+ (deps gc_test.c ../gc.c ../gc.h)
+ (action
+  (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. ../gc.c gc_test.c -o %{targets})))
+
+(rule
+ (alias runtest)
+ (package SchonfinkelML)
+ (action (run ./gc_test.exe)))
