@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
-#include "runtime.h"
+#include "../runtime.h"
 
 #include <signal.h>
 #include <stdint.h>
