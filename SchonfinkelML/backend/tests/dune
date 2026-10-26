@@ -31,3 +31,12 @@
    (run ./tuple_test.exe)
    (run ./runtime_error_test.exe)
    (run ./closure_runtime_test.exe))))
+
+(test
+ (name closures_test)
+ (package SchonfinkelML)
+ (libraries
+  SchonfinkelML_backend
+  SchonfinkelML_middleend
+  SchonfinkelML_frontend
+  top_down))
