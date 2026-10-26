@@ -32,12 +32,7 @@ static void wrong_field_kind(void) {
   (void)schoml_tuple_get_ref(tuple, 0);
 }
 
-static void incorrect_root_order(void) {
-  schoml_gc_root first, second;
-  schoml_gc_push_root(&first, NULL);
-  schoml_gc_push_root(&second, NULL);
-  schoml_gc_pop_root(&first);
-}
+static void empty_root_stack(void) { schoml_gc_pop_root(); }
 
 static void expect_abort(void (*action)(void), const char *diagnostic) {
   int output[2];
@@ -79,8 +74,7 @@ int main(void) {
   expect_abort(tuple_size_overflow, "tuple: allocation size overflow");
   expect_abort(tuple_index_out_of_bounds, "tuple: index out of bounds");
   expect_abort(wrong_field_kind, "tuple: expected a reference field");
-  expect_abort(incorrect_root_order,
-               "GC: roots must be popped in reverse registration order");
+  expect_abort(empty_root_stack, "GC: cannot pop an empty root stack");
   puts("Runtime error tests passed");
   return 0;
 }

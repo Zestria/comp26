@@ -43,7 +43,7 @@ static void test_roots_and_reassignment(void) {
   root.value = NULL;
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 0);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_shutdown();
 }
 
@@ -59,11 +59,11 @@ static void test_cycles_and_shared_children(void) {
   shared->next = left;
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 3);
-  schoml_gc_pop_root(&right_root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 2);
   CHECK(left->next->next == left);
-  schoml_gc_pop_root(&left_root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 0);
   CHECK(schoml_gc_get_stats().bytes == 0);
@@ -83,7 +83,7 @@ static void test_automatic_collection(void) {
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 1);
   CHECK(schoml_gc_get_stats().bytes == sizeof(node));
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_shutdown();
 }
 
@@ -97,7 +97,7 @@ static void test_deep_graph(void) {
   }
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 100000);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 0);
   schoml_gc_shutdown();
@@ -114,7 +114,7 @@ static void test_zero_size_and_empty_heap(void) {
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 1);
   CHECK(schoml_gc_get_stats().bytes == 0);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_shutdown();
   CHECK(schoml_gc_get_stats().objects == 0);
   CHECK(schoml_gc_get_stats().collections == 0);

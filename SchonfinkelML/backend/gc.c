@@ -56,11 +56,12 @@ void schoml_gc_push_root(schoml_gc_root *root, void *value) {
   roots = root;
 }
 
-void schoml_gc_pop_root(schoml_gc_root *root) {
+void schoml_gc_pop_root(void) {
   check_not_collecting();
-  if (root == NULL || root != roots) {
-    fail("roots must be popped in reverse registration order");
+  if (roots == NULL) {
+    fail("cannot pop an empty root stack");
   }
+  schoml_gc_root *root = roots;
   roots = root->previous;
   root->value = NULL;
   root->previous = NULL;

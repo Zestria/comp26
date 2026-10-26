@@ -27,7 +27,7 @@ static void test_tuple_fields(void) {
   CHECK(schoml_tuple_get_word(tuple, 0) == UINTPTR_MAX);
   CHECK(schoml_tuple_get_word(tuple, 1) == (uintptr_t)INTPTR_MIN);
   CHECK(schoml_tuple_get_ref(tuple, 2) == NULL);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_shutdown();
 }
 
@@ -49,7 +49,7 @@ static void test_nested_tuples_and_cycles(void) {
   schoml_tuple_set_word(outer, 1, 43);
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 1);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 0);
   schoml_gc_shutdown();
@@ -65,7 +65,7 @@ static void test_integer_is_not_a_reference(void) {
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 1);
   CHECK(schoml_tuple_get_word(tuple, 0) == address_as_integer);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_shutdown();
 }
 
@@ -106,7 +106,7 @@ static void test_closure_lifetime(void) {
   CHECK(schoml_gc_get_stats().objects == 2);
   CHECK(closure->code(closure->environment, 2) == 42);
   CHECK(schoml_tuple_get_ref(closure->environment, 1) == closure);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 0);
   CHECK(schoml_gc_get_stats().bytes == 0);
@@ -120,7 +120,7 @@ static void test_empty_tuple(void) {
   schoml_gc_collect();
   CHECK(schoml_tuple_length(tuple) == 0);
   CHECK(schoml_gc_get_stats().objects == 1);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_shutdown();
 }
 
@@ -153,7 +153,7 @@ static void test_closure_capturing_closure(void) {
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 4);
   CHECK(outer->code(outer->environment, 2) == 42);
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   CHECK(schoml_gc_get_stats().objects == 0);
   schoml_gc_shutdown();

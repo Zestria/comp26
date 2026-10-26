@@ -24,7 +24,8 @@ typedef struct {
 } schoml_gc_stats;
 
 void schoml_gc_push_root(schoml_gc_root *root, void *value);
-void schoml_gc_pop_root(schoml_gc_root *root);
+/* Pop the most recently registered root. An empty root stack aborts. */
+void schoml_gc_pop_root(void);
 
 /* Allocate zeroed, maximally aligned, nonmoving storage. A NULL trace denotes
  * an object without outgoing references. A trace may only read its object and

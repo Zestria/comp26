@@ -57,10 +57,11 @@ that may allocate:
 2. Keep `root.value` up to date after reassigning the corresponding variable.
    Keep managed arguments rooted throughout calls that may allocate. A returned
    object must be rooted before the next allocating call.
-3. Pop roots in reverse registration order with `schoml_gc_pop_root(&root)`.
-   Remove references when their values become dead. To release an earlier root
-   while later roots remain active, set its `value` to `NULL`, then pop its
-   record when it reaches the top of the root stack.
+3. Pop the most recently registered root with `schoml_gc_pop_root()`.
+   Popping an empty root stack terminates the process. Remove references when
+   their values become dead. To release an earlier root while later roots remain
+   active, set its `value` to `NULL`, then pop its record when it reaches the top
+   of the root stack.
 
 For assembly integration, `schoml_gc_root` contains two pointer-sized fields:
 `value`, then `previous`. On RV64 these are offsets 0 and 8, with a total size
@@ -99,7 +100,7 @@ int main(void) {
   assert(schoml_gc_get_stats().objects == 2);
   assert(schoml_tuple_get_word(schoml_tuple_get_ref(outer, 0), 0) == 42);
 
-  schoml_gc_pop_root(&root);
+  schoml_gc_pop_root();
   schoml_gc_collect();
   assert(schoml_gc_get_stats().objects == 0);
   schoml_gc_shutdown();
