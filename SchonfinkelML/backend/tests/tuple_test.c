@@ -124,11 +124,47 @@ static void test_empty_tuple(void) {
   schoml_gc_shutdown();
 }
 
+static uintptr_t apply_parent(schoml_tuple *environment, uintptr_t argument) {
+  test_closure *parent = schoml_tuple_get_ref(environment, 0);
+  return parent->code(parent->environment, argument) +
+         schoml_tuple_get_word(environment, 1);
+}
+
+static void test_closure_capturing_closure(void) {
+  schoml_gc_root root;
+  schoml_tuple *inner_environment = schoml_tuple_alloc(1);
+  schoml_gc_push_root(&root, inner_environment);
+  schoml_tuple_set_word(inner_environment, 0, 39);
+  schoml_gc_set_threshold(0);
+  test_closure *inner = schoml_gc_alloc(sizeof(*inner), trace_closure);
+  inner->code = add_capture;
+  inner->environment = inner_environment;
+  root.value = inner;
+  schoml_gc_set_threshold(0);
+  schoml_tuple *outer_environment = schoml_tuple_alloc(2);
+  schoml_tuple_set_ref(outer_environment, 0, inner);
+  schoml_tuple_set_word(outer_environment, 1, 1);
+  root.value = outer_environment;
+  schoml_gc_set_threshold(0);
+  test_closure *outer = schoml_gc_alloc(sizeof(*outer), trace_closure);
+  outer->code = apply_parent;
+  outer->environment = outer_environment;
+  root.value = outer;
+  schoml_gc_collect();
+  CHECK(schoml_gc_get_stats().objects == 4);
+  CHECK(outer->code(outer->environment, 2) == 42);
+  schoml_gc_pop_root(&root);
+  schoml_gc_collect();
+  CHECK(schoml_gc_get_stats().objects == 0);
+  schoml_gc_shutdown();
+}
+
 int main(void) {
   test_tuple_fields();
   test_nested_tuples_and_cycles();
   test_integer_is_not_a_reference();
   test_closure_lifetime();
+  test_closure_capturing_closure();
   test_empty_tuple();
   puts("Tuple and closure lifetime tests passed");
   return 0;

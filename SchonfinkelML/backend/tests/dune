@@ -11,9 +11,16 @@
   (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. tuple_test.c ../libschoml_runtime.a -o %{targets})))
 
 (rule
+ (targets runtime_error_test.exe)
+ (deps runtime_error_test.c ../runtime.h ../gc.h ../tuple.h ../libschoml_runtime.a)
+ (action
+  (run cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -I.. runtime_error_test.c ../libschoml_runtime.a -o %{targets})))
+
+(rule
  (alias runtest)
  (package SchonfinkelML)
  (action
   (progn
    (run ./gc_test.exe)
-   (run ./tuple_test.exe))))
+   (run ./tuple_test.exe)
+   (run ./runtime_error_test.exe))))
