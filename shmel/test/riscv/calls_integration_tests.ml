@@ -256,13 +256,11 @@ let run ~docker =
         @ [ "int main(void) {" ]
         @ initialize
         @ [ "return 0; }\n" ]));
-  let available =
-    List.for_all
-      (fun tool -> Sys.command ("command -v " ^ tool ^ " >/dev/null") = 0)
-      [ "riscv64-linux-gnu-gcc"; "qemu-riscv64" ]
-  in
+  let available = Sys.command "sh run_riscv.sh available >/dev/null 2>&1" = 0 in
   if (not docker) && not available
-  then print_endline "skipped integration execution: cross-compiler or QEMU not found"
+  then
+    print_endline
+      "skipped integration execution: cross-compiler, QEMU or target libffi not found"
   else (
     let command =
       if docker

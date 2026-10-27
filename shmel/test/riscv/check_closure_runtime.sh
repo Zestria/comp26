@@ -16,9 +16,8 @@ cc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
     -o closure_runtime_native.exe $(pkg-config --libs libffi)
 ./closure_runtime_native.exe
 
-if command -v riscv64-linux-gnu-gcc >/dev/null 2>&1 && \
-   command -v qemu-riscv64 >/dev/null 2>&1; then
+if sh run_riscv.sh available; then
     sh run_riscv.sh runtime ../../backend
 else
-    echo "skipped RV64 runtime execution: cross-compiler or QEMU not found"
+    echo "skipped RV64 runtime execution: cross-compiler, QEMU or target libffi not found"
 fi
