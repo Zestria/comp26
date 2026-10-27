@@ -15,6 +15,7 @@ depends: [
   "bisect_ppx_ng"
   "llvm" {= "18-shared"}
   "ppx_deriving_qcheck" {= "0.9"}
+  "menhir" {>= "20180523"}
   "odoc" {with-doc}
 ]
 build: [
