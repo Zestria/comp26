@@ -14,7 +14,7 @@ let parse_with_menhir s =
   ast
 ;;
 
-let parse_with_menhir_result s =
+let parse_menhir_result parser s =
   let lexbuf = Lexing.from_string s in
   let error_at message =
     let pos = lexbuf.Lexing.lex_curr_p in
@@ -26,17 +26,15 @@ let parse_with_menhir_result s =
              pos.Lexing.pos_lnum
              (pos.Lexing.pos_cnum - pos.Lexing.pos_bol)))
   in
-  match Parser.prog Lexer.read lexbuf with
+  match parser Lexer.read lexbuf with
   | ast -> Result.Ok ast
   | exception Parser.Error -> error_at "syntax error"
   | exception Failure message -> error_at message
 ;;
 
+let parse_with_menhir_result = parse_menhir_result Parser.prog
 let parse_with_comb = Parser_comb.parse
 let parse_with_comb_extended = Parser_comb.parse_extended
 let parse_program_with_comb = Parser_comb.parse_program
 let parse_program_with_comb_extended = Parser_comb.parse_program_extended
-
-let parse_program_with_menhir s =
-  Result.map (fun e -> [ DExpr e ]) (parse_with_menhir_result s)
-;;
+let parse_program_with_menhir = parse_menhir_result Parser.program
