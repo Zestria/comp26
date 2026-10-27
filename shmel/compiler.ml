@@ -18,6 +18,7 @@ type stage =
   | Anf_stage
   | Closure_stage
   | Lifting_stage
+  | Riscv_stage
 
 type output =
   | Stdout
@@ -41,7 +42,7 @@ let default_opts =
   { parser_kind = Topdown
   ; extended = false
   ; show_ast = false
-  ; stop_after = Anf_stage
+  ; stop_after = Riscv_stage
   ; output = Stdout
   ; input = None
   }
@@ -52,8 +53,8 @@ let usage =
    Compiles an ML program from <file> (or stdin).\n\n\
    Options:\n\
   \  -parsing topdown|menhir   Parser to use: top-down (default) or bottom-up\n\
-  \  --stop-after parsing|anf|closure|lifting  Stop after the stage and print its result \
-   (default: anf)\n\
+  \  --stop-after parsing|anf|closure|lifting|riscv  Stop after the stage and print its \
+   result (default: riscv)\n\
   \  -o <file>                 Write the result to <file>; '-o -' writes to stdout \
    (default)\n\
   \  --extended                Allow reserved words as identifiers (e.g. `let in = 1 in \
@@ -86,8 +87,10 @@ let parse_args args =
       loop llvm_demo { opts with stop_after = Closure_stage } rest
     | "--stop-after" :: "lifting" :: rest ->
       loop llvm_demo { opts with stop_after = Lifting_stage } rest
+    | "--stop-after" :: "riscv" :: rest ->
+      loop llvm_demo { opts with stop_after = Riscv_stage } rest
     | "--stop-after" :: _ ->
-      Error "--stop-after expects 'parsing', 'anf', 'closure' or 'lifting'"
+      Error "--stop-after expects 'parsing', 'anf', 'closure', 'lifting' or 'riscv'"
     | "-o" :: "-" :: rest -> loop llvm_demo { opts with output = Stdout } rest
     | "-o" :: file :: rest -> loop llvm_demo { opts with output = File file } rest
     | [ "-o" ] -> Error "-o expects a file name or '-'"
@@ -166,24 +169,31 @@ let read_input = function
      | Sys_error msg -> Error msg)
 ;;
 
-let emit opts program ppf =
+let generate opts program =
+  let print_anf program =
+    Ok (fun ppf -> Format.fprintf ppf "%a@." Anf.pp_program program)
+  in
   match opts.stop_after with
   | Parsing ->
-    if opts.show_ast then Format.fprintf ppf "%a@." Ast.pp_program program;
-    Format.fprintf ppf "%s@." (Printast.show_program program)
-  | Anf_stage -> Format.fprintf ppf "%a@." Anf.pp_program (Anf.of_program program)
-  | Closure_stage ->
-    Format.fprintf
-      ppf
-      "%a@."
-      Anf.pp_program
-      (Closure_conversion.of_program (Anf.of_program program))
+    Ok
+      (fun ppf ->
+        if opts.show_ast then Format.fprintf ppf "%a@." Ast.pp_program program;
+        Format.fprintf ppf "%s@." (Printast.show_program program))
+  | Anf_stage -> print_anf (Anf.of_program program)
+  | Closure_stage -> print_anf (Closure_conversion.of_program (Anf.of_program program))
   | Lifting_stage ->
-    Format.fprintf
-      ppf
-      "%a@."
-      Anf.pp_program
+    print_anf
       (Lambda_lifting.of_program (Closure_conversion.of_program (Anf.of_program program)))
+  | Riscv_stage ->
+    let lifted =
+      program
+      |> Anf.of_program
+      |> Closure_conversion.of_program
+      |> Lambda_lifting.of_program
+    in
+    Result.map
+      (fun code ppf -> Format.fprintf ppf "%a@." Shmel_backend.Riscv.pp_instrs code)
+      (Shmel_backend.Program.compile lifted)
 ;;
 
 let write output f =
@@ -207,9 +217,12 @@ let compile opts =
     (match parse opts text with
      | Error (`Parsing_error msg) -> fail 1 "Parser error: %s@." msg
      | Ok program ->
-       (match write opts.output (emit opts program) with
-        | Ok () -> ()
-        | Error msg -> fail 1 "Error: %s@." msg))
+       (match generate opts program with
+        | Error msg -> fail 1 "Backend error: %s@." msg
+        | Ok output ->
+          (match write opts.output output with
+           | Ok () -> ()
+           | Error msg -> fail 1 "Error: %s@." msg)))
 ;;
 
 let () =

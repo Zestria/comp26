@@ -62,7 +62,7 @@ Every declaration is converted on its own, declared names are kept:
   >   else fac (n - 1) (fun a -> k (a * n))
   > let main = print_int (fac 6 (fun x -> x))
   > EOF
-  $ ../compiler.exe fac_decls.ml
+  $ ../compiler.exe --stop-after anf fac_decls.ml
   let rec fac n k =
     if n < 2
     then k 1
@@ -87,7 +87,7 @@ Every declaration is converted on its own, declared names are kept:
   >   else fib (n - 1) (fun a -> fib (n - 2) (fun b -> k (a + b)))
   > let main = print_int (fib 6 (fun x -> x))
   > EOF
-  $ ../compiler.exe fib_decls.ml
+  $ ../compiler.exe --stop-after anf fib_decls.ml
   let rec fib n k =
     if n < 2
     then k n
@@ -121,7 +121,7 @@ Every declaration is converted on its own, declared names are kept:
   >   let _ = print_int (fac_cps 4 id) in
   >   0
   > EOF
-  $ ../compiler.exe fac_ll.ml
+  $ ../compiler.exe --stop-after anf fac_ll.ml
   let id x = x
   
   let fresh_1 n k p =
@@ -155,7 +155,7 @@ Every declaration is converted on its own, declared names are kept:
   >   let z = print_int (fib 6 id)  in
   >   0
   > EOF
-  $ ../compiler.exe fib_ll.ml
+  $ ../compiler.exe --stop-after anf fib_ll.ml
   let id x = x
   
   let fresh_2 p1 k p2 =
@@ -183,7 +183,7 @@ Every declaration is converted on its own, declared names are kept:
 Declared names are never renamed or dropped, even when they are shadowed or
 unused; [let rec f x = f x] stays recursive:
 
-  $ printf 'let x = 1\nlet x = x + 1\nlet f y = g y\nlet rec h y = h y\nlet _ = 5\n' | ../compiler.exe
+  $ printf 'let x = 1\nlet x = x + 1\nlet f y = g y\nlet rec h y = h y\nlet _ = 5\n' | ../compiler.exe --stop-after anf
   let x = 1
   
   let x = x + 1
@@ -196,70 +196,70 @@ unused; [let rec f x = f x] stays recursive:
 
 Both parsers give the same ANF, and ANF is the default last stage:
 
-  $ ../compiler.exe -parsing menhir fac.ml > fac_menhir.anf
-  $ ../compiler.exe -parsing topdown fac.ml > fac_topdown.anf
+  $ ../compiler.exe --stop-after anf -parsing menhir fac.ml > fac_menhir.anf
+  $ ../compiler.exe --stop-after anf -parsing topdown fac.ml > fac_topdown.anf
   $ diff fac_menhir.anf fac_topdown.anf
-  $ ../compiler.exe -parsing menhir fib.ml > fib_menhir.anf
-  $ ../compiler.exe -parsing topdown fib.ml | diff fib_menhir.anf -
+  $ ../compiler.exe --stop-after anf -parsing menhir fib.ml > fib_menhir.anf
+  $ ../compiler.exe --stop-after anf -parsing topdown fib.ml | diff fib_menhir.anf -
 
 The output is a valid program, and it is already in ANF: converting it again
 changes nothing.
 
-  $ ../compiler.exe -o fac.anf fac.ml
-  $ ../compiler.exe -o - fac.anf | diff fac.anf -
-  $ ../compiler.exe fib.ml > fib.anf
-  $ ../compiler.exe -parsing menhir fib.anf | diff fib.anf -
-  $ for f in fac_decls fib_decls fac_ll fib_ll; do ../compiler.exe $f.ml > $f.anf; ../compiler.exe $f.anf | diff $f.anf -; done
+  $ ../compiler.exe --stop-after anf -o fac.anf fac.ml
+  $ ../compiler.exe --stop-after anf -o - fac.anf | diff fac.anf -
+  $ ../compiler.exe --stop-after anf fib.ml > fib.anf
+  $ ../compiler.exe --stop-after anf -parsing menhir fib.anf | diff fib.anf -
+  $ for f in fac_decls fib_decls fac_ll fib_ll; do ../compiler.exe --stop-after anf $f.ml > $f.anf; ../compiler.exe --stop-after anf $f.anf | diff $f.anf -; done
 
 Keeping ANF small: immediates are not bound, tail calls are not bound,
 [f a b] is one call, [let x = <immediate>] is substituted, constant arithmetic
 is folded, [fun x -> f x] becomes [f], [- - e] becomes [e] and unused pure
 bindings are dropped.
 
-  $ echo "f (g x) (h y)" | ../compiler.exe
+  $ echo "f (g x) (h y)" | ../compiler.exe --stop-after anf
   let t0 = g x in
   let t1 = h y in
   f t0 t1
-  $ echo "let x = 1 + 2 * 3 in let y = x in f y y" | ../compiler.exe
+  $ echo "let x = 1 + 2 * 3 in let y = x in f y y" | ../compiler.exe --stop-after anf
   f 7 7
-  $ echo "let unused = n * 2 in let call = g 1 in 7" | ../compiler.exe
+  $ echo "let unused = n * 2 in let call = g 1 in 7" | ../compiler.exe --stop-after anf
   let call = g 1 in
   7
-  $ echo "1 + (let x = 2 in x * y)" | ../compiler.exe
+  $ echo "1 + (let x = 2 in x * y)" | ../compiler.exe --stop-after anf
   let t0 = 2 * y in
   1 + t0
-  $ echo "let x = f 1 in x" | ../compiler.exe
+  $ echo "let x = f 1 in x" | ../compiler.exe --stop-after anf
   f 1
-  $ echo "let g = fun x -> h x in g 1" | ../compiler.exe
+  $ echo "let g = fun x -> h x in g 1" | ../compiler.exe --stop-after anf
   h 1
-  $ echo "f (fun x y -> k x (let unused = x * y in y))" | ../compiler.exe
+  $ echo "f (fun x y -> k x (let unused = x * y in y))" | ../compiler.exe --stop-after anf
   f k
-  $ echo "fun x -> x x" | ../compiler.exe
+  $ echo "fun x -> x x" | ../compiler.exe --stop-after anf
   fun x -> x x
-  $ echo "- - x + 1" | ../compiler.exe
+  $ echo "- - x + 1" | ../compiler.exe --stop-after anf
   x + 1
 
 Comparisons are tested directly, as RISC-V and LLVM compare and branch in one
 instruction. A comparison of constants keeps only one branch.
 
-  $ echo "if f x < g y then 1 else 2" | ../compiler.exe
+  $ echo "if f x < g y then 1 else 2" | ../compiler.exe --stop-after anf
   let t0 = f x in
   let t1 = g y in
   if t0 < t1
   then 1
   else 2
-  $ echo "let c = x < y in if c then f 1 else g 2" | ../compiler.exe
+  $ echo "let c = x < y in if c then f 1 else g 2" | ../compiler.exe --stop-after anf
   if x < y
   then f 1
   else g 2
-  $ echo "1 + (let c = x = y in if c then f 1 else 2)" | ../compiler.exe
+  $ echo "1 + (let c = x = y in if c then f 1 else 2)" | ../compiler.exe --stop-after anf
   let t0 =
     (if x = y
      then f 1
      else 2)
   in
   1 + t0
-  $ echo "let c = x < y in let a = (if c then 1 else 2) in if c then a else 0" | ../compiler.exe
+  $ echo "let c = x < y in let a = (if c then 1 else 2) in if c then a else 0" | ../compiler.exe --stop-after anf
   let c = x < y in
   let a =
     (if c
@@ -269,17 +269,17 @@ instruction. A comparison of constants keeps only one branch.
   if c
   then a
   else 0
-  $ echo "if f x then 1 else 2" | ../compiler.exe
+  $ echo "if f x then 1 else 2" | ../compiler.exe --stop-after anf
   let t0 = f x in
   if t0
   then 1
   else 2
-  $ echo "let n = 5 in if n <= 1 then 1 else f n" | ../compiler.exe
+  $ echo "let n = 5 in if n <= 1 then 1 else f n" | ../compiler.exe --stop-after anf
   f 5
 
 Shadowed names are renamed, generated names do not clash with user names:
 
-  $ echo "let t0 = f 1 in let x = g t0 in let x = h x in k (p x) (q t0)" | ../compiler.exe
+  $ echo "let t0 = f 1 in let x = g t0 in let x = h x in k (p x) (q t0)" | ../compiler.exe --stop-after anf
   let t0 = f 1 in
   let x = g t0 in
   let x_1 = h x in
@@ -289,22 +289,22 @@ Shadowed names are renamed, generated names do not clash with user names:
 
 Command line errors:
 
-  $ ../compiler.exe -parsing lr fac.ml
+  $ ../compiler.exe --stop-after anf -parsing lr fac.ml
   Error: -parsing expects 'topdown' or 'menhir'
   Try '--help' for usage.
   [2]
   $ ../compiler.exe --stop-after codegen fac.ml
-  Error: --stop-after expects 'parsing', 'anf', 'closure' or 'lifting'
+  Error: --stop-after expects 'parsing', 'anf', 'closure', 'lifting' or 'riscv'
   Try '--help' for usage.
   [2]
-  $ ../compiler.exe --unknown fac.ml
+  $ ../compiler.exe --stop-after anf --unknown fac.ml
   Error: unknown option '--unknown'
   Try '--help' for usage.
   [2]
-  $ ../compiler.exe -parsing menhir --extended fac.ml
+  $ ../compiler.exe --stop-after anf -parsing menhir --extended fac.ml
   Error: --extended is only supported by the top-down parser
   Try '--help' for usage.
   [2]
-  $ ../compiler.exe missing.ml
+  $ ../compiler.exe --stop-after anf missing.ml
   Error: missing.ml: No such file or directory
   [1]

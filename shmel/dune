@@ -13,6 +13,6 @@
  (package shmel)
  (name compiler)
  (modules compiler)
- (libraries shmel_lib shmel_middleend Shmel)
+ (libraries shmel_lib shmel_middleend shmel_backend Shmel)
  (instrumentation
   (backend bisect_ppx_ng)))

@@ -29,7 +29,7 @@
 
 (cram
  (package shmel)
- (deps riscv_tests.exe))
+ (deps riscv_tests.exe ../../compiler.exe))
 
 (rule
  (alias runtest)
