@@ -106,6 +106,7 @@ type instr =
   (* Pseudoinstructions *)
   | MV of reg * reg
   | LI of reg * int
+  | CALL of string
   | NOP
   | RET
 
@@ -122,6 +123,8 @@ type error =
       }
   | Invalid_label of string
   | Unsupported of string
+  | Symbol_table_error
+  | Invalid_application
 
 let pp_error fmt = function
   | Invalid_immediate { instruction; value; min; max } ->
@@ -134,6 +137,8 @@ let pp_error fmt = function
       max
   | Invalid_label label -> Format.fprintf fmt "Invalid label: %S" label
   | Unsupported message -> Format.fprintf fmt "Unsupported: %s" message
+  | Symbol_table_error -> Format.fprintf fmt "Symbol table is inconsistent"
+  | Invalid_application -> Format.fprintf fmt "Invalid application"
 ;;
 
 type 'a checked = ('a, error) result
@@ -209,6 +214,7 @@ let sllw rd rs1 rs2 = ok (SLLW (rd, rs1, rs2))
 let srlw rd rs1 rs2 = ok (SRLW (rd, rs1, rs2))
 let sraw rd rs1 rs2 = ok (SRAW (rd, rs1, rs2))
 let ecall = ok ECALL
+let call sym = ok (CALL sym)
 let mv rd rs = ok (MV (rd, rs))
 let li rd imm = ok (LI (rd, imm))
 let nop = ok NOP

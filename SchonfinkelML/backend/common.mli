@@ -96,6 +96,7 @@ type instr =
   | ECALL (** ecall *)
   | MV of reg * reg (** mv *)
   | LI of reg * int (** li *)
+  | CALL of string (** call *)
   | NOP (** nop *)
   | RET (** ret *)
 
@@ -112,6 +113,8 @@ type error =
       }
   | Invalid_label of string
   | Unsupported of string
+  | Symbol_table_error
+  | Invalid_application
 
 val pp_error : Format.formatter -> error -> unit
 
@@ -180,5 +183,6 @@ val sraw : reg -> reg -> reg -> (instr, 'a) result
 val ecall : (instr, 'a) result
 val mv : reg -> reg -> (instr, 'a) result
 val li : reg -> int -> (instr, 'a) result
+val call : string -> (instr, 'a) result
 val nop : (instr, 'a) result
 val ret : (instr, 'a) result

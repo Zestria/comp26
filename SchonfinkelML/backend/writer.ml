@@ -266,6 +266,7 @@ let write_instr fd = function
   | ECALL -> Printf.fprintf fd "\tecall\n"
   | MV (rd, rs) -> Printf.fprintf fd "\tmv %s, %s\n" (string_of_reg rd) (string_of_reg rs)
   | LI (rd, imm) -> Printf.fprintf fd "\tli %s, %d\n" (string_of_reg rd) imm
+  | CALL sym -> Printf.fprintf fd "\tcall %s\n" sym
   | NOP -> Printf.fprintf fd "\tnop\n"
   | RET -> Printf.fprintf fd "\tret\n"
 ;;
