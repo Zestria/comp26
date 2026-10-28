@@ -18,19 +18,20 @@
 
 /* Number of syscalls */
 .equ SYSCALL_WRITE, 64
-.equ SYSCALL_MMAP, 222
 .equ SYSCALL_EXIT_GROUP, 94
+.equ SYSCALL_SIGACTION, 134
+.equ SYSCALL_MMAP, 222
 
 /* Constants for `mmap` syscall */
 .equ PROT_READ_WRITE, 0x1 | 0x2
 .equ MAP_PRIVATE_ANON, 0x02 | 0x20
 
-/* Constans of my implementation of runtime: size of heap, error codes */
+.equ SIGSEGV, 11
 
 .equ HEAP_SIZE, 4096
 
 .equ ERROR_ZERO_DIVISION, 0
-.equ ERROR_ALLOCATION, 1
+.equ ERROR_MEMORY, 1
 
 .section .rodata
 
@@ -45,6 +46,11 @@ errors:
     /* {length = 32; message = "Error: not enough memory on heap"} */
     .quad 32
     .quad error2_text
+
+sigaction_struct:
+    .quad segfault_dispatch
+    .quad 0
+    .quad 0
 
 .section .text
 
@@ -62,15 +68,27 @@ heap_init:
     li a4, -1
     li a5, 0
     li a7, SYSCALL_MMAP
-
     ecall
 
     mv s10, a0
 
+    li    a0, SIGSEGV
+    la    a1, sigaction_struct    /* pointer to the sigaction struct */
+    li    a2, 0                   /* oldact = NULL */
+    li    a3, 8                   /* sigsetsize = 8 */
+    li    a7, SYSCALL_SIGACTION
+    ecall
+
     ret
 
-/* void heap_alloc(size_t size) */
+segfault_dispatch:
+    li a0, ERROR_MEMORY
+    tail vc_fail
+
+/* void heap_alloc(size_t size)            */
 heap_alloc:
+    /* Function only modify a0 & a1 registers  */
+
     /* Ensure that new heap pointer is valid memory */
     /* If not - segmentation fault will occur, sigaction catch it and error message will be print */
     lb zero, 0(s10)
@@ -103,9 +121,10 @@ vc_closure:
 /* void* vc_apply(void* closure, long argc, long* argv) */
 vc_apply:
     addi sp, sp, -32
-    sd ra, 16(sp)
-    sd s0, 8(sp)
-    sd s1, 0(sp)
+    sd ra, 24(sp)
+    sd s0, 16(sp)
+    sd s1, 8(sp)
+    sd s2, 0(sp)
 
     ld t0, 0(a0)     /* closure's code */
     ld t1, 8(a0)     /* closure's arity */
@@ -150,7 +169,7 @@ vc_apply:
     ld a2, 0(t5)
     sd a2, 0(a1)
     addi a1, a1, 8
-    addi t3, t3, 8
+    addi t5, t5, 8
     addi t4, t4, -1
     bne t4, zero, .new_closure_args_b_loop
 
@@ -160,7 +179,14 @@ vc_apply:
 /* Enough arguments to call */
 .call_start:
     /* Allocate space for arguments on stack */
+    mv s2, sp
+
+    /* Stack alignment */
+    andi a0, t6, 1
+    slli a0, a0, 3
+    sub sp, sp, a0
     mv s1, sp
+
     sub t6, t6, t1
     slli t6, t6, 3
     slli t1, t1, 3
@@ -242,21 +268,30 @@ vc_apply:
 
 .call:
     jalr ra, t0, 0   /* code pointer of closure  */
-    bge s0, s1, .epilogue
+    beq s0, s1, .restore_stack
 
 .remained_args:
     sub a1, s1, s0
     srai a1, a1, 3
-    mv a2, s0
+
     mv sp, s0
+    mv a2, s0
+
+    /* Stack alignment */
+    andi a3, a2, 1
+    slli a3, a3, 3
+    sub sp, sp, a3
 
     call vc_apply
-    mv sp, s1
+
+.restore_stack:
+    mv sp, s2
 
 .epilogue:
-    ld s1, 0(sp)
-    ld s0, 8(sp)
-    ld ra, 16(sp)
+    ld s2, 0(sp)
+    ld s1, 8(sp)
+    ld s0, 16(sp)
+    ld ra, 24(sp)
     addi sp, sp, 32
     ret
 
@@ -336,7 +371,17 @@ vc_fail:
     li a7, SYSCALL_WRITE
     ecall
 
-    call vc_print_newline
+    addi sp, sp, -16
+    li a1, 10
+    sb a1, 0(sp)
+
+    li a0, STDERR
+    mv a1, sp
+    li a2, 1
+    li a7, SYSCALL_WRITE
+    ecall
+
+    addi sp, sp, 16
 
     li a0, 1
     tail exit
@@ -345,5 +390,5 @@ _start:
     call heap_init
     call vc_main
 
-    li a0, 0x0
+    li a0, 0
     tail exit
