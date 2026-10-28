@@ -58,6 +58,7 @@ let () =
   assert (stop_after "cc" = Some Config.Closure_conversion);
   assert (stop_after "ll" = Some Config.Lambda_lifting);
   assert (stop_after "anf" = Some Config.Anf);
+  assert (stop_after "asm" = Some Config.Asm);
   expect_error [ "--stop-after" ];
   expect_error [ "--stop-after"; "typing" ];
   (* Флаги дампа печатают результат разбора, с другими стадиями они не
