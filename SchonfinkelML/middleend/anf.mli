@@ -24,8 +24,6 @@ type cexpr =
   | CIfExpr of immexpr * aexpr * aexpr
   | CApp of immexpr * immexpr * immexpr list
   | CAbstr of string * aexpr
-  | CMkClosure of string * immexpr list
-  | CApplyClosure of immexpr * immexpr list
 
 and aexpr =
   (* The right-hand side is an aexpr, not a cexpr: a nested let in the

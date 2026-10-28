@@ -24,8 +24,6 @@ type cexpr =
   | CIfExpr of immexpr * aexpr * aexpr
   | CApp of immexpr * immexpr * immexpr list
   | CAbstr of string * aexpr
-  | CMkClosure of string * immexpr list        (* lift_N applied to fewer than arity *)
-  | CApplyClosure of immexpr * immexpr list    (* call through variable / unknown *)
 
 and aexpr =
   (* The right-hand side is an aexpr, not a cexpr: a nested let in the
@@ -141,14 +139,6 @@ let rec pp_cexpr ppf = function
       (fun ppf -> List.iter (fun a -> Format.fprintf ppf " %a" pp_immexpr a))
       args
   | CAbstr (v, body) -> Format.fprintf ppf "@[<2>fun %s -> %a@]" v pp_aexpr body
-  | CMkClosure (f, caps) ->
-    Format.fprintf ppf "@[<2>mk_closure %s [%a]@]" f
-      (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf "; ") pp_immexpr)
-      caps
-  | CApplyClosure (f, args) ->
-    Format.fprintf ppf "@[<2>apply %a [%a]@]" pp_immexpr f
-      (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf "; ") pp_immexpr)
-      args
 
 and pp_aexpr ppf = function
   | ALet (Recursive, x, rhs, rest) ->
