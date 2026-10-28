@@ -4,12 +4,21 @@
 
 #include <stddef.h>
 
-/* code lives in .text; tracing it would make the GC treat machine code
- * as a heap block. Only managed slots are visited. */
+/* Closures travel as tagged pointers (bit 0 = 1), but the GC only accepts
+ * allocation base addresses: untag before visiting. */
+static void *gc_base(void *v) {
+    return schoml_is_closure(v) ? (void *)schoml_untag(v) : v;
+}
+
+/* Managed captures are either tagged closures or non-tagged values (tuples,
+ * integers used in CPS-style captures). For the CPS target, we accept the
+ * heuristic: only tagged values are traced. TODO: proper type analysis or
+ * boxing of non-closure managed captures. */
 static void trace_closure(void *object, schoml_gc_visit_fn visit) {
     schoml_closure *c = object;
     for (int64_t i = 0; i < c->applied; i++)
-        if (c->env[i].is_ref) visit(c->env[i].value);
+        if (c->env[i].is_ref && schoml_is_closure(c->env[i].value))
+            visit(gc_base(c->env[i].value));
 }
 
 void *schoml_closure_make(void *code, int64_t arity,

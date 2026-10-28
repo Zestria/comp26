@@ -6,12 +6,14 @@
 
 typedef struct schoml_closure schoml_closure;
 
-/* Each env slot explicitly marks whether the value is a managed pointer. */
+/* Each env slot explicitly marks whether the value is a managed pointer.
+ * Offsets (RV64): is_ref = 0, value = 8; a slot is 16 bytes. */
 typedef struct {
     int is_ref;
     void *value;
 } schoml_closure_slot;
 
+/* Offsets (RV64): arity = 0, applied = 8, code = 16, env = 24. */
 struct schoml_closure {
     int64_t arity;      /* total arguments expected */
     int64_t applied;    /* captured args already in env */
@@ -19,7 +21,8 @@ struct schoml_closure {
     schoml_closure_slot env[];
 };
 
-/* Returns a tagged pointer (bit 0 = 1). Caller must root managed captures. */
+/* Returns a tagged pointer (bit 0 = 1). Caller must root managed captures.
+ * `caps` is an array of n_caps slots and is only read during the call. */
 void *schoml_closure_make(void *code, int64_t arity,
                           int64_t n_caps, schoml_closure_slot *caps);
 
