@@ -1,17 +1,3 @@
-(library
- (name BDSMl)
- (public_name BDSMl)
- (wrapped false)
- (modules LL REPL)
- (libraries
-  llvm
-  llvm.analysis
-  llvm.executionengine
-  ;
-  )
- (instrumentation
-  (backend bisect_ppx_ng)))
-
 (cram
  (package BDSMl)
  (deps
@@ -27,5 +13,4 @@
   evaluation_order.ml
   recursive_initializer.ml
   check_stages.sh
-  runtime.c
   %{exe:../compiler.exe}))

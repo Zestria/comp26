@@ -18,7 +18,6 @@ depends: [
   "angstrom" {= "0.16.0"}
   "qcheck"
   "bisect_ppx_ng"
-  "llvm" {= "18-shared"}
   "ppx_deriving_qcheck" {= "0.9"}
   "odoc" {with-doc}
 ]

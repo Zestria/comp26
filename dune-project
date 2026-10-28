@@ -1,6 +1,7 @@
 (lang dune 3.24)
 
 (using menhir 3.0)
+
 (name comp26)
 
 (generate_opam_files true)
@@ -75,8 +76,6 @@
    (= "0.16.0"))
   qcheck
   bisect_ppx_ng
-  (llvm
-   (= "18-shared"))
   (ppx_deriving_qcheck
    (= "0.9"))))
 
@@ -137,7 +136,7 @@
   (uri "git+ssh://ssh.sourcecraft.dev/shrexer06/comp26.git"))
  (homepage "https://sourcecraft.dev/shrexer06/comp26")
  (documentation
-    "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
+  "https://sourcecraft.dev/shrexer06/comp26/browse/BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/README.md?rev=frontend")
  (depends
   ocaml
   dune

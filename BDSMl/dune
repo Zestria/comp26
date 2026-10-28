@@ -1,13 +1,8 @@
-(cram
- (package BDSMl)
- (applies_to NewGVNtricky)
- (deps NewGVNtricky.ll))
-
 (executable
  (public_name BDSMl)
  (package BDSMl)
  (name compiler)
  (modules compiler)
- (libraries BDSMl BDSMl.frontend BDSMl.middleend)
+ (libraries BDSMl.frontend BDSMl.middleend)
  (instrumentation
   (backend bisect_ppx_ng)))
