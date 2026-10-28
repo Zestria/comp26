@@ -32,11 +32,15 @@
    (run ./runtime_error_test.exe)
    (run ./closure_runtime_test.exe))))
 
-(test
- (name closures_test)
- (package SchonfinkelML)
- (libraries
-  SchonfinkelML_backend
-  SchonfinkelML_middleend
-  SchonfinkelML_frontend
-  top_down))
+(library
+ (name closures_tests)
+ (modules closures_test)
+ (libraries SchonfinkelML_backend SchonfinkelML_middleend SchonfinkelML_frontend top_down)
+ (inline_tests)
+ (preprocess
+  (pps ppx_inline_test))
+ (package SchonfinkelML))
+
+(env
+ (release
+  (inline_tests enabled)))
