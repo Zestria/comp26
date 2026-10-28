@@ -50,10 +50,4 @@ module Allocator = struct
       r
     | [] -> failwith "get_rtl: register allocation exhausted"
   ;;
-
-  let rec find_var env name =
-    match env with
-    | (name', reg) :: rest -> if name = name' then reg else find_var rest name
-    | [] -> failwith ("get_rtl: unbound variable " ^ name)
-  ;;
 end
