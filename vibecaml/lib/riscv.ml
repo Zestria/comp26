@@ -125,10 +125,13 @@ let reg_name = function
 
 let pp_reg ppf reg = Format.pp_print_string ppf (reg_name reg)
 
-(* Иначе as молча не соберёт программу или соберёт не то: ловим раньше. *)
+(* Иначе as молча не соберёт программу или соберёт не то: ловим раньше.
+   Такой иммедиат --- ошибка кодогена, поэтому assert, а не result. *)
 let imm12 name imm =
-  if imm < -2048 || imm > 2047
-  then failwith (Printf.sprintf "riscv: иммедиат %d в %s не влезает в 12 бит" imm name);
+  let fits = -2048 <= imm && imm <= 2047 in
+  if not fits
+  then Printf.eprintf "riscv: иммедиат %d в %s не влезает в 12 бит\n%!" imm name;
+  assert fits;
   imm
 ;;
 
@@ -183,7 +186,7 @@ let pp_directive ppf = function
   | Data -> Format.fprintf ppf ".data"
   | Globl name -> Format.fprintf ppf ".globl %s" name
   | Dword value -> Format.fprintf ppf ".dword %d" value
-  | Asciz text -> Format.fprintf ppf ".asciz \"%s\"" (escape text)
+  | Asciz text -> Format.fprintf ppf ".asciz %s" ("\"" ^ escape text ^ "\"")
 ;;
 
 let pp_item ppf = function
@@ -205,10 +208,9 @@ let rec peephole = function
     when rd = rs && k = k' -> peephole (load :: rest)
   (* Записали слот и тут же читаем: значение уже в регистре. *)
   | (Instr (Sd (rs, k, Sp), _) as store) :: Instr (Ld (rd, k', Sp), comment) :: rest
-    when k = k' ->
-    if rd = rs
-    then peephole (store :: rest)
-    else store :: peephole (Instr (Mv (rd, rs), comment) :: rest)
+    when k = k' && rd = rs -> peephole (store :: rest)
+  | (Instr (Sd (rs, k, Sp), _) as store) :: Instr (Ld (rd, k', Sp), comment) :: rest
+    when k = k' -> store :: peephole (Instr (Mv (rd, rs), comment) :: rest)
   | item :: rest -> item :: peephole rest
   | [] -> []
 ;;

@@ -99,7 +99,7 @@ type program = item list
 
 val pp_reg : Format.formatter -> reg -> unit
 
-(** Бросает [Failure], если иммедиат [addi], [ld] или [sd] не влезает в 12 бит. *)
+(** Падает на [assert], если иммедиат [addi], [ld] или [sd] не влезает в 12 бит. *)
 val pp_item : Format.formatter -> item -> unit
 
 val pp_program : Format.formatter -> program -> unit

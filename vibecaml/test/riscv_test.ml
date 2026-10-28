@@ -57,7 +57,7 @@ let () =
   let fails program =
     match show program with
     | _ -> false
-    | exception Failure _ -> true
+    | exception Assert_failure _ -> true
   in
   assert (fails [ instr (Addi (A0, A0, 2048)) ]);
   assert (fails [ instr (Ld (A0, -2049, Sp)) ]);
