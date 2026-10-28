@@ -106,6 +106,7 @@ type instr =
   (* Pseudoinstructions *)
   | MV of reg * reg
   | LI of reg * int
+  | LA of reg * string
   | CALL of string
   | NOP
   | RET
@@ -217,5 +218,6 @@ let ecall = ok ECALL
 let call sym = ok (CALL sym)
 let mv rd rs = ok (MV (rd, rs))
 let li rd imm = ok (LI (rd, imm))
+let la rd sym = with_label sym (fun l -> LA (rd, l))
 let nop = ok NOP
 let ret = ok RET

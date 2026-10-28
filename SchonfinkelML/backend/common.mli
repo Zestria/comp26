@@ -96,6 +96,7 @@ type instr =
   | ECALL (** ecall *)
   | MV of reg * reg (** mv *)
   | LI of reg * int (** li *)
+  | LA of reg * string (** la *)
   | CALL of string (** call *)
   | NOP (** nop *)
   | RET (** ret *)
@@ -183,6 +184,7 @@ val sraw : reg -> reg -> reg -> (instr, 'a) result
 val ecall : (instr, 'a) result
 val mv : reg -> reg -> (instr, 'a) result
 val li : reg -> int -> (instr, 'a) result
+val la : reg -> string -> (instr, error) result
 val call : string -> (instr, 'a) result
 val nop : (instr, 'a) result
 val ret : (instr, 'a) result
