@@ -28,13 +28,13 @@ test-runtime1:
 	rm case1_actual.txt case1
 
 test-runtime2:
-	riscv64-linux-gnu-gcc -O3 runtime/runtime.s runtime_test/case2/main.c -nostartfiles -o case2
+	riscv64-linux-gnu-gcc -g -O3 runtime/runtime.s runtime_test/case2/main.c -nostartfiles -o case2
 	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case2 > case2_actual.txt 2>&1
 	diff runtime_test/case2/expected.txt case2_actual.txt
 	rm case2_actual.txt case2
 
 test-runtime3:
-	riscv64-linux-gnu-gcc -O3 runtime/runtime.s runtime_test/case3/main.c -nostartfiles -o case3
+	riscv64-linux-gnu-gcc -O3 -g runtime/runtime.s runtime_test/case3/main.c -nostartfiles -o case3
 	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case3 > case3_actual.txt 2>&1
 	diff runtime_test/case3/expected.txt case3_actual.txt
 	rm case3_actual.txt case3
@@ -45,7 +45,13 @@ test-runtime4:
 	diff runtime_test/case4/expected.txt case4_actual.txt
 	rm case4_actual.txt case4
 
-test-runtime: test-runtime1 test-runtime2 test-runtime3 test-runtime4
+test-runtime5:
+	riscv64-linux-gnu-gcc -O3 runtime/runtime.s runtime_test/case5/main.c -nostartfiles -o case5
+	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case5 > case5_actual.txt 2>&1
+	diff runtime_test/case5/expected.txt case5_actual.txt
+	rm case5_actual.txt case5
+
+test-runtime: test-runtime1 test-runtime2 test-runtime3 test-runtime4 test-runtime5
 	echo "Runtime tests passed!"
 
 check: ## Проверить типы без полной сборки, самый быстрый прогон
