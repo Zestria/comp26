@@ -99,6 +99,10 @@ type instr =
   | NOP (** nop *)
   | RET (** ret *)
 
+val arg_registers : reg list
+val caller_saved : reg list
+val callee_saved : reg list
+
 type error =
   | Invalid_immediate of
       { instruction : string

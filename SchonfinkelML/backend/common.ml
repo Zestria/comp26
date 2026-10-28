@@ -109,6 +109,10 @@ type instr =
   | NOP
   | RET
 
+let arg_registers = [ A0; A1; A2; A3; A4; A5; A6; A7 ]
+let caller_saved = [ RA; A0; A1; A2; A3; A4; A5; A6; A7; T0; T1; T2; T3; T4; T5; T6 ]
+let callee_saved = [ S0; S1; S2; S3; S4; S5; S6; S7; S8; S9; S10; S11 ]
+
 type error =
   | Invalid_immediate of
       { instruction : string
