@@ -1,0 +1,21 @@
+(executable
+ (name hello)
+ (libraries vibecaml))
+
+; Текст программы проверяется всегда.
+
+(cram
+ (applies_to hello)
+ (package vibecaml)
+ (deps hello.exe))
+
+; Запуск нужен тулчейн RISC-V и рантайм (#20).
+
+(cram
+ (applies_to qemu)
+ (package vibecaml)
+ (enabled_if %{bin-available:qemu-riscv64})
+ (deps
+  hello.exe
+  %{project_root}/vibecaml/scripts/run.sh
+  (glob_files %{project_root}/vibecaml/runtime/*.s)))

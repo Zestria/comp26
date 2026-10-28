@@ -8,7 +8,7 @@ COV_DIR = /tmp/cov-$(PKG)
 DUNE_ROOT = cd .. &&
 
 .DEFAULT_GOAL = all
-.PHONY: all release test check fmt fmt-check lint deps coverage clean help
+.PHONY: all release test check fmt fmt-check lint deps coverage clean help run
 
 all: ## Собрать пакет (профиль dev, быстрая сборка для разработки)
 	dune build @all
@@ -66,3 +66,7 @@ clean: ## Удалить артефакты сборки и покрытия
 help: ## Показать этот список
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk -F':.*?## ' '{ printf "  \033[1m%-12s\033[0m %s\n", $$1, $$2 }'
+
+# Тулчейн и отладка: docs/riscv.md.
+run: ## Собрать PROG=file.s с рантаймом и запустить под QEMU
+	scripts/run.sh $(PROG)
