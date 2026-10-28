@@ -1,3 +1,6 @@
+#include <stdint.h>
+#include <stdlib.h>
+
 void vc_fail(long error);
 void vc_print_int(long number);
 void vc_print_newline();
@@ -5,10 +8,21 @@ void vc_print_newline();
 void* vc_closure(void* code, long arity);
 void* vc_apply(void* closure, long argc, void* argv);
 
+void verify_stack() {
+    register void *sp asm("sp");
+
+    if (((uintptr_t)sp & 0xF) != 0) {
+        abort();
+    }
+}
+
 long factorial(long n) {
+    verify_stack();
+
     if (n < 2) {
         return 1;
     }
+
     return n * factorial(n - 1);
 }
 
