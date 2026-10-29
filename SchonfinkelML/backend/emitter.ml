@@ -149,7 +149,7 @@ let get_rtl anf =
         List.fold_left
           (fun env (var, reg) -> SMap.add var (Reg reg) env)
           env
-          (combine vars arg_registers)
+          (combine (List.rev vars) arg_registers)
       in
       let* () =
         function_
