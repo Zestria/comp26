@@ -54,8 +54,10 @@ test-runtime5:
 test-runtime: test-runtime1 test-runtime2 test-runtime3 test-runtime4 test-runtime5
 	echo "Runtime tests passed!"
 
+# Алиас ограничен нашим пакетом: @check из этой папки задевает чужие пакеты
+# в общем dune project, и их ошибки роняли make lint.
 check: ## Проверить типы без полной сборки, самый быстрый прогон
-	dune build @check
+	$(DUNE_ROOT) dune build @$(PKG)/check
 
 fmt: ## Отформатировать исходники (правит файлы на месте)
 	dune build @fmt --auto-promote
