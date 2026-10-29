@@ -7,7 +7,6 @@
 [@@@ocaml.text "/*"]
 
 open Middleend.Anf
-
 module A = Asm
 
 type gen =
@@ -178,7 +177,7 @@ and parameters reversed = function
 
 and assemble g ~name ~exported =
   let return_address = g.slots in
-  let frame = (8 * (g.slots + 1) + 15) land lnot 15 in
+  let frame = ((8 * (g.slots + 1)) + 15) land lnot 15 in
   { A.name
   ; exported
   ; body =
@@ -197,7 +196,8 @@ and build g first_parameter body self =
   let arity = List.length parameters in
   let label = fresh g "code" in
   let self = Option.map (fun id -> id.stamp, label, arity) self in
-  let saved_code = g.code and saved_slots = g.slots in
+  let saved_code = g.code
+  and saved_slots = g.slots in
   g.code <- [];
   g.slots <- 0;
   let env =
