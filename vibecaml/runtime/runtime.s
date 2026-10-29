@@ -28,7 +28,7 @@
 
 .equ SIGSEGV, 11
 
-.equ HEAP_SIZE, 4096
+.equ HEAP_SIZE, 1048576
 
 .equ ERROR_ZERO_DIVISION, 0
 .equ ERROR_MEMORY, 1
@@ -52,6 +52,12 @@ sigaction_struct:
     .quad 0
     .quad 0
 
+.section .bss
+.balign 8
+.globl vc_heap_end
+vc_heap_end:
+    .zero 8
+
 .section .text
 
 /* void exit(long code) */
@@ -70,7 +76,13 @@ heap_init:
     li a7, SYSCALL_MMAP
     ecall
 
+    li t0, -4095
+    bgeu a0, t0, .heap_failure
     mv s10, a0
+    li t0, HEAP_SIZE
+    add t0, s10, t0
+    la t1, vc_heap_end
+    sd t0, 0(t1)
 
     li    a0, SIGSEGV
     la    a1, sigaction_struct    /* pointer to the sigaction struct */
@@ -87,17 +99,21 @@ segfault_dispatch:
 
 /* void heap_alloc(size_t size)            */
 heap_alloc:
-    /* Function only modify a0 & a1 registers  */
-
-    /* Ensure that new heap pointer is valid memory */
-    /* If not - segmentation fault will occur, sigaction catch it and error message will be print */
-    lb zero, 0(s10)
-
-    mv a1, a0
+    /* Проверяем конец блока, а не только первый байт: соседняя страница
+       может быть отображена, поэтому одного SIGSEGV недостаточно. */
+    add a1, s10, a0
+    bltu a1, s10, .heap_failure
+    la a2, vc_heap_end
+    ld a2, 0(a2)
+    bgtu a1, a2, .heap_failure
     mv a0, s10
-    add s10, a0, a1
+    mv s10, a1
 
     ret
+
+.heap_failure:
+    li a0, ERROR_MEMORY
+    tail vc_fail
 
 /* void* vc_closure(void* code, long arity) */
 vc_closure:
@@ -120,11 +136,12 @@ vc_closure:
 
 /* void* vc_apply(void* closure, long argc, long* argv) */
 vc_apply:
-    addi sp, sp, -32
-    sd ra, 24(sp)
-    sd s0, 16(sp)
-    sd s1, 8(sp)
-    sd s2, 0(sp)
+    addi sp, sp, -48
+    sd ra, 40(sp)
+    sd s0, 32(sp)
+    sd s1, 24(sp)
+    sd s2, 16(sp)
+    sd s3, 8(sp)
 
     ld t0, 0(a0)     /* closure's code */
     ld t1, 8(a0)     /* closure's arity */
@@ -178,24 +195,27 @@ vc_apply:
 
 /* Enough arguments to call */
 .call_start:
-    /* Allocate space for arguments on stack */
+    /* Массив всех аргументов отделён от исходящих стековых аргументов.
+       sp не сдвигается при загрузке a0..a7 и всегда выровнен на 16. */
     mv s2, sp
-
-    /* Stack alignment */
-    andi a0, t6, 1
-    slli a0, a0, 3
+    sub s1, t6, t1           /* лишние аргументы после первого вызова */
+    slli a0, t6, 3
+    addi a0, a0, 15
+    andi a0, a0, -16
+    li a1, 0
+    li a2, 8
+    ble t1, a2, .outgoing_size_ready
+    addi a1, t1, -8
+    slli a1, a1, 3
+    addi a1, a1, 15
+    andi a1, a1, -16
+.outgoing_size_ready:
     sub sp, sp, a0
-    mv s1, sp
-
-    sub t6, t6, t1
-    slli t6, t6, 3
-    slli t1, t1, 3
-
-    sub sp, sp, t6   /* sp = sp - (total_args - arity) */
-    mv s0, sp
-
-    sub sp, sp, t1   /* sp = sp - (arity) */
-    mv t6, sp
+    sub sp, sp, a1
+    add s3, sp, a1           /* объединённый argv */
+    slli a0, t1, 3
+    add s0, s3, a0          /* аргументы для результата-замыкания */
+    mv t6, s3
 
 /* Moving all arguments on stack */
 .call_args_on_stack_a_begin:
@@ -224,75 +244,80 @@ vc_apply:
 
 /* Moving arguments from stack into registers */
 .call_args_on_registers:
+    /* Аргументы с девятого копируем в отдельную область у текущего sp. */
+    li a3, 8
+    ble t1, a3, .load_registers
+    addi a3, t1, -8
+    addi a1, s3, 64
+    mv a2, sp
+.copy_stack_arguments:
+    ld a0, 0(a1)
+    sd a0, 0(a2)
+    addi a1, a1, 8
+    addi a2, a2, 8
+    addi a3, a3, -1
+    bnez a3, .copy_stack_arguments
+.load_registers:
     /* First argument -> A0 */
-    beq s0, sp, .call
-    ld a0, 0(sp)
-    addi sp, sp, 8
+    beqz t1, .call
+    ld a0, 0(s3)
 
     /* Second argument -> A1 */
-    beq s0, sp, .call
-    ld a1, 0(sp)
-    addi sp, sp, 8
+    li t6, 1
+    beq t1, t6, .call
+    ld a1, 8(s3)
 
     /* Third argument -> A2 */
-    beq s0, sp, .call
-    ld a2, 0(sp)
-    addi sp, sp, 8
+    li t6, 2
+    beq t1, t6, .call
+    ld a2, 16(s3)
 
     /* Fourth argument -> A3 */
-    beq s0, sp, .call
-    ld a3, 0(sp)
-    addi sp, sp, 8
+    li t6, 3
+    beq t1, t6, .call
+    ld a3, 24(s3)
 
     /* Fifth argument -> A4 */
-    beq s0, sp, .call
-    ld a4, 0(sp)
-    addi sp, sp, 8
+    li t6, 4
+    beq t1, t6, .call
+    ld a4, 32(s3)
 
     /* Sixth argument -> A5 */
-    beq s0, sp, .call
-    ld a5, 0(sp)
-    addi sp, sp, 8
+    li t6, 5
+    beq t1, t6, .call
+    ld a5, 40(s3)
 
     /* Seventh argument -> A6 */
-    beq s0, sp, .call
-    ld a6, 0(sp)
-    addi sp, sp, 8
+    li t6, 6
+    beq t1, t6, .call
+    ld a6, 48(s3)
 
     /* Eighth argument -> A7 */
-    beq s0, sp, .call
-    ld a7, 0(sp)
-    addi sp, sp, 8
+    li t6, 7
+    beq t1, t6, .call
+    ld a7, 56(s3)
 
     /* Other argument (nineth and higher) will be on stack, as ABI requires */
 
 .call:
     jalr ra, t0, 0   /* code pointer of closure  */
-    beq s0, s1, .restore_stack
+    beqz s1, .restore_stack
 
 .remained_args:
-    sub a1, s1, s0
-    srai a1, a1, 3
-
-    mv sp, s0
+    mv a1, s1
     mv a2, s0
-
-    /* Stack alignment */
-    andi a3, a2, 1
-    slli a3, a3, 3
-    sub sp, sp, a3
-
     call vc_apply
 
 .restore_stack:
     mv sp, s2
 
 .epilogue:
-    ld s2, 0(sp)
-    ld s1, 8(sp)
-    ld s0, 16(sp)
-    ld ra, 24(sp)
-    addi sp, sp, 32
+    ld s3, 8(sp)
+    ld s2, 16(sp)
+    ld s1, 24(sp)
+    ld s0, 32(sp)
+    ld ra, 40(sp)
+    addi sp, sp, 48
     ret
 
 /* void vc_print_int(long number) */
@@ -387,6 +412,12 @@ vc_fail:
     tail exit
 
 _start:
+    /* GNU ld может заменить la на адрес относительно gp. Без crt0 этот
+       регистр надо настроить самим, иначе статические замыкания недоступны. */
+    .option push
+    .option norelax
+    la gp, __global_pointer$
+    .option pop
     call heap_init
     call vc_main
 
