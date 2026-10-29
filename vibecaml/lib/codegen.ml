@@ -186,9 +186,7 @@ let generate program =
         match name, arguments with
         | "print_int", [ value ] ->
           load A0 value;
-          emit (Call (label "vc_print_int"));
-          (* write возвращает число байтов, а функция ML должна вернуть unit. *)
-          emit (Li (A0, 0))
+          emit (Call (label "vc_print_int"))
         | "~-", [ value ] ->
           load T0 value;
           emit (Neg (A0, T0))

@@ -366,6 +366,8 @@ vc_print_int:
 
     ecall
 
+    /* Результат функции ML — unit, а не число байтов от write. */
+    li a0, 0
     addi sp, sp, 32
     ret
 
