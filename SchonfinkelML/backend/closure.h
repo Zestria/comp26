@@ -3,6 +3,7 @@
 #define SCHOML_CLOSURE_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct schoml_closure schoml_closure;
 
@@ -15,16 +16,16 @@ typedef struct {
 
 /* Offsets (RV64): arity = 0, applied = 8, code = 16, env = 24. */
 struct schoml_closure {
-    int64_t arity;      /* total arguments expected */
-    int64_t applied;    /* captured args already in env */
+    size_t arity;       /* total arguments expected */
+    size_t applied;     /* captured args already in env */
     void *code;         /* raw code pointer into .text, never traced */
     schoml_closure_slot env[];
 };
 
 /* Returns a tagged pointer (bit 0 = 1). Caller must root managed captures.
  * `caps` is an array of n_caps slots and is only read during the call. */
-void *schoml_closure_make(void *code, int64_t arity,
-                          int64_t n_caps, schoml_closure_slot *caps);
+void *schoml_closure_make(void *code, size_t arity,
+                          size_t n_caps, schoml_closure_slot *caps);
 
 static inline int schoml_is_closure(void *v) {
     return ((uintptr_t)v & 1) != 0;
