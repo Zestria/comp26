@@ -6,6 +6,14 @@
   $ sh ../../scripts/run.sh abi/print_unit.s
   1230
 
+Граничные значения print_int: ноль, отрицательное и границы 64-битного слова.
+
+  $ sh ../../scripts/run.sh abi/print_edges.s
+  0
+  -5
+  9223372036854775807
+  -9223372036854775808
+
   $ run=../../scripts/run.sh
   $ for input in ../middleend/*.src simple.src operators.src calls.src; do
   >   ocaml -w -5-26 "$input" > expected.txt || exit 1
