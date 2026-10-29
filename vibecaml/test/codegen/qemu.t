@@ -15,7 +15,7 @@
   -9223372036854775808
 
   $ run=../../scripts/run.sh
-  $ for input in ../middleend/*.src simple.src operators.src calls.src; do
+  $ for input in ../middleend/*.src simple.src operators.src calls.src tuple_boundary.src; do
   >   ocaml -w -5-26 "$input" > expected.txt || exit 1
   >   for parser in topdown menhir; do
   >     vibecamlc -parsing "$parser" "$input" -o generated.s || exit 1
@@ -62,3 +62,43 @@ Inline-аллокация кортежей проверяет конец куч�
   9
   0
   9
+
+Проверяем обе аллокации ровно на границе небольшой тестовой кучи.
+Страница mmap может быть больше указанного размера: сработать должна
+проверка vc_heap_end, а не случайный SIGSEGV за страницей.
+
+  $ sed 's/^\.equ HEAP_SIZE, .*/.equ HEAP_SIZE, 48/' ../../runtime/runtime.s > tiny-runtime.s
+  $ sh "$run" abi/heap_boundary.s tiny-runtime.s > out.txt 2> err.txt
+  [1]
+  $ cat out.txt
+  10
+  0
+  $ cat err.txt
+  Error: not enough memory on heap
+
+Два кортежа по 16 байт помещаются в 32 байта, третий уже не должен создаться.
+
+  $ sed 's/^\.equ HEAP_SIZE, .*/.equ HEAP_SIZE, 32/' ../../runtime/runtime.s > tiny-runtime.s
+  $ vibecamlc tuple_boundary.src -o tuple-boundary.s
+  $ sh "$run" tuple-boundary.s tiny-runtime.s > out.txt 2> err.txt
+  [1]
+  $ cat out.txt
+  37
+  $ cat err.txt
+  Error: not enough memory on heap
+
+Большие CPS-примеры исчерпывают фиксированную кучу и завершаются с ошибкой,
+а не продолжают запись за её границей. Здесь оба парсера идут до машинного кода.
+
+  $ sed 's/fibk 10 /fibk 25 /' fibk.src > big-fib.ml
+  $ sed 's/fack 5 /fack 40000 /' fack.src > big-fack.ml
+  $ for parser in topdown menhir; do
+  >   for input in big-fib.ml big-fack.ml; do
+  >     vibecamlc -parsing "$parser" "$input" -o big.s || exit 1
+  >     sh "$run" big.s > out.txt 2> err.txt && exit 1
+  >     test "$?" -eq 1 || exit 1
+  >     test ! -s out.txt || exit 1
+  >     echo 'Error: not enough memory on heap' > expected.txt
+  >     diff expected.txt err.txt || exit 1
+  >   done
+  > done

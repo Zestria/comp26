@@ -223,7 +223,9 @@ let rec peephole = function
      Подходит и для слотов через sp, и для слотов кадра через s0. *)
   (* Загрузили слот и тут же записали обратно: запись лишняя. *)
   | (Instr (Ld (rd, k, base), _) as load) :: Instr (Sd (rs, k', base'), _) :: rest
-    when rd = rs && rd <> base && base = base' && k = k' -> peephole (load :: rest)
+    when rd = rs && rd <> Zero && rd <> base && base = base' && k = k' ->
+    (* zero отбрасывает результат ld: следующий sd zero меняет память. *)
+    peephole (load :: rest)
   (* Записали слот и тут же читаем: значение уже в регистре. *)
   | (Instr (Sd (rs, k, base), _) as store) :: Instr (Ld (rd, k', base'), _) :: rest
     when base = base' && k = k' && rd = rs -> peephole (store :: rest)
