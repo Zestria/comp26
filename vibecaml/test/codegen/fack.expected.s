@@ -89,7 +89,6 @@ vc_main:
     sd a0, -24(s0)
     ld a0, -24(s0)
     call vc_print_int
-    li a0, 0
     la t0, vc_value_value__12_3
     sd a0, 0(t0)
     li a0, 0

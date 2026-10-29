@@ -221,7 +221,7 @@ let rec peephole = function
   | Instr ((Mv (rd, rs) | Addi (rd, rs, 0)), _) :: rest when rd = rs -> peephole rest
   (* Загрузили слот и тут же записали обратно: запись лишняя. *)
   | (Instr (Ld (rd, k, Sp), _) as load) :: Instr (Sd (rs, k', Sp), _) :: rest
-    when rd = rs && k = k' -> peephole (load :: rest)
+    when rd = rs && rd <> Sp && k = k' -> peephole (load :: rest)
   (* Записали слот и тут же читаем: значение уже в регистре. *)
   | (Instr (Sd (rs, k, Sp), _) as store) :: Instr (Ld (rd, k', Sp), comment) :: rest
     when k = k' && rd = rs -> peephole (store :: rest)

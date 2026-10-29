@@ -1,6 +1,11 @@
 Настоящие исходники проходят весь конвейер и запускаются без libc.
 Сравнение всего stdout также ловит изменение порядка вычисления эффектов.
 
+Рантайм сам возвращает unit после печати; кодоген не должен его исправлять.
+
+  $ sh ../../scripts/run.sh abi/print_unit.s
+  1230
+
   $ run=../../scripts/run.sh
   $ for input in ../middleend/*.src simple.src operators.src calls.src; do
   >   ocaml -w -5-26 "$input" > expected.txt || exit 1

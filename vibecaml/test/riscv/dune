@@ -14,7 +14,11 @@
 (cram
  (applies_to qemu)
  (package vibecaml)
- (enabled_if %{bin-available:qemu-riscv64})
+ (enabled_if
+  (and
+   %{bin-available:qemu-riscv64}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:riscv64-linux-gnu-ld}))
  (deps
   hello.exe
   %{project_root}/vibecaml/scripts/run.sh

@@ -88,6 +88,9 @@ let () =
   check [ instr (Addi (A0, T0, 0)) ] [ instr (Addi (A0, T0, 0)) ];
   (* ld; sd в тот же слот: запись лишняя. *)
   check [ instr (Ld (T0, 8, Sp)) ] [ instr (Ld (T0, 8, Sp)); instr (Sd (T0, 8, Sp)) ];
+  (* Если ld меняет sp, следующий sd уже пишет по другому адресу. *)
+  let changes_base = [ instr (Ld (Sp, 8, Sp)); instr (Sd (Sp, 8, Sp)) ] in
+  check changes_base changes_base;
   check
     [ instr (Ld (T0, 8, Sp)); instr (Sd (T0, 16, Sp)) ]
     [ instr (Ld (T0, 8, Sp)); instr (Sd (T0, 16, Sp)) ];
