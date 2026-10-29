@@ -5,10 +5,10 @@
  (enabled_if false)) ; TODO: codegeneration in next tasks
 
 (executable
- (public_name compiler)
+ (public_name MyLittleML-compiler)
  (package MyLittleML)
  (name compiler)
  (modules compiler)
- (libraries LL parsing)
+ (libraries mylittleml_LL mylittleml)
  (instrumentation
   (backend bisect_ppx_ng)))
