@@ -95,9 +95,9 @@ let generate program =
       List.mapi
         (fun index (name, parameters, _) ->
            let global =
-             if parameters = []
-             then Value (symbol "value" index name)
-             else
+             match parameters with
+             | [] -> Value (symbol "value" index name)
+             | _ ->
                Function
                  { code = symbol "fn" index name
                  ; closure = symbol "closure" index name
@@ -284,7 +284,7 @@ let generate program =
              then error "неверное поле %d кортежа размера %d" index size;
              load T0 value;
              emit (Ld (A0, 8 * index, T0))
-           | CIf _ -> assert false);
+           | CIf _ -> error "условие попало в обработчик простого действия");
           save destination
       and application function_ arguments =
         let known =
@@ -350,7 +350,9 @@ let generate program =
              emit (La (T0, address));
              emit (Sd (A0, 0, T0)))
         bodies;
-      if parameters = [] then emit (Li (A0, 0));
+      (match parameters with
+       | [] -> emit (Li (A0, 0))
+       | _ -> ());
       (* Эпилог общий, и здесь нет TCO: это отдельное задание. *)
       emit (Ld (Ra, frame - 8, Sp));
       emit (Ld (S0, frame - 16, Sp));
@@ -365,7 +367,13 @@ let generate program =
       bindings;
     (* Каждое значение вычисляется в порядке исходных объявлений. Хвост
        маленького ANF-блока сохраняет результат в его глобальный слот. *)
-    let values = List.filter (fun (_, parameters, _) -> parameters = []) bindings in
+    let values =
+      List.filter
+        (function
+          | _, [], _ -> true
+          | _ -> false)
+        bindings
+    in
     let value_bodies =
       List.map
         (fun (name, _, body) ->
