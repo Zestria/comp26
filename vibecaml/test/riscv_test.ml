@@ -121,3 +121,57 @@ let () =
   let barrier = [ instr (Sd (T0, 8, Sp)); Label l; instr (Ld (T1, 8, Sp)) ] in
   check barrier barrier
 ;;
+
+(* Сравниваем не вид списка инструкций, а регистры и память после исполнения.
+   Маленькая модель покрывает только окно peephole; память обычная, не MMIO.
+   В частности, запись в zero должна отбрасываться и в исходной программе,
+   и в результате оптимизации. *)
+let () =
+  let registers = [ Zero; Sp; S0; A0; T0; T1 ] in
+  let initial_registers = [ Sp, 16; S0, 32; A0, 40; T0, 48; T1, 56 ] in
+  let initial_memory = List.init 10 (fun n -> 8 * n, 100 + n) in
+  let get key values = Option.value ~default:0 (List.assoc_opt key values) in
+  let set key value values =
+    let rest = List.remove_assoc key values in
+    if value = 0 then rest else (key, value) :: rest
+  in
+  let run program =
+    let step (regs, memory) = function
+      | Instr (instruction, _) ->
+        let read register = if register = Zero then 0 else get register regs in
+        let write register value =
+          if register = Zero then regs else set register value regs
+        in
+        (match instruction with
+         | Ld (rd, offset, base) -> write rd (get (read base + offset) memory), memory
+         | Sd (rs, offset, base) -> regs, set (read base + offset) (read rs) memory
+         | Mv (rd, rs) -> write rd (read rs), memory
+         | Addi (rd, rs, offset) -> write rd (read rs + offset), memory
+         | _ -> assert false)
+      | Label _ | Directive _ -> assert false
+    in
+    let regs, memory = List.fold_left step (initial_registers, initial_memory) program in
+    List.sort compare regs, List.sort compare memory
+  in
+  List.iter
+    (fun base ->
+       List.iter
+         (fun base' ->
+            List.iter
+              (fun rd ->
+                 List.iter
+                   (fun rs ->
+                      List.iter
+                        (fun offset ->
+                           let load = instr (Ld (rd, 8, base)) in
+                           let store = instr (Sd (rs, offset, base')) in
+                           List.iter
+                             (fun program ->
+                                assert (run program = run (peephole program)))
+                             [ [ load; store ]; [ store; load ] ])
+                        [ 8; 16 ])
+                   registers)
+              registers)
+         registers)
+    registers
+;;

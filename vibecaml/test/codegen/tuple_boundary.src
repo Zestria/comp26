@@ -1,0 +1,5 @@
+let pair a b = (a, b)
+let sum pair = let (a, b) = pair in a + b
+let () = print_int (sum (pair 1 2))
+let () = print_int (sum (pair 3 4))
+let () = print_int (sum (pair 5 6))
