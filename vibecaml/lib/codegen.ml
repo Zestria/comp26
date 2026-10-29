@@ -88,6 +88,13 @@ let symbol kind index name =
   label (Printf.sprintf "vc_%s_%s_%d" kind readable index)
 ;;
 
+(* Накопители инструкций и использованных замыканий принадлежат одному
+   запуску generate. Изменяемое состояние позволяет вложенным обработчикам
+   выдавать код за линейное время. Отключаем только проверку изменяемости
+   на время этой функции и явно возвращаем её после функции: в установленной
+   Zanuda выход из модуля сам по себе не восстанавливает настройку. *)
+[@@@zanuda "-mutability_check"]
+
 let generate program =
   try
     let bindings = List.concat_map snd program in
@@ -412,3 +419,5 @@ let generate program =
   with
   | Unsupported message -> Error message
 ;;
+
+[@@@zanuda "+mutability_check"]
