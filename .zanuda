@@ -5,6 +5,7 @@ forward mutability_check ignore MMML/test/anf_test_eval.ml
 ignore _none_
 ignore vibecaml/lib/menhir_parser.ml
 ignore vibecaml/lib/menhir_parser.mli
+forward mutability_check ignore vibecaml/lib/rd_parser.ml
 ignore shmel/lib/parser.ml
 ignore shmel/lib/parser.mli
 ignore SchonfinkelML/frontend/bottom_up_parser/parser_gen.ml

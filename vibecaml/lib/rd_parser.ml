@@ -4,10 +4,6 @@
 
 open Ast
 
-(* Курсор изменяется только при потреблении неизменяемого массива токенов.
-   Это обычная модель состояния для нисходящего парсера. *)
-[@@@zanuda "-mutability_check"]
-
 type token_kind =
   | Int of string
   | Ident of string

@@ -29,7 +29,11 @@ let bindings_of = function
 (* Вынесенные определения одного объявления верхнего уровня копятся в
    обратном порядке. Тело функции обрабатывается до того, как она сама
    попадёт в список, поэтому вложенное оказывается раньше внешнего. Порядок
-   обхода --- слева направо, так нумерация свежих имён предсказуема. *)
+   обхода --- слева направо, так нумерация свежих имён предсказуема.
+   Локальный ref служит накопителем этого обхода, включая вложенные группы;
+   исключение для него заканчивается сразу после lift_item. *)
+[@@@zanuda "-mutability_check"]
+
 let lift_item (Structure_value (rec_flag, binding, bindings)) =
   let lifted = ref [] in
   let emit name expression = lifted := Single (named name expression) :: !lifted in
@@ -117,6 +121,8 @@ let lift_item (Structure_value (rec_flag, binding, bindings)) =
     in
     List.map separate definitions @ [ Structure_value (Non_recursive, binding, bindings) ]
 ;;
+
+[@@@zanuda "+mutability_check"]
 
 let lift program =
   try Ok (List.concat_map lift_item program) with
