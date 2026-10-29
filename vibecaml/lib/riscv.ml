@@ -52,6 +52,8 @@ type directive =
   | Data
   | Globl of label
   | Dword of int
+  | Dword_label of label
+  | Align of int
   | Asciz of string
 
 type instr =
@@ -64,6 +66,12 @@ type instr =
   | Slt of reg * reg * reg
   | Sltu of reg * reg * reg
   | Xor of reg * reg * reg
+  | And of reg * reg * reg
+  | Or of reg * reg * reg
+  | Sll of reg * reg * reg
+  | Srl of reg * reg * reg
+  | Sra of reg * reg * reg
+  | Neg of reg * reg
   | Seqz of reg * reg
   | Snez of reg * reg
   | Ld of reg * int * reg
@@ -149,6 +157,12 @@ let pp_instr ppf instr =
   | Slt (rd, rs1, rs2) -> r3 "slt" rd rs1 rs2
   | Sltu (rd, rs1, rs2) -> r3 "sltu" rd rs1 rs2
   | Xor (rd, rs1, rs2) -> r3 "xor" rd rs1 rs2
+  | And (rd, rs1, rs2) -> r3 "and" rd rs1 rs2
+  | Or (rd, rs1, rs2) -> r3 "or" rd rs1 rs2
+  | Sll (rd, rs1, rs2) -> r3 "sll" rd rs1 rs2
+  | Srl (rd, rs1, rs2) -> r3 "srl" rd rs1 rs2
+  | Sra (rd, rs1, rs2) -> r3 "sra" rd rs1 rs2
+  | Neg (rd, rs) -> r2 "neg" rd rs
   | Addi (rd, rs, imm) -> p "addi %a, %a, %d" pp_reg rd pp_reg rs (imm12 "addi" imm)
   | Seqz (rd, rs) -> r2 "seqz" rd rs
   | Snez (rd, rs) -> r2 "snez" rd rs
@@ -186,6 +200,8 @@ let pp_directive ppf = function
   | Data -> Format.fprintf ppf ".data"
   | Globl name -> Format.fprintf ppf ".globl %s" name
   | Dword value -> Format.fprintf ppf ".dword %d" value
+  | Dword_label name -> Format.fprintf ppf ".dword %s" name
+  | Align power -> Format.fprintf ppf ".p2align %d" power
   | Asciz text -> Format.fprintf ppf ".asciz %s" ("\"" ^ escape text ^ "\"")
 ;;
 
