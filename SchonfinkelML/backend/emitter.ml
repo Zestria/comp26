@@ -85,24 +85,20 @@ module Monad = struct
       let functions = List.concat (List.rev final_state.functions_rev) in
       Ok (main_code @ functions)
   ;;
-end
 
-let rec map_m f = function
-  | [] -> Monad.return []
-  | x :: xs ->
-    Monad.(
+  let rec map_m f = function
+    | [] -> return []
+    | x :: xs ->
       let* y = f x in
       let* ys = map_m f xs in
-      return (y :: ys))
-;;
+      return (y :: ys)
+  ;;
 
-let iteri_m f l =
-  snd
-    (List.fold_left
-       (fun (i, m) x -> i + 1, Monad.bind m (fun () -> f i x))
-       (0, Monad.return ())
-       l)
-;;
+  let iteri_m f l =
+    snd
+      (List.fold_left (fun (i, m) x -> i + 1, bind m (fun () -> f i x)) (0, return ()) l)
+  ;;
+end
 
 let align16 n = (n + 15) land lnot 15
 
