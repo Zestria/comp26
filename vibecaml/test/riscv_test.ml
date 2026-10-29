@@ -91,6 +91,13 @@ let () =
   (* Если ld меняет sp, следующий sd уже пишет по другому адресу. *)
   let changes_base = [ instr (Ld (Sp, 8, Sp)); instr (Sd (Sp, 8, Sp)) ] in
   check changes_base changes_base;
+  (* ld в zero отбрасывает значение, а sd zero обнуляет память.
+     Это не запись загруженного слова обратно. *)
+  List.iter
+    (fun base ->
+       let clears_slot = [ instr (Ld (Zero, 8, base)); instr (Sd (Zero, 8, base)) ] in
+       check clears_slot clears_slot)
+    [ Sp; S0; A0 ];
   check
     [ instr (Ld (T0, 8, Sp)); instr (Sd (T0, 16, Sp)) ]
     [ instr (Ld (T0, 8, Sp)); instr (Sd (T0, 16, Sp)) ];
