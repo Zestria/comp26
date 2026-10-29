@@ -27,6 +27,16 @@ struct schoml_closure {
 void *schoml_closure_make(void *code, size_t arity,
                           size_t n_caps, schoml_closure_slot *caps);
 
+/* Maximum arity supported by the application entry points below: all
+ * arguments have to fit into a0..a7. */
+#define SCHOML_CLOSURE_MAX_ARITY 8
+
+/* caml_callback-style application. Handles partial (creates a new closure,
+ * rooting live values across allocation), full, and over-application.
+ * Raw code pointers are called directly; partial through raw is undefined. */
+void *schoml_closure_apply1(void *f, void *a);
+void *schoml_closure_apply2(void *f, void *a, void *b);
+
 static inline int schoml_is_closure(void *v) {
     return ((uintptr_t)v & 1) != 0;
 }
