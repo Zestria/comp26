@@ -12,7 +12,7 @@ vc_fn_lifted__5_0:
     ld t1, -40(s0)
     add a0, t0, t1
     sd a0, -48(s0)
-    ld t0, -48(s0)
+    mv t0, a0
     sd t0, 0(sp)
     ld a0, -32(s0)
     li a1, 1
@@ -32,7 +32,7 @@ vc_fn_lifted__6_1:
     sd a0, -24(s0)
     sd a1, -32(s0)
     sd a2, -40(s0)
-    ld t0, -40(s0)
+    mv t0, a2
     sd t0, 0(sp)
     ld t0, -24(s0)
     sd t0, 8(sp)
@@ -45,7 +45,6 @@ vc_fn_lifted__6_1:
     li t1, 2
     sub a0, t0, t1
     sd a0, -56(s0)
-    ld a0, -56(s0)
     ld a1, -48(s0)
     call vc_fn_fibk_2
     ld ra, 72(sp)
@@ -85,7 +84,6 @@ vc_fn_fibk_2:
     li t1, 1
     sub a0, t0, t1
     sd a0, -48(s0)
-    ld a0, -48(s0)
     ld a1, -40(s0)
     call vc_fn_fibk_2
 .L__22:
@@ -101,7 +99,6 @@ vc_fn_lifted__7_3:
     sd s0, 16(sp)
     addi s0, sp, 32
     sd a0, -24(s0)
-    ld a0, -24(s0)
     ld ra, 24(sp)
     ld s0, 16(sp)
     addi sp, sp, 32
@@ -117,7 +114,6 @@ vc_main:
     la a1, vc_closure_lifted__7_3
     call vc_fn_fibk_2
     sd a0, -24(s0)
-    ld a0, -24(s0)
     call vc_print_int
     la t0, vc_value_value__18_4
     sd a0, 0(t0)
