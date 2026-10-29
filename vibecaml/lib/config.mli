@@ -21,6 +21,7 @@ type stage =
   | Closure_conversion (** [--stop-after cc] *)
   | Lambda_lifting (** [--stop-after ll] *)
   | Anf (** [--stop-after anf] *)
+  | Asm (** [--stop-after asm], конец конвейера: программа на RISC-V *)
 
 (** Расширения синтаксиса --- общий тип из [Parser_intf], см. #5. *)
 type extensions = Parser_intf.extensions

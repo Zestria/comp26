@@ -37,7 +37,7 @@ let show_parsed config structure =
   tree ^ program
 ;;
 
-(* Конвейер middleend по порядку из #9; на стадии из --stop-after печатаем
+(* Конвейер по порядку из #9, в конце --- RISC-V (#19, #21); на стадии из --stop-after печатаем
    результат и останавливаемся. *)
 let compile config parsed =
   let ( let* ) = Result.bind in
@@ -59,7 +59,13 @@ let compile config parsed =
         else
           let* anf = Anf_conv.convert lifted in
           let anf = Anf_simplify.simplify anf in
-          Ok (Format.asprintf "%a@." Anf.pp_program anf)
+          if stop_after Config.Anf
+          then Ok (Format.asprintf "%a@." Anf.pp_program anf)
+          else
+            (* Кодоген ANF -> RISC-V --- #21; здесь будет
+               [Riscv.pp_program (Riscv.peephole program)]. *)
+            Error
+              "генерация RISC-V ещё не реализована (#21), используйте --stop-after anf"
 ;;
 
 let write_output config text =

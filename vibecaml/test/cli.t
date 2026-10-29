@@ -141,7 +141,7 @@
   let x = f 1
 
   $ vibecamlc --stop-after typing small.ml
-  vibecaml: неизвестная стадия: typing (ожидается parsing, rename, cc, ll или anf)
+  vibecaml: неизвестная стадия: typing (ожидается parsing, rename, cc, ll, anf или asm)
   [1]
 
   $ vibecamlc --stop-after
@@ -173,7 +173,7 @@
   vibecaml: после -o ожидается значение
   [1]
 
-  $ vibecamlc -o missing/out.ml small.ml
+  $ vibecamlc --stop-after anf -o missing/out.ml small.ml
   vibecaml: missing/out.ml: No such file or directory
   [1]
 

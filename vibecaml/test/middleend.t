@@ -18,8 +18,7 @@
   > let () = print_int (fibk 10 identity)
   > ML
 
-Для каждой стадии результат пишется через -o, затем исполняется. Режим без
---stop-after должен совпасть с ANF, включая свежие имена.
+Для каждой стадии результат пишется через -o, затем исполняется.
 
   $ for sample in fack fibk; do
   >   ocaml "$sample.ml" > expected.txt || exit 1
@@ -29,8 +28,6 @@
   >       ocaml output.ml > actual.txt || exit 1
   >       diff expected.txt actual.txt || exit 1
   >     done
-  >     vibecamlc -parsing "$parser" "$sample.ml" > default.ml || exit 1
-  >     diff output.ml default.ml || exit 1
   >   done
   >   cat expected.txt; echo
   > done

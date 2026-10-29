@@ -13,8 +13,6 @@
   >       ocaml -w -5-26 result.ml > actual.txt || exit 1
   >       diff expected.txt actual.txt || exit 1
   >     done
-  >     vibecamlc -parsing "$parser" "$input" > default.ml || exit 1
-  >     diff result.ml default.ml || exit 1
   >   done
   >   printf '%s: ' "$input"; cat expected.txt; echo
   > done
