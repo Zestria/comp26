@@ -99,10 +99,16 @@ let () =
     [ instr (Sd (T0, 8, Sp)); instr (Mv (T1, T0)) ]
     [ instr (Sd (T0, 8, Sp)); instr (Ld (T1, 8, Sp)) ];
   check [ instr (Sd (T0, 8, Sp)) ] [ instr (Sd (T0, 8, Sp)); instr (Ld (T0, 8, Sp)) ];
-  (* Через другой базовый регистр не трогаем: адрес может отличаться. *)
+  (* Слоты кадра через s0 сокращаются так же, как через sp. *)
   check
-    [ instr (Sd (T0, 8, A0)); instr (Ld (T1, 8, A0)) ]
-    [ instr (Sd (T0, 8, A0)); instr (Ld (T1, 8, A0)) ];
+    [ instr (Sd (A0, -48, S0)); instr (Mv (T0, A0)) ]
+    [ instr (Sd (A0, -48, S0)); instr (Ld (T0, -48, S0)) ];
+  check
+    [ instr (Ld (T0, -24, S0)) ]
+    [ instr (Ld (T0, -24, S0)); instr (Sd (T0, -24, S0)) ];
+  (* Разные базы не трогаем: адреса могут отличаться. *)
+  let other_base = [ instr (Sd (T0, 8, Sp)); instr (Ld (T1, 8, S0)) ] in
+  check other_base other_base;
   (* Метка --- барьер: на неё могут прыгнуть с другим содержимым регистров. *)
   let l = label ".Lx" in
   let barrier = [ instr (Sd (T0, 8, Sp)); Label l; instr (Ld (T1, 8, Sp)) ] in

@@ -77,7 +77,6 @@ vc_main:
     ld t1, 0(t1)
     add a0, t0, t1
     sd a0, -40(s0)
-    ld a0, -40(s0)
     call vc_print_int
     la t0, vc_value_value__9_5
     sd a0, 0(t0)
