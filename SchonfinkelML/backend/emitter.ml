@@ -117,20 +117,7 @@ let rec combine l1 l2 =
 let get_rtl anf =
   let open Monad in
   let open Allocator in
-  let label_counter = ref 0 in
-  let fresh base =
-    incr label_counter;
-    Printf.sprintf "%s__%d" base !label_counter
-  in
   let materialize env = function
-    | Anf.ImmId name ->
-      (match SMap.find_opt name env with
-       | Some (Reg r) -> return r
-       | Some (Function _) ->
-         let reg = alloc () in
-         let* () = emit (la reg name) in
-         return reg
-       | None -> error Symbol_table_error)
     | Anf.ImmNum n ->
       let reg = alloc () in
       let* () = emit (li reg n) in
@@ -143,15 +130,13 @@ let get_rtl anf =
       let reg = alloc () in
       let* () = emit (li reg 0) in
       return reg
-  in
-  let emit_arg reg env = function
-    | Anf.ImmNum n -> emit (li reg n)
-    | Anf.ImmBool b -> emit (li reg (Bool.to_int b))
-    | Anf.ImmUnit -> emit (li reg 0)
-    | Anf.ImmId id ->
-      (match SMap.find_opt id env with
-       | Some (Reg r) -> emit (mv reg r)
-       | Some (Function _) -> emit (la reg id)
+    | Anf.ImmId name ->
+      (match SMap.find_opt name env with
+       | Some (Reg r) -> return r
+       | Some (Function _) ->
+         let reg = alloc () in
+         let* () = emit (la reg name) in
+         return reg
        | None -> error Symbol_table_error)
   in
   let live_caller_saved env dst =
@@ -166,14 +151,26 @@ let get_rtl anf =
       []
   in
   let compile_call env dst f args =
-    let* () =
-      List.fold_left
-        (fun m (arg, arg_reg) -> m >>= fun () -> emit_arg arg_reg env arg)
-        (return ())
-        (combine args arg_registers)
-    in
+    let* arg_regs = map_m (materialize env) args in
+    let saved = live_caller_saved env dst in
+    (* Frame layout: staged arguments at 0.., then saved registers. Staging
+       avoids the swap hazard when two arguments sit in registers that the
+       A-register loading order would exchange. *)
+    let args_bytes = 8 * List.length args in
+    let frame = align16 (args_bytes + (8 * List.length saved)) in
+    let* () = emit (addi SP SP (-frame)) in
+    let* () = iteri_m (fun i r -> emit (sd r SP (8 * i))) arg_regs in
+    let* () = iteri_m (fun j r -> emit (sd r SP (args_bytes + (8 * j)))) saved in
+    let* () = iteri_m (fun i _ -> emit (ld (List.nth arg_registers i) SP (8 * i))) args in
     let* () = emit (call f) in
-    emit (mv dst A0)
+    (* Move the result out of A0 before restoring saved registers: restore
+       may overwrite A0 if it held a named value (e.g. a function parameter
+       used as a call argument). dst is excluded from [saved], so it survives
+       restore. *)
+    let* () = if dst = A0 then return () else emit (mv dst A0) in
+    let* () = iteri_m (fun j r -> emit (ld r SP (args_bytes + (8 * j)))) saved in
+    let* () = emit (addi SP SP frame) in
+    return ()
   in
   let compile_mk_closure env dst f arity args =
     let* caps = map_m (materialize env) args in
@@ -184,6 +181,8 @@ let get_rtl anf =
     let* () =
       iteri_m
         (fun i r ->
+           (* is_ref = 0: no type info at this stage, so the GC does not trace
+              captures. Safe while the heap stays under the collection threshold. *)
            let* () = emit (sd Zero SP (16 * i)) in
            emit (sd r SP ((16 * i) + 8)))
         caps
@@ -203,71 +202,32 @@ let get_rtl anf =
     if n > 2
     then error (Unsupported "apply with more than 2 arguments")
     else
+      (* Stage f and the arguments on the stack (no register swaps), save
+         live caller-saved registers, then call the runtime entry point. *)
       let* f_reg = materialize env f in
-      let* () = emit (addi SP SP (-16)) in
+      let* arg_regs = map_m (materialize env) args in
+      let saved = live_caller_saved env dst in
+      let args_bytes = 8 * (1 + n) in
+      let frame = align16 (args_bytes + (8 * List.length saved)) in
+      let* () = emit (addi SP SP (-frame)) in
       let* () = emit (sd f_reg SP 0) in
-      let tmp_regs = List.filteri (fun i _ -> i < n) [ T3; T4 ] in
-      let* () =
-        iteri_m (fun i _ -> emit_arg (List.nth tmp_regs i) env (List.nth args i)) args
-      in
-      let* () = emit (ld T0 SP 0) in
-      let* () = emit (addi SP SP 16) in
-      let raw = fresh "apply_raw" in
-      let a0 = fresh "apply_a0" in
-      let a1 = fresh "apply_a1" in
-      let a2 = fresh "apply_a2" in
-      let fail = fresh "apply_fail" in
-      let done_ = fresh "apply_done" in
-      let* () = emit (andi T1 T0 1) in
-      let* () = emit (beq T1 Zero raw) in
-      let* () = emit (addi T0 T0 (-1)) in
-      let* () = emit (ld T1 T0 16) in
-      let* () = emit (ld T2 T0 8) in
-      let* () = emit (beq T2 Zero a0) in
-      let* () = emit (li T5 1) in
-      let* () = emit (beq T2 T5 a1) in
-      let* () = emit (li T5 2) in
-      let* () = emit (beq T2 T5 a2) in
-      let* () = emit (jal Zero fail) in
-      let* () = label a0 in
+      let* () = iteri_m (fun i r -> emit (sd r SP (8 * (i + 1)))) arg_regs in
+      let* () = iteri_m (fun j r -> emit (sd r SP (args_bytes + (8 * j)))) saved in
+      let* () = emit (ld A0 SP 0) in
       let* () =
         iteri_m
-          (fun i _ -> emit (mv (List.nth arg_registers i) (List.nth tmp_regs i)))
+          (fun i _ -> emit (ld (List.nth arg_registers (i + 1)) SP (8 * (i + 1))))
           args
       in
-      let* () = emit (jalr RA T1 0) in
-      let* () = emit (jal Zero done_) in
-      let* () = label a1 in
-      let* () = emit (ld A0 T0 32) in
       let* () =
-        iteri_m
-          (fun i _ -> emit (mv (List.nth arg_registers (i + 1)) (List.nth tmp_regs i)))
-          args
+        emit (call (if n = 1 then "schoml_closure_apply1" else "schoml_closure_apply2"))
       in
-      let* () = emit (jalr RA T1 0) in
-      let* () = emit (jal Zero done_) in
-      let* () = label a2 in
-      let* () = emit (ld A0 T0 32) in
-      let* () = emit (ld A1 T0 48) in
-      let* () =
-        iteri_m
-          (fun i _ -> emit (mv (List.nth arg_registers (i + 2)) (List.nth tmp_regs i)))
-          args
-      in
-      let* () = emit (jalr RA T1 0) in
-      let* () = emit (jal Zero done_) in
-      let* () = label raw in
-      let* () =
-        iteri_m
-          (fun i _ -> emit (mv (List.nth arg_registers i) (List.nth tmp_regs i)))
-          args
-      in
-      let* () = emit (jalr RA T0 0) in
-      let* () = emit (jal Zero done_) in
-      let* () = label fail in
-      let* () = emit (li A0 0) in
-      let* () = label done_ in
-      emit (mv dst A0)
+      (* Move the result out of A0 before restoring, same reasoning as
+         compile_call. *)
+      let* () = if dst = A0 then return () else emit (mv dst A0) in
+      let* () = iteri_m (fun j r -> emit (ld r SP (args_bytes + (8 * j)))) saved in
+      let* () = emit (addi SP SP frame) in
+      return ()
   in
   let compile_binop env dst op lhs rhs =
     let* rs1 = materialize env lhs in
@@ -346,10 +306,10 @@ let get_rtl anf =
        | Closures.Unknown -> compile_apply_closure env dst head args)
   in
   let dst = alloc () in
-  run
-    (let* () = compile_aexpr SMap.empty dst anf in
-     let* () = emit (li A7 94) in
-     let* () = emit (mv A0 dst) in
-     let* () = emit ecall in
-     return ())
+  let env = SMap.empty in
+  (let* () = compile_aexpr env dst anf in
+   let* () = emit (li A7 94) in
+   let* () = emit (mv A0 dst) in
+   emit ecall)
+  |> run
 ;;
