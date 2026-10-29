@@ -3,6 +3,7 @@
   pprint_test
   anf_test
   config_test
+  codegen_test
   fresh_test
   middleend_test
   closure_conversion_test

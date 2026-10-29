@@ -16,6 +16,24 @@
 `scripts/run.sh` собирает `prog.s` и `runtime/runtime.s` через `as` и `ld` и
 запускает результат под QEMU.
 
+Пример из корня репозитория после подключения Codegen (#21):
+
+```sh
+opam exec --switch=comp26 -- dune exec vibecaml/compiler.exe -- \
+  vibecaml/test/middleend/fack.src -o /tmp/fack.s
+sh vibecaml/scripts/run.sh /tmp/fack.s
+```
+
+Результат — `120`. Для `fibk.src` — `55`. Режим по умолчанию совпадает
+с `--stop-after asm`; `--stop-after anf` по-прежнему печатает промежуточный ML.
+
+В `test/codegen/` снапшоты `.s` проверяются всегда. QEMU-тесты включаются,
+когда доступны QEMU, `as` и `ld`: сравнивают весь stdout с OCaml на обоих
+парсерах, проверяют ошибки runtime и ABI. `test/codegen_test.ml` отдельно
+проверяет ограничения кадра, неизвестные имена, поля кортежа и линейность
+цепочки `if`. Кодоген не реализует типизацию: сравнения предназначены
+для целых и bool, float и структурное сравнение кортежей не поддерживаются.
+
 ## Отладка
 
 В одном терминале:

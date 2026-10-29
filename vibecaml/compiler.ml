@@ -62,10 +62,8 @@ let compile config parsed =
           if stop_after Config.Anf
           then Ok (Format.asprintf "%a@." Anf.pp_program anf)
           else
-            (* Кодоген ANF -> RISC-V --- #21; здесь будет
-               [Riscv.pp_program (Riscv.peephole program)]. *)
-            Error
-              "генерация RISC-V ещё не реализована (#21), используйте --stop-after anf"
+            let* program = Codegen.generate anf in
+            Ok (Format.asprintf "%a" Riscv.pp_program (Riscv.peephole program))
 ;;
 
 let write_output config text =

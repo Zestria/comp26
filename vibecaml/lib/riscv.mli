@@ -60,6 +60,8 @@ type directive =
   | Data
   | Globl of label
   | Dword of int
+  | Dword_label of label (** Адрес кода в статическом замыкании. *)
+  | Align of int (** [.p2align], степень двойки. *)
   | Asciz of string
 
 type instr =
@@ -72,6 +74,12 @@ type instr =
   | Slt of reg * reg * reg
   | Sltu of reg * reg * reg
   | Xor of reg * reg * reg
+  | And of reg * reg * reg
+  | Or of reg * reg * reg
+  | Sll of reg * reg * reg
+  | Srl of reg * reg * reg
+  | Sra of reg * reg * reg
+  | Neg of reg * reg
   | Seqz of reg * reg
   | Snez of reg * reg
   | Ld of reg * int * reg (** [Ld (rd, offset, base)] --- [ld rd, offset(base)] *)

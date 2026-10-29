@@ -12,6 +12,22 @@ open Riscv
 let show program = Format.asprintf "%a" pp_program program
 let instr i = Instr (i, None)
 
+let () =
+  assert (
+    show
+      [ instr (And (A0, T0, T1))
+      ; instr (Sra (A0, T0, T1))
+      ; instr (Neg (A0, T0))
+      ; Directive (Align 3)
+      ; Directive (Dword_label (label "f"))
+      ]
+    = "    and a0, t0, t1\n\
+      \    sra a0, t0, t1\n\
+      \    neg a0, t0\n\
+      \    .p2align 3\n\
+      \    .dword f\n")
+;;
+
 let expect_equal expected actual =
   if expected <> actual
   then (
