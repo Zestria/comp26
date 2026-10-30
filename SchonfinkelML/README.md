@@ -30,10 +30,7 @@ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./file.exe
 ## Managed runtime
 
 The runtime provides a nonmoving mark-and-sweep collector with explicit roots,
-custom tracers for closures and other objects, and managed tuples. See
-[the runtime integration guide](backend/RUNTIME.md) for the allocation contract,
-root placement, and RISC-V build commands. The current emitter does not yet
-emit runtime calls or root registration.
+custom tracers for closures and other objects, and managed tuples.
 
 
 ## How to run

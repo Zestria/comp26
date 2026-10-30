@@ -8,14 +8,10 @@
  (archive_name schoml_runtime)
  (language c)
  (names runtime gc tuple)
- (flags (:standard -std=c11 -Wall -Wextra -Werror -pedantic)))
+ (flags
+  (:standard -std=c11 -Wall -Wextra -Werror -pedantic)))
 
 (install
  (package SchonfinkelML)
  (section lib)
  (files libschoml_runtime.a runtime.h gc.h tuple.h runtime.c gc.c tuple.c))
-
-(install
- (package SchonfinkelML)
- (section doc)
- (files (RUNTIME.md as backend/RUNTIME.md)))
