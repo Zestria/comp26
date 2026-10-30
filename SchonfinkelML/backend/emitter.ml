@@ -23,6 +23,7 @@ module Monad = struct
   type state =
     { current_rev : item list
     ; functions_rev : item list list
+    ; counter : int
     }
 
   type 'a t = state -> ('a * state, error) result
@@ -77,13 +78,19 @@ module Monad = struct
   ;;
 
   let run (program : unit t) : (item list, error) result =
-    let initial_state = { current_rev = []; functions_rev = [] } in
+    let initial_state = { current_rev = []; functions_rev = []; counter = 0 } in
     match program initial_state with
     | Error e -> Error e
     | Ok ((), final_state) ->
       let main_code = Label "_start" :: List.rev final_state.current_rev in
       let functions = List.concat (List.rev final_state.functions_rev) in
       Ok (main_code @ functions)
+  ;;
+
+  let fresh_label (prefix : string) : string t =
+    fun state ->
+    let n = state.counter in
+    Ok (Printf.sprintf "%s_%d" prefix n, { state with counter = n + 1 })
   ;;
 
   let rec map_m f = function
@@ -244,6 +251,20 @@ let get_rtl anf =
     | "lsl" -> emit (sll dst rs1 rs2)
     | "lsr" -> emit (srl dst rs1 rs2)
     | "asr" -> emit (sra dst rs1 rs2)
+    | "=" ->
+      let* () = emit (xor dst rs1 rs2) in
+      emit (sltiu dst dst 1)
+    | "<>" ->
+      let* () = emit (xor dst rs1 rs2) in
+      emit (sltu dst Zero dst)
+    | "<" -> emit (slt dst rs1 rs2)
+    | ">" -> emit (slt dst rs2 rs1)
+    | "<=" ->
+      let* () = emit (slt dst rs2 rs1) in
+      emit (xori dst dst 1)
+    | ">=" ->
+      let* () = emit (slt dst rs1 rs2) in
+      emit (xori dst dst 1)
     | _ -> error (Unsupported "binop")
   in
   let rec compile_aexpr env dst =
@@ -280,8 +301,8 @@ let get_rtl anf =
            emit ret)
       in
       compile_aexpr env dst body
-    | ALet (Recursive, _, _, _) -> error (Unsupported "recursive bindings")
-    | ALet (NotRecursive, name, rhs, body) ->
+    (* | ALet (Recursive, _, _, _) -> error (Unsupported "recursive bindings") *)
+    | ALet (_, name, rhs, body) ->
       let reg = alloc () in
       let env = SMap.add name (Reg reg) env in
       let* () = compile_aexpr env reg rhs in
@@ -290,8 +311,20 @@ let get_rtl anf =
     | ACExpr (CImmExpr imm) ->
       let* src = materialize env imm in
       emit (mv dst src)
-    | ACExpr (CIfExpr _) -> error (Unsupported "if")
+    | ACExpr (CIfExpr (cond, then_branch, else_branch)) ->
+      let* cond_reg = materialize env cond in
+      let* else_lbl = fresh_label "if_else" in
+      let* end_lbl = fresh_label "if_end" in
+      let* () = emit (beq cond_reg Zero else_lbl) in
+      let* () = compile_aexpr env dst then_branch in
+      let* () = emit (jal Zero end_lbl) in
+      let* () = label else_lbl in
+      let* () = compile_aexpr env dst else_branch in
+      let* () = label end_lbl in
+      return ()
     | ACExpr (CAbstr (v, body)) -> error (Unsupported "closures")
+    | ACExpr (CApp (ImmId f, y, [])) when f = "print_int" ->
+      compile_call env dst "schoml_print_int" [ y ]
     | ACExpr (CApp (head, y, z)) ->
       let args = y :: z in
       let arity_of f =
@@ -309,7 +342,7 @@ let get_rtl anf =
   let env = SMap.empty in
   (let* () = compile_aexpr env dst anf in
    let* () = emit (li A7 94) in
-   let* () = emit (mv A0 dst) in
+   let* () = emit (mv A0 Zero) in
    emit ecall)
   |> run
 ;;
