@@ -3,14 +3,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 set -eu
 
-# The target dispatcher is RV64 assembly. Other hosts use a test-only C
-# adapter; the full target implementation is checked under QEMU.
-case "$(uname -m)" in
-    riscv64) invoke=../../backend/closure_invoke.S ;;
-    *) invoke=closure_invoke_native.c ;;
-esac
+# The same C dispatcher runs on the host and on RV64 under QEMU.
 cc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
-    -I ../../backend ../../backend/closure_runtime.c "$invoke" \
+    -I ../../backend ../../backend/closure_runtime.c \
     closure_runtime_tests.c -o closure_runtime_native.exe
 ./closure_runtime_native.exe
 

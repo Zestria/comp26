@@ -4,8 +4,14 @@
 #include "closure_runtime.h"
 
 #include <assert.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/resource.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 typedef shmel_word word;
 
@@ -18,19 +24,34 @@ static word constant(void) { return UINT64_MAX; }
 static word add(word x, word y) { return x + y; }
 static word subtract(word x, word y) { return x - y; }
 
+static word weighted2(word a, word b) {
+    return a + 2*b;
+}
+
+static word weighted3(word a, word b, word c) {
+    return a + 2*b + 3*c;
+}
+
+static word weighted4(word a, word b, word c, word d) {
+    return a + 2*b + 3*c + 4*d;
+}
+
+static word weighted5(word a, word b, word c, word d, word e) {
+    return a + 2*b + 3*c + 4*d + 5*e;
+}
+
+static word weighted6(word a, word b, word c, word d, word e, word f) {
+    return a + 2*b + 3*c + 4*d + 5*e + 6*f;
+}
+
+static word weighted7(word a, word b, word c, word d, word e, word f, word g) {
+    return a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g;
+}
+
 static word weighted8(word a, word b, word c, word d, word e, word f, word g, word h) {
     return a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h;
 }
 
-static word weighted9(word a, word b, word c, word d, word e, word f, word g,
-                      word h, word i) {
-    return weighted8(a, b, c, d, e, f, g, h) + 9*i;
-}
-
-static word weighted10(word a, word b, word c, word d, word e, word f, word g,
-                       word h, word i, word j) {
-    return weighted9(a, b, c, d, e, f, g, h, i) + 10*j;
-}
 
 static shmel_closure *add_closure;
 static shmel_closure *last_intermediate;
@@ -71,34 +92,80 @@ static void test_partial_application(void) {
 }
 
 static void test_many_arguments(void) {
-    word args[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    word args[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    shmel_closure *base = shmel_make_closure((shmel_code_address)weighted8, 8);
+    assert(shmel_apply(base, 8, args) == 204);
+    shmel_closure *p = as_closure(shmel_apply(base, 3, args));
+    shmel_closure *q = as_closure(shmel_apply(p, 4, args + 3));
+    assert(p->applied == 3 && q->applied == 7);
+    assert(shmel_apply(q, 1, args + 7) == 204);
+    free(q);
+    free(p);
+    free(base);
+}
+
+static void test_dispatch_arities(void) {
+    word args[SHMEL_MAX_ARITY];
     shmel_code_address codes[] = {
-        (shmel_code_address)weighted8,
-        (shmel_code_address)weighted9,
-        (shmel_code_address)weighted10
+        (shmel_code_address)identity,
+        (shmel_code_address)weighted2,
+        (shmel_code_address)weighted3,
+        (shmel_code_address)weighted4,
+        (shmel_code_address)weighted5,
+        (shmel_code_address)weighted6,
+        (shmel_code_address)weighted7,
+        (shmel_code_address)weighted8
     };
-    for (uint64_t arity = 8; arity <= 10; ++arity) {
-        shmel_closure *base = shmel_make_closure(codes[arity - 8], arity);
-        word expected = 0;
-        for (uint64_t i = 0; i < arity; ++i) {
-            expected += args[i] * (i + 1);
+    _Static_assert(sizeof(codes) / sizeof(codes[0]) == SHMEL_MAX_ARITY,
+                   "test every supported positive arity");
+    for (uint64_t i = 0; i < SHMEL_MAX_ARITY; ++i) args[i] = i + 1;
+    args[0] = UINT64_MAX;
+    word expected = 0;
+    for (uint64_t arity = 1; arity <= SHMEL_MAX_ARITY; ++arity) {
+        expected += arity * args[arity - 1];
+        assert(shmel_invoke(codes[arity - 1], arity, args) == expected);
+        shmel_closure *base = shmel_make_closure(codes[arity - 1], arity);
+        if (arity > 1) {
+            shmel_closure *p = as_closure(shmel_apply(base, arity - 1, args));
+            assert(shmel_apply(p, 1, args + arity - 1) == expected);
+            free(p);
         }
-        assert(shmel_apply(base, arity, args) == expected);
-        shmel_closure *p = as_closure(shmel_apply(base, 3, args));
-        shmel_closure *q = as_closure(shmel_apply(p, 4, args + 3));
-        assert(p->applied == 3 && q->applied == 7);
-        assert(shmel_apply(q, arity - 7, args + 7) == expected);
-        if (arity == 10) {
-            shmel_closure *r = as_closure(shmel_apply(q, 2, args + 7));
-            assert(r->applied == 9 && r->arguments[8] == 9);
-            assert(shmel_apply(r, 1, args + 9) == expected);
-            free(r);
-        }
-        free(q);
-        free(p);
         free(base);
     }
+    assert(args[0] == UINT64_MAX);
 }
+
+static void expect_arity_failure(int invoke) {
+    int errors[2];
+    assert(pipe(errors) == 0);
+    pid_t child = fork();
+    assert(child >= 0);
+    if (child == 0) {
+        close(errors[0]);
+        if (dup2(errors[1], STDERR_FILENO) < 0) _Exit(2);
+        close(errors[1]);
+        if (invoke) {
+            word value = 1;
+            (void)shmel_invoke((shmel_code_address)identity,
+                               SHMEL_MAX_ARITY + 1, &value);
+        } else {
+            (void)shmel_make_closure((shmel_code_address)identity,
+                                     SHMEL_MAX_ARITY + 1);
+        }
+        _Exit(0);
+    }
+    close(errors[1]);
+    char message[256];
+    ssize_t size = read(errors[0], message, sizeof(message) - 1);
+    assert(size > 0);
+    message[size] = '\0';
+    close(errors[0]);
+    int status;
+    assert(waitpid(child, &status, 0) == child);
+    assert(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+    assert(strstr(message, "function arity exceeds SHMEL_MAX_ARITY") != NULL);
+}
+
 
 static shmel_closure *fac_closure;
 static shmel_closure *fac_step_closure;
@@ -174,6 +241,8 @@ static void test_cps(void) {
 }
 
 int main(void) {
+    struct rlimit no_core = {0, 0};
+    assert(setrlimit(RLIMIT_CORE, &no_core) == 0);
     assert(shmel_invoke(constant, 0, NULL) == UINT64_MAX);
     word all_bits[] = {UINT64_MAX};
     assert(shmel_invoke((shmel_code_address)identity, 1, all_bits) == UINT64_MAX);
@@ -182,6 +251,9 @@ int main(void) {
     assert(shmel_invoke((shmel_code_address)subtract, 2, negative) == UINT64_MAX - 4);
     test_partial_application();
     test_many_arguments();
+    test_dispatch_arities();
+    expect_arity_failure(0);
+    expect_arity_failure(1);
     test_cps();
     puts("closure runtime tests passed");
     return 0;

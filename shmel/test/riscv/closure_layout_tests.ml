@@ -28,11 +28,17 @@ let () =
   assert (Closure.argument_offset 1 = Ok 32);
   assert (Closure.remaining_arity f ~applied:0 = Ok 3);
   assert (Closure.remaining_arity f ~applied:2 = Ok 1);
-  let wide = Result.get_ok (Closure.create ~code:"nine_args" ~arity:9) in
-  assert (Closure.arity wide = 9);
-  assert (Closure.remaining_arity wide ~applied:8 = Ok 1);
-  assert (Closure.size_bytes ~applied:8 = Ok 88);
-  assert (Closure.argument_offset 8 = Ok 88);
+  let wide = Result.get_ok (Closure.create ~code:"eight_args" ~arity:8) in
+  assert (Closure.arity wide = 8);
+  assert (Closure.remaining_arity wide ~applied:7 = Ok 1);
+  assert (Closure.size_bytes ~applied:7 = Ok 80);
+  assert (Closure.argument_offset 7 = Ok 80);
+  let largest_arity =
+    Result.get_ok (Closure.create ~code:"largest_arity" ~arity:Closure.max_arity)
+  in
+  assert (Closure.max_arity = 8);
+  assert (Closure.arity largest_arity = Closure.max_arity);
+  expect_error (Closure.create ~code:"too_wide" ~arity:(Closure.max_arity + 1));
   expect_error (Closure.create ~code:"" ~arity:1);
   expect_error (Closure.create ~code:"f" ~arity:0);
   expect_error (Closure.create ~code:"f" ~arity:(-1));

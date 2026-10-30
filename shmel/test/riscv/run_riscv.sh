@@ -26,7 +26,7 @@ case "${1:-}" in
         fi
         riscv64-linux-gnu-gcc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
             -static -march=rv64gc -I "$backend" \
-            "$backend/closure_runtime.c" "$backend/closure_invoke.S" "$@" \
+            "$backend/closure_runtime.c" "$@" \
             -o "${mode}_rv64.exe"
         run_qemu -cpu max "./${mode}_rv64.exe"
         ;;

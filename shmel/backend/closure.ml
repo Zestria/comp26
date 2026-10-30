@@ -11,11 +11,15 @@ type t =
   ; arity : int
   }
 
+let max_arity = 8
+
 let create ~code ~arity =
   if String.equal code ""
   then Error "closure code label must not be empty"
   else if arity <= 0
   then Error "closure arity must be positive"
+  else if arity > max_arity
+  then Error (Printf.sprintf "closure arity exceeds runtime limit (%d)" max_arity)
   else Ok { code; arity }
 ;;
 

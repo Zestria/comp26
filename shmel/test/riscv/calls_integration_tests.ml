@@ -131,18 +131,45 @@ let compile_case case_id (name, source) =
 ;;
 
 let many_arguments ~partial =
-  let params = List.init 300 (Printf.sprintf "p%d") in
-  let args = List.init 300 Int.to_string in
+  let params = List.init Closure.max_arity (Printf.sprintf "p%d") in
+  let args = List.init Closure.max_arity Int.to_string in
   let call =
     if partial
     then
       Printf.sprintf
         "let g = f %s in g %s"
-        (String.concat " " (List.take 260 args))
-        (String.concat " " (List.drop 260 args))
+        (String.concat " " (List.take (Closure.max_arity - 1) args))
+        (String.concat " " (List.drop (Closure.max_arity - 1) args))
     else "f " ^ String.concat " " args
   in
-  Printf.sprintf "let f %s = p0 + p255 + p299 in %s" (String.concat " " params) call
+  Printf.sprintf
+    "let f %s = p0 + p3 + p%d in %s"
+    (String.concat " " params)
+    (Closure.max_arity - 1)
+    call
+;;
+
+(* A large application buffer need not imply a large code arity: each unary
+   function returns the next one. This keeps the >12-bit-offset coverage. *)
+let large_overapplication ~partial =
+  let definitions =
+    List.init 300 (fun i ->
+      let index = 299 - i in
+      if index = 299
+      then "let f299 x = x"
+      else Printf.sprintf "let f%d x = f%d" index (index + 1))
+  in
+  let args = List.init 300 Int.to_string in
+  let call =
+    if partial
+    then
+      Printf.sprintf
+        "let g = f0 %s in g %s"
+        (String.concat " " (List.take 260 args))
+        (String.concat " " (List.drop 260 args))
+    else "f0 " ^ String.concat " " args
+  in
+  String.concat "\n" (definitions @ [ "let result = " ^ call ])
 ;;
 
 let cases =
@@ -198,14 +225,16 @@ let cases =
        (emit 2)" )
   ; "print as function value", "let run f x = f x in let _ = run print_int 42 in 7"
   ; "unit result", "let f x = print_int x in f 7"
-  ; ( "ten arguments"
-    , "let f a b c d e f g h i j = a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h + 9*i + \
-       10*j in let p = f 1 2 3 in p 4 5 6 7 8 9 10" )
-  ; ( "register and stack parameters survive calls"
-    , "let bump x = x + 1 in let f a b c d e f g h i j = let v = bump (a + j) in v + b + \
-       c + d + e + f + g + h + i in f 1 2 3 4 5 6 7 8 9 10" )
-  ; "large argument buffer", many_arguments ~partial:false
-  ; "large partial application", many_arguments ~partial:true
+  ; ( "eight arguments"
+    , "let f a b c d e f g h = a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h in let p \
+       = f 1 2 3 in p 4 5 6 7 8" )
+  ; ( "capture and parameters survive calls"
+    , "let bump x = x + 1 in let f a b c d e f g = let v = bump (a + g) in v + b + c + \
+       d + e + f in f 1 2 3 4 5 6 7" )
+  ; "maximum code arity", many_arguments ~partial:false
+  ; "maximum partial code arity", many_arguments ~partial:true
+  ; "large argument buffer", large_overapplication ~partial:false
+  ; "split large application", large_overapplication ~partial:true
   ]
 ;;
 

@@ -41,10 +41,8 @@ not a partial-application trampoline.
 Generated functions and the C runtime both use the standard RV64 integer
 psABI for word-sized values:
 
-- Arguments 0 through 7 go in `a0` through `a7`.
-- Argument 8 goes at `0(sp)` on entry, argument 9 at `8(sp)`, and so on.
-- The caller allocates and releases stack arguments and keeps `sp` aligned
-  to 16 bytes. Padding follows the stack arguments, not the first one.
+- The supported arguments 0 through 7 go in `a0` through `a7`.
+- The caller keeps `sp` aligned to 16 bytes.
 - The result is one word in `a0`. Argument and temporary registers are
   caller-saved; `s0` through `s11` are callee-saved.
 
@@ -52,22 +50,29 @@ Saved and incoming arguments are combined in source order before assigning
 registers or stack locations. There is no hidden environment or closure
 parameter at the code entry. For example, applying `helper k n` to `m`
 calls the original code with `k` in `a0`, `n` in `a1`, and `m` in `a2`.
-More than eight parameters are allowed; saved arguments can also occupy
-stack positions when the final application is made.
+The total code arity, including saved arguments, is limited to eight.
 
 No bridge between different calling conventions is needed. `shmel_invoke`,
-implemented in `closure_runtime.c`, validates the call and delegates to
-`shmel_invoke_abi` in `closure_invoke.S`. The dispatcher copies the first eight
-arguments to `a0` through `a7`, puts any remaining words on a 16-byte-aligned
-stack, and calls the code address. It restores `sp`, `ra` and the callee-saved
-registers it uses, preserving the result in `a0`.
+implemented entirely in `closure_runtime.c`, selects a matching C function
+prototype with a switch over the argument count. The C compiler emits the
+register and stack argument setup and preserves the target ABI. The same
+implementation is used on the host and on RV64; no handwritten assembly
+dispatcher or external FFI library is needed.
 
 All values, including encoded closure pointers, are passed as word bits rather
 than as typed C pointers. The callee must follow this word-valued contract.
 The dispatcher reads but does not modify the argument array. Invocation state
 is kept on the stack, so nested applications do not overwrite another call's
-state. There is no fixed arity limit or external FFI dependency; available
-memory and stack space still limit the number of arguments.
+state. A code entry supports at most **8 word parameters**, including captured
+values made explicit by closure conversion. `SHMEL_MAX_ARITY` in the C header
+and `Closure.max_arity` expose this limit; excessive code arities are rejected.
+`shmel_invoke` also supports a zero-argument entry, but function closures still
+require positive arity. Extending the limit requires adding matching dispatch
+cases and updating both constants and boundary tests.
+
+An application may supply more than 8 new arguments if they are consumed by
+successive function-valued results (overapplication); the bound applies to each
+code entry, not the total application buffer.
 
 The `shmel_code_address` typedef is a storage type, not the actual prototype
 of every function. Calling it as a zero-argument function would be incorrect.
@@ -105,11 +110,11 @@ apt-get install gcc-riscv64-linux-gnu libc6-dev-riscv64-cross \
   qemu-user
 ```
 
-Link both the C runtime and its RV64 dispatcher with the generated assembly:
+Link the C runtime with the generated assembly:
 
 ```sh
 riscv64-linux-gnu-gcc -static -march=rv64gc program.s \
-  shmel/backend/closure_runtime.c shmel/backend/closure_invoke.S -o program
+  shmel/backend/closure_runtime.c -o program
 qemu-riscv64 -cpu max ./program
 ```
 
@@ -132,24 +137,25 @@ Run the runtime tests with:
 opam exec -- dune runtest shmel/test/riscv --force
 ```
 
-On a RISC-V host the native runtime tests use the real dispatcher. Other hosts
-use `closure_invoke_native.c`, a test-only C adapter covering the arities in
-the native runtime suite; this adapter is not part of the production runtime.
+Native tests compile the production C runtime directly, including its dispatcher.
 When `riscv64-linux-gnu-gcc` and `qemu-riscv64` are available, the same tests
-also run using the actual RV64 dispatcher. Tests include argument
-order, independent and chained partial applications, overapplication, 8/9/10
-arguments, and reentrant applications implementing CPS factorial/Fibonacci.
+also run on RV64. Tests exercise every supported arity, the maximum and rejected
+arities, argument
+order, independent and chained partial applications, overapplication, eight
+arguments, rejection of nine, and reentrant applications implementing CPS factorial/Fibonacci.
 These CPS functions are written in C to isolate the runtime; they do not yet
 test the compiler's full pipeline.
 
 `calls_integration_tests.ml` separately checks the actual source-to-codegen
 pipeline: parsing, ANF, closure conversion, lifting, `Calls.hooks`, then QEMU
-with the RV64 dispatcher. A test-only C harness creates global closures, initializes values
+with the C runtime cross-compiled for RV64. A test-only C harness creates global closures, initializes values
 and provides `print_int`; it is not a production implementation of whole-program
 code generation. Results and output are compared against `Eval` on the original
 source. Cases cover recursion, escaping closures, captured values, partial and
 excess applications, argument order, preserved locals, CPS factorial/Fibonacci,
-and 300-argument calls/partial applications with large stack offsets.
+the maximum code arity, and 300-argument overapplications with large buffer
+offsets. The previous unrestricted code arity is intentionally replaced by
+the explicit 8-parameter limit.
 
 ## Docker tests
 
