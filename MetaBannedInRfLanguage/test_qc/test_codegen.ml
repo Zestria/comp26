@@ -106,12 +106,13 @@ let save_failure kind seed source asm_path =
 ;;
 
 let status_to_string = function
+  | Unix.WEXITED 124 -> "timeout after 10s"
   | Unix.WEXITED n -> Printf.sprintf "exit %d" n
   | Unix.WSIGNALED n -> Printf.sprintf "signal %d" n
   | Unix.WSTOPPED n -> Printf.sprintf "stopped %d" n
 ;;
 
-(* Use argv, not a shell command; capture diagnostics and bound subprocess time. *)
+(* Allow 10 seconds, then terminate; force a kill after one more second if needed. *)
 let run base tool args =
   let stdout_path = base ^ ".out" in
   let stderr_path = base ^ ".err" in
@@ -129,7 +130,7 @@ let run base tool args =
       (fun () ->
          Unix.create_process
            "timeout"
-           (Array.of_list ([ "timeout"; "10s"; tool ] @ args))
+           (Array.of_list ([ "timeout"; "--kill-after=1s"; "10s"; tool ] @ args))
            Unix.stdin
            stdout_fd
            stderr_fd)

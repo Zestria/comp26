@@ -4,7 +4,7 @@ Tuple values, patterns, and closures executed on RISC-V.
   >   ../driver/compiler.exe --stop-after riscv -o "$1.s" "$1.ml" &&
   >   riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d -static "$1.s" runtime_riscv.o -o "$1.exe"
   > }
-  $ run () { qemu-riscv64 "./$1.exe" && printf '\n'; }
+  $ run () { timeout --kill-after=1s 10s qemu-riscv64 "./$1.exe" && printf '\n'; }
 
 A returned tuple contains tagged integers, booleans, and unit. Wildcard fields
 are skipped when the receiving function destructures it.
@@ -180,7 +180,7 @@ It must neither return a field from the rejected case nor run the continuation.
   > let () = print_int 99
   > EOF
   $ compile match_failure
-  $ qemu-riscv64 ./match_failure.exe
+  $ timeout --kill-after=1s 10s qemu-riscv64 ./match_failure.exe
   match failure: no case matched
   [1]
 
@@ -230,7 +230,7 @@ Failure in a tuple parameter reaches the runtime handler, not the continuation.
   > let () = print_int 99
   > EOF
   $ compile failure
-  $ qemu-riscv64 ./failure.exe
+  $ timeout --kill-after=1s 10s qemu-riscv64 ./failure.exe
   match failure: no case matched
   [1]
 
@@ -296,7 +296,7 @@ runtime handler.
   > let () = print_int (42 / 0)
   > EOF
   $ compile division_zero
-  $ qemu-riscv64 ./division_zero.exe
+  $ timeout --kill-after=1s 10s qemu-riscv64 ./division_zero.exe
   division by zero
   [1]
 
