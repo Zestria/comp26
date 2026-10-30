@@ -11,3 +11,10 @@
  (libraries MMML_LL MMML.frontend MMML.middleend)
  (instrumentation
   (backend bisect_ppx_ng)))
+
+(executable
+ (public_name mmml-asmgen)
+ (name asmgen)
+ (package MMML)
+ (modules asmgen)
+ (libraries MMML.frontend MMML.middleend MMML.backend))

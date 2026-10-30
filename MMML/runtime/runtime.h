@@ -25,6 +25,9 @@ mmml_value mmml_bool(bool value);
 bool mmml_unbox_bool(mmml_value value);
 bool mmml_is_closure(mmml_value value);
 
+/* Prints the integer value (decimal, newline-terminated) and returns it. */
+mmml_value mmml_print_int(mmml_value value);
+
 /* Arity includes captured arguments. Each application supplies one argument. */
 mmml_value mmml_make_closure(mmml_code code, size_t arity);
 mmml_value mmml_apply(mmml_value function, mmml_value argument);

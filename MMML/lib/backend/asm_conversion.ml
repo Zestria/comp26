@@ -9,12 +9,26 @@
 open Middleend.Anf
 module A = Asm
 
+(* Reaching these branches means the ANF invariant was violated (builtins and
+   print_int never appear as first-class values); this is an internal error. *)
+[@@@zanuda "-exc_failwith"]
+
+type binding =
+  | Slot of int
+  | Print_int
+
+(* The code generator threads a small mutable accumulator (label counter,
+   current instruction buffer, slot counter, finished functions); this is the
+   natural shape for emitting code and is confined to this module. *)
+[@@@zanuda "-mutability_check"]
+
 type gen =
   { mutable functions : A.function_ list
   ; mutable counter : int
   ; mutable code : A.instruction list
   ; mutable slots : int
   }
+[@@zanuda "-mutability_check"]
 
 let push g instruction = g.code <- instruction :: g.code
 let offset slot = Int64.of_int (8 * slot)
@@ -56,7 +70,8 @@ let constant g = function
 let imm g env self = function
   | Local id ->
     (match List.assoc_opt id.stamp env with
-     | Some slot -> ld g A.A0 slot
+     | Some (Slot slot) -> ld g A.A0 slot
+     | Some Print_int -> failwith "codegen: print_int used as a value"
      | None ->
        (match self with
         | Some (stamp, label, arity) when stamp = id.stamp ->
@@ -113,15 +128,25 @@ let unboxed g env self left right =
   ld g A.A0 left_int
 ;;
 
+let print_int g env self argument =
+  imm g env self argument;
+  push g (A.Call "mmml_print_int")
+;;
+
 let rec compound g env self = function
   | Value immediate -> imm g env self immediate
   | Apply (function_, argument) ->
-    imm g env self function_;
-    let function_value = save g in
-    imm g env self argument;
-    mv g A.A1 A.A0;
-    ld g A.A0 function_value;
-    push g (A.Call "mmml_apply")
+    (match function_ with
+     | Local id when List.assoc_opt id.stamp env = Some Print_int ->
+       print_int g env self argument
+     | External "print_int" -> print_int g env self argument
+     | _ ->
+       imm g env self function_;
+       let function_value = save g in
+       imm g env self argument;
+       mv g A.A1 A.A0;
+       ld g A.A0 function_value;
+       push g (A.Call "mmml_apply"))
   | Unary_primitive (Positive, operand) -> imm g env self operand
   | Unary_primitive (Negate, operand) ->
     imm g env self operand;
@@ -161,15 +186,17 @@ and term g env self ~tail = function
     (match tail with
      | Some label -> push g (A.Jump label)
      | None -> ())
+  | Let (id, Value (External "print_int"), continuation) ->
+    term g ((id.stamp, Print_int) :: env) self ~tail continuation
   | Let (id, value, continuation) ->
     compound g env self value;
-    term g ((id.stamp, save g) :: env) self ~tail continuation
+    term g ((id.stamp, Slot (save g)) :: env) self ~tail continuation
   | Let_rec (id, parameter, body, continuation) ->
     let label, arity = build g parameter body (Some id) in
     push g (A.La (A.A0, label));
     push g (A.Li (A.A1, Int64.of_int arity));
     push g (A.Call "mmml_make_closure");
-    term g ((id.stamp, save g) :: env) self ~tail continuation
+    term g ((id.stamp, Slot (save g)) :: env) self ~tail continuation
 
 and parameters reversed = function
   | Result (Lambda (parameter, body)) -> parameters (parameter :: reversed) body
@@ -206,7 +233,7 @@ and build g first_parameter body self =
          let slot = alloc g in
          push g (A.Ld (A.T0, Int64.of_int (8 * index), A.A0));
          st g A.T0 slot;
-         parameter.stamp, slot)
+         parameter.stamp, Slot slot)
       parameters
   in
   let exit = fresh g "exit" in
@@ -223,15 +250,15 @@ let compile program =
   let definition env = function
     | Definition (id, value) ->
       term g env None ~tail:None value;
-      (id.stamp, save g) :: env
+      (id.stamp, Slot (save g)) :: env
     | Recursive_definition (id, parameter, body) ->
       let label, arity = build g parameter body (Some id) in
       push g (A.La (A.A0, label));
       push g (A.Li (A.A1, Int64.of_int arity));
       push g (A.Call "mmml_make_closure");
-      (id.stamp, save g) :: env
+      (id.stamp, Slot (save g)) :: env
   in
-  ignore (List.fold_left definition [] program);
+  let (_ : (int * binding) list) = List.fold_left definition [] program in
   push g (A.Li (A.A0, 10L));
   let exit = fresh g "main_exit" in
   push g (A.Jump exit);

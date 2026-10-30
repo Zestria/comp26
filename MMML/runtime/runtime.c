@@ -1,5 +1,6 @@
 #include "runtime.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +66,11 @@ bool mmml_unbox_bool(mmml_value value) {
 
 bool mmml_is_closure(mmml_value value) {
   return value != 0 && (value & UINT64_C(7)) == 0;
+}
+
+mmml_value mmml_print_int(mmml_value value) {
+  printf("%" PRId64 "\n", mmml_unbox_int(value));
+  return value;
 }
 
 static mmml_closure *closure_of(mmml_value value) {

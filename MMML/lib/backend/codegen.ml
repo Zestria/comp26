@@ -63,6 +63,7 @@ let pp_instruction formatter = function
       label
   | A.Jump label -> Format.fprintf formatter "\tj %s@." label
   | A.Call label -> Format.fprintf formatter "\tcall %s@." label
+  | A.Ecall -> Format.fprintf formatter "\tecall@."
   | A.Ret -> Format.fprintf formatter "\tret@."
 ;;
 

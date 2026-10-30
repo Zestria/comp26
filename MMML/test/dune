@@ -1,4 +1,10 @@
 (test
+ (name asm_ast)
+ (package MMML)
+ (modules asm_ast)
+ (libraries MMML.frontend MMML.middleend MMML.backend))
+
+(test
  (name anf_usage_example)
  (package MMML)
  (modules anf_usage_example)
@@ -96,3 +102,11 @@
  (inline_tests)
  (preprocess
   (pps ppx_expect)))
+
+(cram
+ (package MMML)
+ (deps
+  ../asmgen.exe
+  ../runtime/runtime.c
+  ../runtime/runtime.h
+  ../runtime/startup.c))

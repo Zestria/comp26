@@ -69,6 +69,7 @@ type instruction =
   | Branch of condition * register * register * string
   | Jump of string
   | Call of string
+  | Ecall
   | Ret
 
 type function_ =
