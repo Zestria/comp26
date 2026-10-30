@@ -57,6 +57,7 @@ case "$CMD" in
         echo "zanuda exit status: $status"
         [ -f result.sarif ] || printf '%s\n' '{"version":"2.1.0","runs":[]}' > result.sarif
         [ -f result.rdjsonl ] || : > result.rdjsonl
+        cp result.sarif results.sarif
         ;;
     stats)
         members="$(yq --arg compiler "$COMPILER_NAME" -c \
