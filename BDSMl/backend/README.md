@@ -2,10 +2,26 @@
 
 Реализованы представление и печать ассемблера, стековые кадры, выражения,
 глобальные инициализаторы, прямые вызовы и runtime замыканий. Библиотека
-`BDSMl.backend` пока не подключена к CLI. Основные решения по ABI записаны в [abi/ABI.md](abi/ABI.md):
+`BDSMl.backend` подключена к CLI: обычная компиляция выдаёт RV64-ассемблер.
+Основные решения по ABI записаны в [abi/ABI.md](abi/ABI.md):
 Linux RV64GC, стандартный ABI `lp64d`, значения по 64 бита. Объявления runtime
 находятся в [runtime.h](../runtime/runtime.h). Общие константы доступны через
 `BDSMl_backend.Abi`.
+
+Из корня репозитория:
+
+```sh
+dune exec BDSMl/compiler.exe -- program.ml -o program.s
+dune exec BDSMl/compiler.exe -- -parsing menhir program.ml -o program.s
+dune exec BDSMl/compiler.exe -- --stop-after anf program.ml -o -
+```
+
+Без `--stop-after` выводится GNU-совместимый ассемблер. По умолчанию результат
+идёт в stdout; `-o FILE` записывает файл, `-o -` явно выбирает stdout.
+Сборка ELF с runtime и запуск QEMU описаны в [abi/ABI.md](abi/ABI.md).
+`--parse` сохраняет вывод AST для исходника из командной строки.
+Ошибки компиляции идут в stderr с кодом 2; выходной файл открывается
+только после успешного получения полного результата генерации.
 
 Публичная точка входа:
 
@@ -66,7 +82,7 @@ lifting. Backend не разбирает напечатанный OCaml. При�
 
 ```sh
 opam exec --switch=comp26 -- dune build -p BDSMl
-opam exec --switch=comp26 -- dune runtest BDSMl/test
+opam exec --switch=comp26 -- dune test -p BDSMl
 ```
 
 Нужны `riscv64-linux-gnu-gcc`, статическая RISC-V libc, `qemu-riscv64` и
@@ -82,6 +98,14 @@ opam exec --switch=comp26 -- dune runtest BDSMl/test
 Тесты линкуют production runtime из `runtime/`: создание и применение
 замыканий, адаптер RV64 ABI, `print_int` и ошибку деления на ноль.
 Команда сборки ELF с runtime описана в ABI.md.
+
+[check_riscv.sh](../bin/check_riscv.sh) дополнительно проверяет полный путь
+через CLI для `print_int`, CPS-факториала и CPS-Фибоначчи с обоими парсерами:
+исходник → CLI → ассемблер → GCC с runtime → ELF → QEMU. stdout сравнивается
+побайтово с OCaml и ответами `42`, `120`, `55`, stderr должен быть пустым,
+каждый шаг должен завершиться с кодом 0. Ограничения времени: 10 секунд
+для OCaml, компилятора и QEMU, 30 секунд для GCC. Проверка входит в cram-тест
+`bin/run.t` и запускается командой `dune test -p BDSMl`.
 
 Структура каталогов: `abi/` — соглашения, `assembly/` —
 представление и печать ассемблера, `allocation/` — размещение значений,

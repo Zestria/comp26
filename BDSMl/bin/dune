@@ -13,6 +13,10 @@
   evaluation_order.ml
   recursive_initializer.ml
   check_stages.sh
+  check_riscv.sh
+  ../test/riscv/programs/print_int.ml
+  ../test/riscv/programs/fac_cps.ml
+  ../test/riscv/programs/fib_cps.ml
   ../runtime/runtime.h
   ../runtime/closures/closures.c
   ../runtime/closures/apply.S

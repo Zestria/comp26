@@ -89,3 +89,10 @@ Generation failures preserve existing output and do not create a new file.
   $ ../compiler.exe
   an input .ml file is required
   [2]
+
+CPS examples pass through the CLI, assembler/linker and QEMU with both parsers.
+
+  $ sh check_riscv.sh
+  print_int: both parsers match OCaml (42).
+  fac_cps: both parsers match OCaml (120).
+  fib_cps: both parsers match OCaml (55).
