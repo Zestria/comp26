@@ -28,12 +28,62 @@ int64_t print_int_closure(int64_t *args) {
     return 1; /* tagged unit */
 }
 
+/* ========== Tuple ========== */
+
+/* Heap values start with a size: tuples have at least two fields;
+ * closures use zero. Fields contain the same tagged words as ML variables. */
+typedef struct {
+    int64_t size;
+    int64_t fields[];
+} tuple;
+
+int64_t tuple_alloc(int64_t size, const int64_t *fields) {
+    tuple *result = malloc(sizeof(tuple) + (size_t)size * sizeof(int64_t));
+    if (!result) {
+        fputs("tuple: out of memory\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    result->size = size;
+    memcpy(result->fields, fields, (size_t)size * sizeof(int64_t));
+    return (int64_t)(uintptr_t)result;
+}
+
+static int equal_values(int64_t left, int64_t right) {
+    if ((left & 1) || (right & 1)) {
+        return left == right;
+    }
+
+    int64_t left_size = *(const int64_t *)(uintptr_t)left;
+    int64_t right_size = *(const int64_t *)(uintptr_t)right;
+    if (left_size != right_size) {
+        return 0;
+    }
+    /* Like Value.equal, treat two closures as equal. */
+    if (left_size == 0) {
+        return 1;
+    }
+
+    const tuple *a = (const tuple *)(uintptr_t)left;
+    const tuple *b = (const tuple *)(uintptr_t)right;
+    for (int64_t i = 0; i < left_size; i++) {
+        if (!equal_values(a->fields[i], b->fields[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int64_t equal(int64_t left, int64_t right) {
+    return 2 * equal_values(left, right) + 1;
+}
+
 /* ========== Closure ========== */
 
 /* Typed function pointer: checked by the compiler, unlike void*. */
 typedef int64_t (*closure_fn)(int64_t *);
 
 typedef struct {
+    int64_t size;    // zero distinguishes closures from tuples
     closure_fn code;  // entry point of the generated function
     int64_t arity;    // arguments still expected
     int64_t received; // values already captured in env
@@ -61,6 +111,7 @@ int64_t closure_alloc(int64_t code, int64_t arity, int64_t env_len, int64_t *env
         exit(1);
     }
 
+    cl->size = 0;
     cl->code = (closure_fn)(uintptr_t)code;
     cl->arity = arity;
     cl->received = env_len;
@@ -122,6 +173,7 @@ int64_t apply(int64_t cf, int64_t nargs, int64_t *args) {
             exit(1);
         }
 
+        ncl->size = 0;
         ncl->code = cl->code;
         ncl->arity = cl->arity - nargs;
         ncl->received = new_received;

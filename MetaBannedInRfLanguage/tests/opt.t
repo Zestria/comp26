@@ -137,10 +137,10 @@ two arithmetic instructions on the tagged value, with no decoding or branches.
     ret
 
 Comparisons work directly on tagged integers. Greater-than reverses slt's
-operands without moving registers. Equality uses xor/seqz without branching.
-All three return a tagged boolean without allocating memory.
+operands without moving registers.
+Both return a tagged boolean without allocating memory.
 
-  $ for op in '<' '>' '='; do
+  $ for op in '<' '>'; do
   >   printf 'let op = (%s)\n' "$op" > comparison.ml
   >   ../driver/compiler.exe --stop-after riscv -o comparison.s comparison.ml || break
   >   printf '%s:\n' "$op"
@@ -157,14 +157,6 @@ All three return a tagged boolean without allocating memory.
     ld t0, 0(a0)
     ld t1, 8(a0)
     slt a0, t1, t0
-    slli a0, a0, 1
-    addi a0, a0, 1
-    ret
-  =:
-    ld t0, 0(a0)
-    ld t1, 8(a0)
-    xor a0, t0, t1
-    seqz a0, a0
     slli a0, a0, 1
     addi a0, a0, 1
     ret
@@ -239,3 +231,40 @@ or extra local stack slots cannot be hidden by filtering the output.
   $ diff -u minimal.s simplified.s
   $ grep '^  addi a0,' simplified.s
     addi a0, a0, 80
+
+Known immediate operands keep scalar equality branch-free, even though (=)
+also supports heap tuples. Neither case calls the structural equality helper.
+
+  $ cat > scalar_equality.ml <<EOF
+  > let zero x = x = 0;;
+  > let nonzero x = x <> 0
+  > EOF
+  $ ../driver/compiler.exe --stop-after riscv -o scalar_equality.s scalar_equality.ml
+  $ grep -E '^  (xor |seqz |snez |slli |addi a0,|beq |bne |call )' scalar_equality.s
+    xor a0, t0, t1
+    seqz a0, a0
+    slli a0, a0, 1
+    addi a0, a0, 1
+    xor a0, t0, t1
+    snez a0, a0
+    slli a0, a0, 1
+    addi a0, a0, 1
+
+Tuple projection uses direct loads only for the requested fields. The first
+load reads the tuple argument; the next two read fields 1 and 3 after its header.
+
+  $ printf 'let keep (_, x, _, y) = x + y\n' > projection.ml
+  $ ../driver/compiler.exe --stop-after riscv -o projection.s projection.ml
+  $ grep -E '^  ld t0, [0-9]+\(a0\)$' projection.s
+    ld t0, 0(a0)
+    ld t0, 16(a0)
+    ld t0, 32(a0)
+  $ grep '^  call ' projection.s
+  [1]
+
+ANF can eliminate a locally constructed tuple whose fields are immediately
+destructured. The full assembly is identical to scalar addition: no allocation.
+
+  $ printf 'let f x = let (a, b) = (x, 40) in a + b\n' > local_tuple.ml
+  $ ../driver/compiler.exe --stop-after riscv -o local_tuple.s local_tuple.ml
+  $ diff -u minimal.s local_tuple.s

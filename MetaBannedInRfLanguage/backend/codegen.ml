@@ -479,6 +479,22 @@ let gen_not ~dst arg =
 
 let gen_comparison ~dst op left right =
   let* left_reg, right_reg = gen_binary_operands left right in
+  let* heap_case = fresh_label in
+  let* done_label = fresh_label in
+  let structural =
+    match op, left, right with
+    | ("=" | "<>"), ImmVar _, ImmVar _ -> true
+    | _ -> false
+  in
+  let* () =
+    if structural
+    then
+      (* If both operands have the immediate tag, a word comparison suffices. *)
+      let* () = emit and_ t2 left_reg right_reg in
+      let* () = emit slli t2 t2 63 in
+      emit beq t2 x0 heap_case
+    else return ()
+  in
   let* () =
     match op with
     | "<" -> emit slt dst left_reg right_reg
@@ -497,7 +513,29 @@ let gen_comparison ~dst op left right =
       emit snez dst dst
     | _ -> fail (Printf.sprintf "unsupported comparison operator %S" op)
   in
-  tag_result dst
+  let* () = tag_result dst in
+  if not structural
+  then return ()
+  else
+    let* () = emit j done_label in
+    let* () = emit label heap_case in
+    (* Preserve both operands before placing them in the C argument registers. *)
+    let* () = adjust_sp (-16) in
+    let* () = emit sd left_reg { offset = 0; base = sp } in
+    let* () = emit sd right_reg { offset = 8; base = sp } in
+    let* () = emit ld a0 { offset = 0; base = sp } in
+    let* () = emit ld a1 { offset = 8; base = sp } in
+    let* () = emit call "equal" ~comm:"structural equality of heap values" in
+    let* () = adjust_sp 16 in
+    let* () =
+      if String.equal op "<>"
+      then
+        let* () = emit sub a0 x0 a0 in
+        emit addi a0 a0 4
+      else return ()
+    in
+    let* () = if dst = a0 then return () else emit mv dst a0 in
+    emit label done_label
 ;;
 
 let gen_logic ~dst op args =
@@ -572,6 +610,32 @@ let gen_apply fn args =
      emit call "apply" ~comm:"a0 = closure, a1 = argument count, a2 = argument buffer")
 ;;
 
+(* ---------- Tuples ---------- *)
+
+let gen_tuple fields =
+  with_call_frame
+    fields
+    (let* () = emit li a0 (List.length fields) in
+     let* () = emit mv a1 sp in
+     emit call "tuple_alloc" ~comm:"copy fields into a heap tuple; size is untagged")
+;;
+
+(* Keep the tuple pointer in a0 while binding fields to frame slots.
+   None represents a wildcard and needs neither a load nor a local slot. *)
+let bind_tuple names subject =
+  let* () = gen_imm ~dst:a0 subject in
+  let rec bind offset = function
+    | [] -> return ()
+    | None :: rest -> bind (offset + 8) rest
+    | Some name :: rest ->
+      let* () = load_word ~dst:t0 ~base:a0 offset in
+      let* local = alloc_local name in
+      let* () = store_local ~src:t0 local in
+      bind (offset + 8) rest
+  in
+  bind 8 names (* offset 0 holds the raw tuple size *)
+;;
+
 (* ---------- ANF expressions ---------- *)
 
 (* Each expression leaves its result in a0. Values that must survive a call
@@ -620,7 +684,7 @@ let rec gen_cexpr = function
     let* () = gen_aexpr else_branch in
     emit label end_label
   | CFun _ -> fail "unexpected function expression after lambda lifting"
-  | CTuple _ -> fail "tuple generation is not implemented yet"
+  | CTuple (first, second, rest) -> gen_tuple (first :: second :: rest)
   | CMatchFailure -> emit call "match_failure"
 
 and gen_aexpr = function
@@ -632,7 +696,11 @@ and gen_aexpr = function
     let* () = store_local ~src:a0 offset in
     let* () = gen_aexpr body in
     modify (fun state -> { state with env = outer.env; functions = outer.functions })
-  | ALetTuple _ -> fail "tuple destructuring is not implemented yet"
+  | ALetTuple (names, subject, body) ->
+    let* outer = get in
+    let* () = bind_tuple names subject in
+    let* () = gen_aexpr body in
+    modify (fun state -> { state with env = outer.env; functions = outer.functions })
   | ALetRec _ -> fail "unexpected local recursive binding after lambda lifting"
 ;;
 
@@ -696,9 +764,9 @@ let gen_builtin_wrappers =
     map_m
       (fun (name, (symbol, arity)) ->
          let params = List.init arity (fun index -> Printf.sprintf "arg%d" index) in
-         if String.equal name "/"
+         if List.mem name [ "/"; "="; "<>" ]
          then (
-           (* Division may call the runtime error handler, so keep its frame. *)
+           (* These primitives may call the runtime, so keep their frame. *)
            let args = List.map (fun name -> ImmVar name) params in
            gen_function ~symbol params (ACExpr (CApp (ImmVar name, args))))
          else gen_leaf_builtin_wrapper ~symbol name params)
