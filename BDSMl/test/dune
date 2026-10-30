@@ -33,8 +33,11 @@
  (modules backend_tests)
  (libraries BDSMl.frontend BDSMl.middleend BDSMl.backend alcotest unix)
  (deps
-  backend_support/contract_runtime.c
-  backend_support/contract_invoke.S
+  ../runtime/closures/closures.c
+  ../runtime/closures/apply.S
+  ../runtime/io/print_int.c
+  ../runtime/errors.c
   ../runtime/runtime.h
+  riscv/programs/print_int.ml
   riscv/programs/fac_cps.ml
   riscv/programs/fib_cps.ml))

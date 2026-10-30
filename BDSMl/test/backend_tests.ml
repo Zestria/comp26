@@ -52,7 +52,8 @@ let execute_assembly ?(status = 0) ?(stderr = "") expected assembly =
         command "riscv64-linux-gnu-gcc"
           [ "-march=rv64gc"; "-mabi=lp64d"; "-std=c11"; "-Wall"; "-Wextra"; "-Werror"
           ; "-static"; "-no-pie"; assembly_path
-          ; "backend_support/contract_runtime.c"; "backend_support/contract_invoke.S"
+          ; "../runtime/closures/closures.c"; "../runtime/closures/apply.S"
+          ; "../runtime/io/print_int.c"; "../runtime/errors.c"
           ; "-o"; executable_path ] stdout_path stderr_path
       in
       if compilation <> Unix.WEXITED 0 then Alcotest.fail ("assembler/linker: " ^ read_file stderr_path);
@@ -68,7 +69,9 @@ let execute_assembly ?(status = 0) ?(stderr = "") expected assembly =
 let run source expected () = execute_assembly expected (generate source)
 
 let arithmetic =
-  [ "integer arithmetic", "let () = print_int ((6 * 7 + 2 - 4) / 2)", "20"
+  [ "print zero", "let () = print_int 0", "0"
+  ; "print maximum int64", "let x = 4611686018427387903 * 2 + 1 let () = print_int x", "9223372036854775807"
+  ; "integer arithmetic", "let () = print_int ((6 * 7 + 2 - 4) / 2)", "20"
   ; "signed division", "let () = print_int ((-7) / 2)", "-3"
   ; "large literal", "let () = print_int 4000000000000", "4000000000000"
   ; "64-bit overflow", "let x = 4611686018427387903 * 4 let () = print_int x", "-4"
@@ -171,7 +174,8 @@ let () =
     [ "arithmetic and state", cases arithmetic
     ; "calls and closures", cases calls
     ; "CPS",
-      [ Alcotest.test_case "factorial" `Quick (fun () -> execute_assembly "120" (generate (read_file "riscv/programs/fac_cps.ml")))
+      [ Alcotest.test_case "print_int example" `Quick (fun () -> execute_assembly "42" (generate (read_file "riscv/programs/print_int.ml")))
+      ; Alcotest.test_case "factorial" `Quick (fun () -> execute_assembly "120" (generate (read_file "riscv/programs/fac_cps.ml")))
       ; Alcotest.test_case "fibonacci" `Quick (fun () -> execute_assembly "55" (generate (read_file "riscv/programs/fib_cps.ml"))) ]
     ; "ABI and diagnostics",
       [ Alcotest.test_case "large frame and 300 arguments" `Quick large_frame
