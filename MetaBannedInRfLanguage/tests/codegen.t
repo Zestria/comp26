@@ -56,6 +56,32 @@ Each escaping closure retains its own tuple after the creator's frame returns.
   $ run capture
   426244
 
+Partially applied user functions keep supplying arguments through fresh
+closures, including when the function captures an outer variable.
+
+  $ cat > partial.ml <<EOF
+  > let add3 a b c = a + b + c;;
+  > let add10 = add3 10;;
+  > let add30 = add10 20;;
+  > let () = print_int (add30 12);;
+  > let () = print_int (add3 1 2 39)
+  > EOF
+  $ compile partial
+  $ run partial
+  4242
+
+  $ cat > partial_capture.ml <<EOF
+  > let make n =
+  >   let rec go a b = n + a + b in
+  >   go;;
+  > let add10 = make 10;;
+  > let add30 = add10 20;;
+  > let () = print_int (add30 12)
+  > EOF
+  $ compile partial_capture
+  $ run partial_capture
+  42
+
 Recursive functions construct and unpack tuple arguments on every step.
 
   $ cat > recursive.ml <<EOF
