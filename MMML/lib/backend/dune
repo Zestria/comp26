@@ -1,6 +1,5 @@
 (library
  (name backend)
  (public_name MMML.backend)
- (libraries MMML.frontend MMML.middleend)
- (instrumentation
-  (backend bisect_ppx_ng)))
+ (modules asm asm_conversion codegen)
+ (libraries MMML.middleend))
