@@ -31,6 +31,7 @@
 %token FUN
 %token REC
 %token ARROW
+%token SEMISEMI
 %token EOF
 
 %nonassoc IN
@@ -54,6 +55,7 @@ program:
 
 declarations:
   | EOF { [] }
+  | SEMISEMI; rest = program { rest }
   | LET; x = ID; args = list(ID); EQUALS; body = expr; rest = declarations
       { DLet (x, List.fold_right (fun p e -> Abs (p, e)) args body) :: rest }
   | LET; REC; f = ID; p = ID; args = list(ID); EQUALS; body = expr; rest = declarations

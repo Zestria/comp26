@@ -510,11 +510,16 @@ let pp_decl ppf = function
   | DLetRec (f, params, body) -> pp_binding ppf ("let rec", f, params, body)
 ;;
 
-(* Declarations are separated by an empty line. *)
+(* Declarations are separated by an empty line; an expression after the first
+   item needs [;;]. *)
 let pp_program ppf program =
-  Format.fprintf
-    ppf
-    "@[<v>%a@]"
-    (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf "@,@,") pp_decl)
-    program
+  let pp_item i ppf d =
+    match i, d with
+    | 0, _ -> pp_decl ppf d
+    | _, DExpr _ -> Format.fprintf ppf "@,@,;;@,%a" pp_decl d
+    | _ -> Format.fprintf ppf "@,@,%a" pp_decl d
+  in
+  Format.fprintf ppf "@[<v>";
+  List.iteri (fun i d -> pp_item i ppf d) program;
+  Format.fprintf ppf "@]"
 ;;

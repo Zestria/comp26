@@ -211,6 +211,24 @@ changes nothing.
   $ ../compiler.exe --stop-after anf -parsing menhir fib.anf | diff fib.anf -
   $ for f in fac_decls fib_decls fac_ll fib_ll; do ../compiler.exe --stop-after anf $f.ml > $f.anf; ../compiler.exe --stop-after anf $f.anf | diff $f.anf -; done
 
+An expression after a declaration is printed after [;;], so the output can be
+read again:
+
+  $ printf 'let x = 1;;\nprint_int x;;\nlet y = x + 1;;\nprint_int (y * 2)\n' > semi.ml
+  $ ../compiler.exe --stop-after anf -o semi.anf semi.ml
+  $ cat semi.anf
+  let x = 1
+  
+  ;;
+  print_int x
+  
+  let y = x + 1
+  
+  ;;
+  let t0 = y * 2 in
+  print_int t0
+  $ ../compiler.exe --stop-after anf -parsing menhir semi.anf | diff semi.anf -
+
 Keeping ANF small: immediates are not bound, tail calls are not bound,
 [f a b] is one call, [let x = <immediate>] is substituted, constant arithmetic
 is folded, [fun x -> f x] becomes [f], [- - e] becomes [e] and unused pure

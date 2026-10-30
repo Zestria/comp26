@@ -49,9 +49,15 @@ let pp_decl fmt = function
   | DExpr e -> pp fmt e
 ;;
 
-(* One declaration per line. *)
+(* One declaration per line; an expression after the first item needs [;;]. *)
 let pp_program fmt decls =
-  pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "\n") pp_decl fmt decls
+  List.iteri
+    (fun i d ->
+       match i, d with
+       | 0, _ -> pp_decl fmt d
+       | _, DExpr _ -> fprintf fmt "\n;;\n%a" pp_decl d
+       | _ -> fprintf fmt "\n%a" pp_decl d)
+    decls
 ;;
 
 let show_program decls = asprintf "%a" pp_program decls
