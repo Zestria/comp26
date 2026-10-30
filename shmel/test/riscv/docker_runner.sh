@@ -4,10 +4,11 @@
 set -eu
 
 case "${1:-}" in
-    codegen|runtime|integration) mode="$1" ;;
-    *) echo "usage: docker_runner.sh <codegen|runtime|integration>" >&2; exit 2 ;;
+    codegen|runtime|integration|program|programs) mode="$1" ;;
+    *) echo "usage: docker_runner.sh <codegen|runtime|integration|program|programs>" >&2; exit 2 ;;
 esac
 
+backend="${2:-../../backend}"
 docker="${DOCKER:-docker}"
 if ! command -v "$docker" >/dev/null 2>&1; then
     echo "Docker CLI not found; add it to PATH or set DOCKER to its full path" >&2
@@ -32,11 +33,20 @@ case "$mode" in
         ;;
     runtime)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh closure_runtime_tests.c \
-            -C ../../backend closure_runtime.c closure_runtime.h
+            -C "$backend" closure_runtime.c closure_runtime.h
         ;;
     integration)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh integration.c integration.s \
-            -C ../../backend closure_runtime.c closure_runtime.h
+            -C "$backend" closure_runtime.c closure_runtime.h
+        ;;
+    program|programs)
+        if [ "$mode" = program ]; then
+            input=program.s
+        else
+            input=programs
+        fi
+        COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh "$input" \
+            -C "$backend" closure_runtime.c closure_runtime.h print_runtime.c
         ;;
 esac
 

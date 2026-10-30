@@ -71,6 +71,56 @@ Errors point to the line and the column where parsing stopped:
   Parser error: syntax error at line 3, column 5
   [1]
 
+The menhir parser points to the token where it stopped:
+
+  $ printf 'let x = 1\n\nlet y = (2 +)\n' | ../compiler.exe --stop-after parsing -parsing menhir
+  Parser error: syntax error at line 3, column 13
+  [1]
+  $ printf 'let x = 1\nlet y = 2 in y\n' | ../compiler.exe --stop-after parsing -parsing menhir
+  Parser error: syntax error at line 2, column 11
+  [1]
+
+Declarations may be separated by [;;], as in OCaml; after [;;] an expression
+may follow a declaration. Both parsers give the same program:
+
+  $ cat > semi.ml <<'EOF'
+  > let x = 1;;
+  > print_int x;;
+  > ;;
+  > let y = x + 1
+  > ;; print_int y;;
+  > EOF
+  $ ../compiler.exe --stop-after parsing semi.ml
+  let x = 1
+  ;;
+  (print_int x)
+  let y = (x + 1)
+  ;;
+  (print_int y)
+  $ ../compiler.exe --stop-after parsing -parsing menhir semi.ml
+  let x = 1
+  ;;
+  (print_int x)
+  let y = (x + 1)
+  ;;
+  (print_int y)
+  $ printf ';;\n' | ../compiler.exe --stop-after parsing
+  
+
+Without [;;] the expression is a part of the declaration, as in OCaml:
+
+  $ printf 'let x = f 1\nprint_int x\n' | ../compiler.exe --stop-after parsing
+  let x = (((f 1) print_int) x)
+
+[let ... and ...] is not supported, both parsers say so:
+
+  $ printf 'let rec f x = g x\nand g x = f x\n' | ../compiler.exe --stop-after parsing
+  Parser error: let ... and ... is not supported at line 2, column 1
+  [1]
+  $ printf 'let rec f x = g x\nand g x = f x\n' | ../compiler.exe --stop-after parsing -parsing menhir
+  Parser error: let ... and ... is not supported at line 2, column 1
+  [1]
+
 [-] after a function is subtraction, as in OCaml; a negative argument needs
 parentheses:
 

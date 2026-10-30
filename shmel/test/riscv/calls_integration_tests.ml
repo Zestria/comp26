@@ -226,11 +226,11 @@ let cases =
   ; "print as function value", "let run f x = f x in let _ = run print_int 42 in 7"
   ; "unit result", "let f x = print_int x in f 7"
   ; ( "eight arguments"
-    , "let f a b c d e f g h = a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h in let p \
-       = f 1 2 3 in p 4 5 6 7 8" )
+    , "let f a b c d e f g h = a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h in let p = f \
+       1 2 3 in p 4 5 6 7 8" )
   ; ( "capture and parameters survive calls"
-    , "let bump x = x + 1 in let f a b c d e f g = let v = bump (a + g) in v + b + c + \
-       d + e + f in f 1 2 3 4 5 6 7" )
+    , "let bump x = x + 1 in let f a b c d e f g = let v = bump (a + g) in v + b + c + d \
+       + e + f in f 1 2 3 4 5 6 7" )
   ; "maximum code arity", many_arguments ~partial:false
   ; "maximum partial code arity", many_arguments ~partial:true
   ; "large argument buffer", large_overapplication ~partial:false
@@ -285,11 +285,7 @@ let run ~docker =
         @ [ "int main(void) {" ]
         @ initialize
         @ [ "return 0; }\n" ]));
-  let available =
-    List.for_all
-      (fun tool -> Sys.command ("command -v " ^ tool ^ " >/dev/null") = 0)
-      [ "riscv64-linux-gnu-gcc"; "qemu-riscv64" ]
-  in
+  let available = Sys.command "sh run_riscv.sh available >/dev/null 2>&1" = 0 in
   if (not docker) && not available
   then print_endline "skipped integration execution: cross-compiler or QEMU not found"
   else (

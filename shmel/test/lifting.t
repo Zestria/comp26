@@ -37,8 +37,8 @@ Generated code is executable OCaml and accepted by the source parser.
 The new stage appears in help and error messages.
 
   $ ../compiler.exe --help | grep '^  --stop-after'
-    --stop-after parsing|anf|closure|lifting  Stop after the stage and print its result (default: anf)
+    --stop-after parsing|anf|closure|lifting|riscv  Stop after the stage and print its result (default: riscv)
   $ ../compiler.exe --stop-after unknown
-  Error: --stop-after expects 'parsing', 'anf', 'closure' or 'lifting'
+  Error: --stop-after expects 'parsing', 'anf', 'closure', 'lifting' or 'riscv'
   Try '--help' for usage.
   [2]

@@ -65,6 +65,9 @@ type frame =
   }
 
 let ret = A 0
+
+(* The runtime function called on division by zero; it does not return. *)
+let division_by_zero = "shmel_div_by_zero"
 let tmp1 = T 0
 let tmp2 = T 1
 
@@ -138,13 +141,27 @@ let binop hooks frame op a b =
   | Ast.Lt, x, Anf.ImmInt n when fits_imm12 n ->
     let* code, r = lift (operand hooks frame tmp1 x) in
     return (code @ [ I (Slti, ret, r, n) ])
-  | (Ast.Add | Ast.Sub | Ast.Mul | Ast.Div), _, _ ->
+  | Ast.Div, _, Anf.ImmInt n when n <> 0 ->
+    let* code, ra, rb = operands hooks frame a b in
+    return (code @ [ R (Div, ret, ra, rb) ])
+  | Ast.Div, _, _ ->
+    (* [div] gives -1 for a zero divisor; OCaml raises Division_by_zero. *)
+    let* code, ra, rb = operands hooks frame a b in
+    let* n = fresh_label in
+    let nonzero = Printf.sprintf ".L%s_div%d" frame.prefix n in
+    return
+      (code
+       @ [ Branch (Bne, rb, Zero, nonzero)
+         ; Call division_by_zero
+         ; Label nonzero
+         ; R (Div, ret, ra, rb)
+         ])
+  | (Ast.Add | Ast.Sub | Ast.Mul), _, _ ->
     let rop =
       match op with
       | Ast.Add -> Add
       | Ast.Sub -> Sub
-      | Ast.Mul -> Mul
-      | _ -> Div
+      | _ -> Mul
     in
     let* code, ra, rb = operands hooks frame a b in
     return (code @ [ R (rop, ret, ra, rb) ])
