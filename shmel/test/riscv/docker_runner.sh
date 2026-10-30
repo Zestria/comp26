@@ -32,11 +32,11 @@ case "$mode" in
         ;;
     runtime)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh closure_runtime_tests.c \
-            -C ../../backend closure_runtime.c closure_runtime.h
+            -C ../../backend closure_runtime.c closure_runtime.h closure_invoke.S
         ;;
     integration)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh integration.c integration.s \
-            -C ../../backend closure_runtime.c closure_runtime.h
+            -C ../../backend closure_runtime.c closure_runtime.h closure_invoke.S
         ;;
 esac
 

@@ -19,24 +19,16 @@ case "${1:-}" in
     runtime|integration)
         mode="$1"
         backend="${2:-.}"
-        cross_pc="${RISCV_PKG_CONFIG_LIBDIR:-/usr/lib/riscv64-linux-gnu/pkgconfig}"
-        if ! PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --exists libffi; then
-            echo "RV64 tests require target libffi development files; set RISCV_PKG_CONFIG_LIBDIR" >&2
-            exit 1
-        fi
-        ffi_cflags=$(PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --cflags libffi)
-        ffi_libs=$(PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --libs --static libffi)
         if [ "$mode" = runtime ]; then
             set -- closure_runtime_tests.c
         else
             set -- integration.c integration.s
         fi
-        # pkg-config output intentionally undergoes word splitting.
         riscv64-linux-gnu-gcc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
-            -static -march=rv64gc $ffi_cflags -I "$backend" \
-            "$backend/closure_runtime.c" "$@" \
-            -o "${mode}_rv64.exe" $ffi_libs
-        run_qemu "./${mode}_rv64.exe"
+            -static -march=rv64gc -I "$backend" \
+            "$backend/closure_runtime.c" "$backend/closure_invoke.S" "$@" \
+            -o "${mode}_rv64.exe"
+        run_qemu -cpu max "./${mode}_rv64.exe"
         ;;
     *)
         echo "usage: run_riscv.sh <codegen|runtime|integration> [backend-directory]" >&2

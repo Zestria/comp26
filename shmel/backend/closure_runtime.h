@@ -12,7 +12,7 @@ typedef uint64_t shmel_word;
 /* Storage type for a code address, not a uniform callable prototype.
    Entries use the RV64 integer psABI and return one shmel_word. Each accepts
    arity word arguments: the first eight in a0-a7, the rest on the stack.
-   Call through a matching function type or the libffi-backed shmel_invoke;
+   Call through a matching function type or shmel_invoke;
    do not call this zero-argument storage type directly. No implicit closure
    pointer is passed: saved arguments precede the new arguments. */
 typedef shmel_word (*shmel_code_address)(void);
@@ -45,9 +45,10 @@ shmel_closure *shmel_make_closure(shmel_code_address code, uint64_t arity);
 shmel_word shmel_apply(const shmel_closure *closure, uint64_t argc,
                        const shmel_word *argv);
 
-/* libffi uses the platform's default ABI (RV64 psABI on the target).
+/* Uses the RV64 integer psABI through the dispatcher in closure_invoke.S.
    All parameters and the result must be shmel_word, and arity must match argc.
-   argv is not modified. argc must fit in libffi's unsigned int argument count. */
+   argv is not modified. Zero arguments are allowed (argv may then be NULL).
+   Invalid inputs and impossible argument-array sizes abort with a diagnostic. */
 shmel_word shmel_invoke(shmel_code_address code, uint64_t argc,
                         const shmel_word *argv);
 
