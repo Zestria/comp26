@@ -77,6 +77,29 @@ let run computation =
 
 (* ---------- Code emission ---------- *)
 
+(* Forward memory values only between adjacent stack accesses. *)
+let optimize_asm asm =
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | Instruction (Mv (dst, src)) :: rest when dst = src -> loop acc rest
+    | Instruction (Addi (dst, src, 0)) :: rest ->
+      loop acc (Instruction (Mv (dst, src)) :: rest)
+    | Instruction (Ld (dst, address)) :: rest when address.base = sp || address.base = fp
+      ->
+      (match acc with
+       | Instruction (Sd (src, stored_address)) :: _ when address = stored_address ->
+         loop acc (Instruction (Mv (dst, src)) :: rest)
+       | _ -> loop (Instruction (Ld (dst, address)) :: acc) rest)
+    | (Instruction (Label name) as label) :: rest ->
+      (match acc with
+       | Instruction (J target) :: acc when String.equal name target ->
+         loop (label :: acc) rest
+       | _ -> loop (label :: acc) rest)
+    | item :: rest -> loop (item :: acc) rest
+  in
+  loop [] asm
+;;
+
 let emit ?(comm = "") instruction =
   instruction (fun i ->
     match i with
@@ -847,5 +870,5 @@ let gen_program (program : Anf.program) =
         code_rev = List.concat (List.rev (functions @ wrappers)) @ state.code_rev
       })
   in
-  Result.map snd (run generate)
+  Result.map (fun (_, asm) -> optimize_asm asm) (run generate)
 ;;
