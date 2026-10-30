@@ -46,7 +46,7 @@ case "$CMD" in
         ;;
     build)
         echo "compiler = $COMPILER_NAME"
-        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @check @runtest @install
+        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @"$COMPILER_NAME"/check @"$COMPILER_NAME"/runtest @install
         ;;
     zanuda)
         echo "compiler = $COMPILER_NAME"
