@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Architecture-specific dispatcher; the runtime API validates its inputs. */
+extern shmel_word shmel_invoke_abi(shmel_code_address code, uint64_t argc,
+                                  const shmel_word *argv);
+
 static _Noreturn void runtime_error(const char *message) {
   fprintf(stderr, "Shmel runtime: %s\n", message);
   abort();
@@ -29,7 +33,6 @@ static void *allocate(size_t bytes) {
 
 static void validate_closure(const shmel_closure *closure) {
   if (closure == NULL || closure->code == NULL || closure->arity == 0 ||
-      closure->arity > SHMEL_MAX_ARITY ||
       closure->applied >= closure->arity) {
     runtime_error("invalid closure");
   }
@@ -41,77 +44,13 @@ shmel_word shmel_invoke(shmel_code_address code, uint64_t argc,
   if (code == NULL || (argc != 0 && argv == NULL)) {
     runtime_error("invalid function invocation");
   }
-  if (argc > SHMEL_MAX_ARITY) {
-    runtime_error("function arity exceeds SHMEL_MAX_ARITY");
-  }
-  /* Each branch has a statically known prototype. The C compiler emits the
-     register and stack argument setup required by the target ABI. */
-  switch (argc) {
-    case 0:
-        return code();
-    case 1: {
-        typedef shmel_word (*function_type)(
-            shmel_word);
-        return ((function_type)code)(
-            argv[0]);
-    }
-    case 2: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1]);
-    }
-    case 3: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word, shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1], argv[2]);
-    }
-    case 4: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word, shmel_word, shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1], argv[2], argv[3]);
-    }
-    case 5: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word, shmel_word, shmel_word, shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1], argv[2], argv[3], argv[4]);
-    }
-    case 6: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word, shmel_word, shmel_word, shmel_word,
-            shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1], argv[2], argv[3], argv[4], argv[5]);
-    }
-    case 7: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word, shmel_word, shmel_word, shmel_word,
-            shmel_word, shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1], argv[2], argv[3], argv[4], argv[5], argv[6]);
-    }
-    case 8: {
-        typedef shmel_word (*function_type)(
-            shmel_word, shmel_word, shmel_word, shmel_word, shmel_word,
-            shmel_word, shmel_word, shmel_word);
-        return ((function_type)code)(
-            argv[0], argv[1], argv[2], argv[3], argv[4], argv[5], argv[6],
-            argv[7]);
-    }
-  default:
-    runtime_error("unsupported function arity");
-  }
+  (void)argument_bytes(argc);
+  return shmel_invoke_abi(code, argc, argv);
 }
 
 shmel_closure *shmel_make_closure(shmel_code_address code, uint64_t arity) {
   if (code == NULL || arity == 0) {
     runtime_error("a function needs a code address and a positive arity");
-  }
-  if (arity > SHMEL_MAX_ARITY) {
-    runtime_error("function arity exceeds SHMEL_MAX_ARITY");
   }
   (void)argument_bytes(arity);
   shmel_closure *closure = allocate(sizeof(*closure));

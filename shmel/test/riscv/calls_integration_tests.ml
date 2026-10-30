@@ -131,21 +131,22 @@ let compile_case case_id (name, source) =
 ;;
 
 let many_arguments ~partial =
-  let params = List.init Closure.max_arity (Printf.sprintf "p%d") in
-  let args = List.init Closure.max_arity Int.to_string in
+  let arity = 300 in
+  let params = List.init arity (Printf.sprintf "p%d") in
+  let args = List.init arity Int.to_string in
   let call =
     if partial
     then
       Printf.sprintf
         "let g = f %s in g %s"
-        (String.concat " " (List.take (Closure.max_arity - 1) args))
-        (String.concat " " (List.drop (Closure.max_arity - 1) args))
+        (String.concat " " (List.take 260 args))
+        (String.concat " " (List.drop 260 args))
     else "f " ^ String.concat " " args
   in
   Printf.sprintf
-    "let f %s = p0 + p3 + p%d in %s"
+    "let f %s = p0 + p255 + p%d in %s"
     (String.concat " " params)
-    (Closure.max_arity - 1)
+    (arity - 1)
     call
 ;;
 
@@ -231,8 +232,8 @@ let cases =
   ; ( "capture and parameters survive calls"
     , "let bump x = x + 1 in let f a b c d e f g = let v = bump (a + g) in v + b + c + d \
        + e + f in f 1 2 3 4 5 6 7" )
-  ; "maximum code arity", many_arguments ~partial:false
-  ; "maximum partial code arity", many_arguments ~partial:true
+  ; "300-parameter function", many_arguments ~partial:false
+  ; "300-parameter partial application", many_arguments ~partial:true
   ; "large argument buffer", large_overapplication ~partial:false
   ; "split large application", large_overapplication ~partial:true
   ]

@@ -26,7 +26,7 @@ case "${1:-}" in
         build() {
             riscv64-linux-gnu-gcc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
                 -static -march=rv64gc -mabi=lp64d -I "$backend" \
-                "$backend/closure_runtime.c" "$@" -o program_rv64.exe
+                "$backend/closure_runtime.c" "$backend/closure_invoke.S" "$@" -o program_rv64.exe
         }
         case "$mode" in
             runtime) build closure_runtime_tests.c ;;

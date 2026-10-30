@@ -30,22 +30,16 @@ An error must not overwrite an existing output file.
   $ ../../compiler.exe -o missing/output.s input.ml > /dev/null 2>&1
   [1]
 
-The C dispatcher rejects code arities above eight, including explicit captures.
+Code arities above eight, including explicit captures, compile with both parsers.
 
   $ echo 'let f a b c d e f g h i = a + i in print_int (f 1 2 3 4 5 6 7 8 9)' > wide.ml
-  $ ../../compiler.exe -o output.s wide.ml
-  Backend error: closure arity exceeds runtime limit (8)
-  [1]
-  $ ../../compiler.exe -parsing menhir -o output.s wide.ml
-  Backend error: closure arity exceeds runtime limit (8)
-  [1]
+  $ ../../compiler.exe -o wide.s wide.ml
+  $ ../../compiler.exe -parsing menhir -o wide-menhir.s wide.ml
+  $ cmp wide.s wide-menhir.s
   $ echo 'let bump x = x + 1 in let f a b c d e f g h = bump a + b + c + d + e + f + g + h in print_int (f 1 2 3 4 5 6 7 8)' > captures.ml
-  $ ../../compiler.exe -o output.s captures.ml
-  Backend error: closure arity exceeds runtime limit (8)
-  [1]
-  $ ../../compiler.exe -parsing menhir -o output.s captures.ml
-  Backend error: closure arity exceeds runtime limit (8)
-  [1]
+  $ ../../compiler.exe -o captures.s captures.ml
+  $ ../../compiler.exe -parsing menhir -o captures-menhir.s captures.ml
+  $ cmp captures.s captures-menhir.s
   $ cat output.s
   keep this file
 

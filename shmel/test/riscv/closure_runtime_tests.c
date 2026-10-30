@@ -52,6 +52,15 @@ static word weighted8(word a, word b, word c, word d, word e, word f, word g, wo
     return a + 2*b + 3*c + 4*d + 5*e + 6*f + 7*g + 8*h;
 }
 
+static word weighted9(word a, word b, word c, word d, word e, word f, word g,
+                      word h, word i) {
+    return weighted8(a, b, c, d, e, f, g, h) + 9*i;
+}
+
+static word weighted10(word a, word b, word c, word d, word e, word f, word g,
+                       word h, word i, word j) {
+    return weighted9(a, b, c, d, e, f, g, h, i) + 10*j;
+}
 
 static shmel_closure *add_closure;
 static shmel_closure *last_intermediate;
@@ -105,7 +114,7 @@ static void test_many_arguments(void) {
 }
 
 static void test_dispatch_arities(void) {
-    word args[SHMEL_MAX_ARITY];
+    word args[10];
     shmel_code_address codes[] = {
         (shmel_code_address)identity,
         (shmel_code_address)weighted2,
@@ -114,14 +123,15 @@ static void test_dispatch_arities(void) {
         (shmel_code_address)weighted5,
         (shmel_code_address)weighted6,
         (shmel_code_address)weighted7,
-        (shmel_code_address)weighted8
+        (shmel_code_address)weighted8,
+        (shmel_code_address)weighted9,
+        (shmel_code_address)weighted10
     };
-    _Static_assert(sizeof(codes) / sizeof(codes[0]) == SHMEL_MAX_ARITY,
-                   "test every supported positive arity");
-    for (uint64_t i = 0; i < SHMEL_MAX_ARITY; ++i) args[i] = i + 1;
+    const uint64_t tested_arities = sizeof(codes) / sizeof(codes[0]);
+    for (uint64_t i = 0; i < tested_arities; ++i) args[i] = i + 1;
     args[0] = UINT64_MAX;
     word expected = 0;
-    for (uint64_t arity = 1; arity <= SHMEL_MAX_ARITY; ++arity) {
+    for (uint64_t arity = 1; arity <= tested_arities; ++arity) {
         expected += arity * args[arity - 1];
         assert(shmel_invoke(codes[arity - 1], arity, args) == expected);
         shmel_closure *base = shmel_make_closure(codes[arity - 1], arity);
@@ -135,7 +145,7 @@ static void test_dispatch_arities(void) {
     assert(args[0] == UINT64_MAX);
 }
 
-static void expect_arity_failure(int invoke) {
+static void expect_invalid_call(int invoke) {
     int errors[2];
     assert(pipe(errors) == 0);
     pid_t child = fork();
@@ -145,12 +155,9 @@ static void expect_arity_failure(int invoke) {
         if (dup2(errors[1], STDERR_FILENO) < 0) _Exit(2);
         close(errors[1]);
         if (invoke) {
-            word value = 1;
-            (void)shmel_invoke((shmel_code_address)identity,
-                               SHMEL_MAX_ARITY + 1, &value);
+            (void)shmel_invoke(NULL, 0, NULL);
         } else {
-            (void)shmel_make_closure((shmel_code_address)identity,
-                                     SHMEL_MAX_ARITY + 1);
+            (void)shmel_make_closure((shmel_code_address)identity, 0);
         }
         _Exit(0);
     }
@@ -163,7 +170,8 @@ static void expect_arity_failure(int invoke) {
     int status;
     assert(waitpid(child, &status, 0) == child);
     assert(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
-    assert(strstr(message, "function arity exceeds SHMEL_MAX_ARITY") != NULL);
+    assert(strstr(message, invoke ? "invalid function invocation"
+                                 : "a function needs a code address and a positive arity") != NULL);
 }
 
 
@@ -252,8 +260,8 @@ int main(void) {
     test_partial_application();
     test_many_arguments();
     test_dispatch_arities();
-    expect_arity_failure(0);
-    expect_arity_failure(1);
+    expect_invalid_call(0);
+    expect_invalid_call(1);
     test_cps();
     puts("closure runtime tests passed");
     return 0;

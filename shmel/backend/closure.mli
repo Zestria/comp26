@@ -14,19 +14,16 @@
     A valid function closure has [0 <= applied < arity]. Saturated applications
     call the code rather than construct a saturated closure.
 
-    The code entry follows the standard RV64 integer psABI: up to eight
-    word arguments are passed in [a0] .. [a7], and the word result in [a0].
-    No implicit environment parameter is added;
+    The code entry follows the standard RV64 integer psABI: the first eight
+    word arguments are passed in [a0] .. [a7], further arguments on the stack,
+    and the word result in [a0]. No implicit environment parameter is added;
     saved arguments form the prefix of the ordinary parameter list. *)
 
 (** Compile-time description of the original function; not a runtime object. *)
 type t
 
-(** Maximum code arity supported by the C runtime, including captures. *)
-val max_arity : int
-
-(** Rejects an empty code label and arities outside [1 .. max_arity].
-    Arity counts all parameters, including explicit captures. *)
+(** Rejects an empty code label and non-positive arities. Arity counts all
+    parameters, including explicit captures, and is not limited to eight. *)
 val create : code:Riscv.label -> arity:int -> (t, string) result
 
 val code : t -> Riscv.label
