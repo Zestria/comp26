@@ -1,9 +1,8 @@
 Tuple values, patterns, and closures executed on RISC-V.
 
-  $ riscv64-linux-gnu-gcc -O2 -Wall -Wextra -Werror -c ../backend/runtime.c -o runtime.o
   $ compile () {
   >   ../driver/compiler.exe --stop-after riscv -o "$1.s" "$1.ml" &&
-  >   riscv64-linux-gnu-gcc -static "$1.s" runtime.o -o "$1.exe"
+  >   riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d -static "$1.s" runtime_riscv.o -o "$1.exe"
   > }
   $ run () { qemu-riscv64 "./$1.exe" && printf '\n'; }
 
@@ -100,7 +99,7 @@ case. The variable case must handle the value rejected by the constant case.
   $ run cases
   4242-1
   $ ../driver/compiler.exe -parsing menhir --stop-after riscv -o cases_menhir.s cases.ml
-  $ riscv64-linux-gnu-gcc -static cases_menhir.s runtime.o -o cases_menhir.exe
+  $ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d -static cases_menhir.s runtime_riscv.o -o cases_menhir.exe
   $ run cases_menhir
   4242-1
 
