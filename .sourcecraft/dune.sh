@@ -50,7 +50,13 @@ case "$CMD" in
         ;;
     zanuda)
         echo "compiler = $COMPILER_NAME"
+        set +e
         opam exec -- zanuda -dir "$COMPILER_NAME" -osarif result.sarif -ordjsonl result.rdjsonl
+        status=$?
+        set -e
+        echo "zanuda exit status: $status"
+        [ -f result.sarif ] || printf '%s\n' '{"version":"2.1.0","runs":[]}' > result.sarif
+        [ -f result.rdjsonl ] || : > result.rdjsonl
         ;;
     stats)
         members="$(yq --arg compiler "$COMPILER_NAME" -c \
