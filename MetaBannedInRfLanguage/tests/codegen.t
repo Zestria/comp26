@@ -234,6 +234,137 @@ Failure in a tuple parameter reaches the runtime handler, not the continuation.
   match failure: no case matched
   [1]
 
+Plain (non-CPS) recursion returns values directly instead of through a
+continuation.
+
+  $ cat > plain.ml <<EOF
+  > let rec fac n = if n = 0 then 1 else n * fac (n - 1);;
+  > let rec fib n = if n < 2 then n else fib (n - 1) + fib (n - 2);;
+  > let () = print_int (fac 6);;
+  > let () = print_int (fib 10)
+  > EOF
+  $ compile plain
+  $ run plain
+  72055
+
+Closures passed as arguments are applied indirectly.
+
+  $ cat > higher_order.ml <<EOF
+  > let apply f x = f x;;
+  > let twice f x = f (f x);;
+  > let inc x = x + 1;;
+  > let () = print_int (apply inc 41);;
+  > let () = print_int (twice inc 40)
+  > EOF
+  $ compile higher_order
+  $ run higher_order
+  4242
+
+Ten arguments force the last two through the stack; ten captured variables
+force the closure environment beyond the register file.
+
+  $ cat > many_args.ml <<EOF
+  > let sum10 a b c d e f g h i j = a + b + c + d + e + f + g + h + i + j;;
+  > let () = print_int (sum10 1 2 3 4 5 6 7 8 6 0)
+  > EOF
+  $ compile many_args
+  $ run many_args
+  42
+
+  $ cat > many_captures.ml <<EOF
+  > let make a b c d e f g h i j = fun x -> a + b + c + d + e + f + g + h + i + j + x;;
+  > let f = make 1 2 3 4 5 6 7 8 9 10;;
+  > let () = print_int (f (-13))
+  > EOF
+  $ compile many_captures
+  $ run many_captures
+  42
+
+Division truncates toward zero like OCaml, and a zero divisor reaches the
+runtime handler.
+
+  $ cat > division.ml <<EOF
+  > let () = print_int (-7 / 3);;
+  > let () = print_int (7 / -3);;
+  > let () = print_int (-7 / -3)
+  > EOF
+  $ compile division
+  $ run division
+  -2-22
+
+  $ cat > division_zero.ml <<EOF
+  > let () = print_int (42 / 0)
+  > EOF
+  $ compile division_zero
+  $ qemu-riscv64 ./division_zero.exe
+  division by zero
+  [1]
+
+Boolean operators short-circuit, so the unevaluated division never runs.
+
+  $ cat > logic.ml <<EOF
+  > let () = print_int (if false && (1 / 0 = 0) then 1 else 42);;
+  > let () = print_int (if true || (1 / 0 = 0) then 42 else 1);;
+  > let () = print_int (if 3 < 5 && not (2 > 4) then 42 else 0)
+  > EOF
+  $ compile logic
+  $ run logic
+  424242
+
+Matching on a plain integer uses the same constant patterns as tuple fields.
+
+  $ cat > int_match.ml <<EOF
+  > let f x = match x with | 0 -> 42 | _ -> x;;
+  > let () = print_int (f 0);;
+  > let () = print_int (f 7)
+  > EOF
+  $ compile int_match
+  $ run int_match
+  427
+
+Closures nested in closures keep the intermediate environment alive.
+
+  $ cat > nested_closures.ml <<EOF
+  > let make a b = let c = a + b in fun x -> fun y -> x + y + c;;
+  > let f = make 10 20;;
+  > let g = f 5;;
+  > let () = print_int (g 7)
+  > EOF
+  $ compile nested_closures
+  $ run nested_closures
+  42
+
+  $ cat > closure_of_closure.ml <<EOF
+  > let add a b = a + b;;
+  > let make n = let f = add n in fun x -> f x;;
+  > let () = print_int (make 40 2)
+  > EOF
+  $ compile closure_of_closure
+  $ run closure_of_closure
+  42
+
+Local recursive functions are lifted and still capture their surroundings.
+
+  $ cat > local_rec.ml <<EOF
+  > let f n =
+  >   let rec go acc i = if i = 0 then acc else go (acc + i) (i - 1) in
+  >   go 0 n;;
+  > let () = print_int (f 9)
+  > EOF
+  $ compile local_rec
+  $ run local_rec
+  45
+
+Over-application consumes the closure result and keeps applying.
+
+  $ cat > over_apply.ml <<EOF
+  > let f a = fun b -> a + b;;
+  > let () = print_int (f 40 2)
+  > EOF
+  $ compile over_apply
+  $ run over_apply
+  42
+
 The shared heap header also applies to closures. CPS programs still allocate
 and apply captured continuations correctly after tuples were introduced.
 
