@@ -25,3 +25,11 @@ type stage =
     Возвращает [Error] для неподдерживаемых рекурсивных значений или
     если программа нарушает требования входа ANF. *)
 val run : stop_after:stage -> Ast.program -> (string, string) result
+
+(** [to_anf program] выполняет alpha conversion, нормализацию рекурсивных
+    инициализаторов, closure conversion, lambda lifting и ANF conversion.
+    Возвращает структуру ANF без печати для передачи в backend.
+    Использует тот же конвейер, что [run ~stop_after:Anf].
+    Возвращает [Error] для неподдерживаемых рекурсивных значений или
+    при нарушении требований входа ANF. *)
+val to_anf : Ast.program -> (Anf.Anf_ast.aprogram, string) result

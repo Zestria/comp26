@@ -8,11 +8,7 @@ let unwrap = function Ok value -> value | Error error -> Alcotest.fail error
 
 let lower source =
   let ast = Parse.parse source |> unwrap in
-  let normalized = Ast_passes.Normalize_rec.run (Ast_passes.Alpha.alpha ast) |> unwrap in
-  Ast_passes.Closure_conv.closure_conv normalized
-  |> Ast_passes.Lambda_lift.lambda_lift
-  |> Anf.Anf_conv.anf
-  |> unwrap
+  Pipeline.to_anf ast |> unwrap
 ;;
 
 let generate source = Codegen.generate (lower source) |> unwrap
