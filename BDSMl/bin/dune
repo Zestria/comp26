@@ -13,4 +13,9 @@
   evaluation_order.ml
   recursive_initializer.ml
   check_stages.sh
+  ../runtime/runtime.h
+  ../runtime/closures/closures.c
+  ../runtime/closures/apply.S
+  ../runtime/io/print_int.c
+  ../runtime/errors.c
   %{exe:../compiler.exe}))

@@ -56,3 +56,36 @@
   [2]
   $ ../compiler.exe --parser lr --operator-assoc minus:right --parse '8 - 3 - 1' 2> /dev/null
   [2]
+
+Default compilation emits RV64 assembly with either parser and output mode.
+
+  $ ../compiler.exe cli_input.ml > default.s
+  $ ../compiler.exe -parsing topdown cli_input.ml -o topdown.s
+  $ ../compiler.exe -parsing menhir cli_input.ml -o - > menhir.s
+  $ cmp default.s topdown.s
+  $ cmp topdown.s menhir.s
+  $ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d -std=c11 -static -no-pie default.s ../runtime/closures/closures.c ../runtime/closures/apply.S ../runtime/io/print_int.c ../runtime/errors.c -o cli.exe
+  $ timeout 10s qemu-riscv64 ./cli.exe > cli.stdout
+  $ cat cli.stdout; echo
+  3
+
+Generation failures preserve existing output and do not create a new file.
+
+  $ echo 'let () = print_endline 1' > unsupported.ml
+  $ echo keep > preserved.s
+  $ ../compiler.exe unsupported.ml -o preserved.s
+  RISC-V: unknown identifier: print_endline
+  [2]
+  $ cat preserved.s
+  keep
+  $ ../compiler.exe unsupported.ml -o absent.s
+  RISC-V: unknown identifier: print_endline
+  [2]
+  $ test ! -e absent.s
+  $ ../compiler.exe unsupported.ml > failure.stdout
+  RISC-V: unknown identifier: print_endline
+  [2]
+  $ test ! -s failure.stdout
+  $ ../compiler.exe
+  an input .ml file is required
+  [2]

@@ -13,6 +13,11 @@ type parser_kind =
   | LL
   | LR
 
+let die message =
+  prerr_endline message;
+  exit 2
+;;
+
 let binop_of_name = function
   | "plus" -> Ast.Plus
   | "minus" -> Ast.Minus
@@ -69,9 +74,7 @@ let parse_source parser overrides source =
 let parse_or_exit parser overrides source =
   match parse_source parser overrides source with
   | Ok program -> program
-  | Error message ->
-    prerr_endline message;
-    exit 2
+  | Error message -> die message
 ;;
 
 let read_file filename =
@@ -81,9 +84,7 @@ let read_file filename =
       ~finally:(fun () -> close_in_noerr channel)
       (fun () -> really_input_string channel (in_channel_length channel))
   with
-  | Sys_error message ->
-    prerr_endline message;
-    exit 2
+  | Sys_error message -> die message
 ;;
 
 let write_output filename text =
@@ -95,12 +96,10 @@ let write_output filename text =
        Fun.protect
          ~finally:(fun () -> close_out_noerr channel)
          (fun () ->
-           output_string channel text;
-           output_char channel '\n')
+            output_string channel text;
+            output_char channel '\n')
      with
-     | Sys_error message ->
-       prerr_endline message;
-       exit 2)
+     | Sys_error message -> die message)
 ;;
 
 let stage_of_name = function
@@ -118,15 +117,17 @@ type options =
   ; inline_source : string option (** Source supplied with [--parse]. *)
   ; input_file : string option (** Positional input filename. *)
   ; output_file : string (** Destination, or [-] for stdout. *)
-  ; stop_after : Pipeline.stage (** Last compilation stage. *)
-  ; pipeline_mode : bool (** Whether an input file is required. *)
+  ; stop_after : Pipeline.stage option (** Intermediate stage, or [None] for RV64. *)
   ; overrides : (Ast.binop * LL_parser.Parser.associativity) list
-      (** Associativity overrides in reverse command-line order. *)
+    (** Associativity overrides in reverse command-line order. *)
   ; show_help : bool (** Print usage and exit. *)
   }
 
 let usage =
   "Usage: BDSMl [OPTIONS] [FILE.ml]\n\
+   Compile FILE.ml to GNU RV64 assembly (default output: stdout).\n\
+   Assemble and link with the C runtime using riscv64-linux-gnu-gcc;\n\
+   see BDSMl/backend/abi/ABI.md for the full command.\n\n\
    --parser ll|lr                 Select parser (default: ll)\n\
    -parsing topdown|menhir         Select parser\n\
    --stop-after parsing|alpha|cc|ll|anf\n\
@@ -141,8 +142,7 @@ let default_options =
   ; inline_source = None
   ; input_file = None
   ; output_file = "-"
-  ; stop_after = Pipeline.Anf
-  ; pipeline_mode = false
+  ; stop_after = None
   ; overrides = []
   ; show_help = false
   }
@@ -166,7 +166,8 @@ let parse_options arguments =
     | [] -> Ok options
     | ("-help" | "--help") :: _ -> Ok { options with show_help = true }
     | "--" :: rest -> positional options rest
-    | ("--parser" | "-parsing" | "--stop-after" | "-o" | "--operator-assoc" | "--parse" as flag)
+    | (("--parser" | "-parsing" | "--stop-after" | "-o" | "--operator-assoc" | "--parse")
+       as flag)
       :: rest ->
       (match rest with
        | [] -> Error (flag ^ " requires an argument")
@@ -175,16 +176,17 @@ let parse_options arguments =
            match flag, value with
            | "--parser", "ll" -> Ok { options with parser = LL }
            | "--parser", "lr" -> Ok { options with parser = LR }
-           | "-parsing", "topdown" ->
-             Ok { options with parser = LL; pipeline_mode = true }
-           | "-parsing", "menhir" ->
-             Ok { options with parser = LR; pipeline_mode = true }
+           | "-parsing", "topdown" -> Ok { options with parser = LL }
+           | "-parsing", "menhir" -> Ok { options with parser = LR }
            | ("--parser" | "-parsing"), _ -> Error ("unknown parser: " ^ value)
            | "--stop-after", _ ->
-             Ok { options with stop_after = stage_of_name value; pipeline_mode = true }
-           | "-o", _ -> Ok { options with output_file = value; pipeline_mode = true }
+             Ok { options with stop_after = Some (stage_of_name value) }
+           | "-o", _ -> Ok { options with output_file = value }
            | "--operator-assoc", _ ->
-             Ok { options with overrides = parse_associativity_override value :: options.overrides }
+             Ok
+               { options with
+                 overrides = parse_associativity_override value :: options.overrides
+               }
            | "--parse", _ -> Ok { options with inline_source = Some value }
            | _ -> Error ("unknown option: " ^ flag)
          in
@@ -193,7 +195,9 @@ let parse_options arguments =
       (match String.index_opt argument '=' with
        | Some index ->
          let flag = String.sub argument 0 index in
-         let value = String.sub argument (index + 1) (String.length argument - index - 1) in
+         let value =
+           String.sub argument (index + 1) (String.length argument - index - 1)
+         in
          parse options (flag :: value :: rest)
        | None -> Error ("unknown option: " ^ argument))
     | filename :: rest ->
@@ -204,42 +208,34 @@ let parse_options arguments =
   | Arg.Bad message -> Error message
 ;;
 
+let compile options program =
+  match options.stop_after with
+  | Some stage -> Pipeline.run ~stop_after:stage program
+  | None ->
+    let ( let* ) = Result.bind in
+    let* program = Pipeline.to_anf program in
+    BDSMl_backend.Codegen.generate program
+;;
+
 let () =
   let options =
     match parse_options (List.tl (Array.to_list Sys.argv)) with
     | Ok options -> options
-    | Error message ->
-      prerr_endline message;
-      prerr_endline usage;
-      exit 2
+    | Error message -> die (message ^ "\n" ^ usage)
   in
   if options.show_help
   then print_endline usage
-  else
+  else (
     match options.inline_source, options.input_file with
-    | Some _, Some _ ->
-      prerr_endline "--parse and an input file cannot be used together";
-      exit 2
+    | Some _, Some _ -> die "--parse and an input file cannot be used together"
     | Some source, None ->
       let program = parse_or_exit options.parser options.overrides source in
       write_output options.output_file (Printer.print_ast program)
     | None, Some filename ->
       let source = read_file filename in
       let program = parse_or_exit options.parser options.overrides source in
-      (match Pipeline.run ~stop_after:options.stop_after program with
+      (match compile options program with
        | Ok output -> write_output options.output_file output
-       | Error message ->
-         prerr_endline message;
-         exit 2)
-    | None, None ->
-      if options.overrides <> []
-      then (
-        prerr_endline "--operator-assoc requires --parse or an input file";
-        exit 2)
-      else if options.pipeline_mode
-      then (
-        prerr_endline "an input .ml file is required";
-        exit 2)
-      else prerr_endline "no input file";
-      exit 2;
+       | Error message -> die message)
+    | None, None -> die "an input .ml file is required")
 ;;
