@@ -22,7 +22,11 @@ open Shmel_middleend
     [t1] hold the operands, [t6] addresses far slots. A parameter is read
     straight from its register while the register still holds it ([a0] until
     the first computation, [a1] .. [a7] until the first call); only the
-    parameters needed later are saved to slots when the function starts. *)
+    parameters needed later are saved to slots when the function starts.
+
+    Division by anything but a non-zero constant checks the divisor and, if it
+    is zero, calls [shmel_div_by_zero], a runtime function that reports
+    [Division_by_zero] like OCaml and does not return. *)
 
 (** What the body needs from the code for calls and closures (part 2). *)
 type hooks =
