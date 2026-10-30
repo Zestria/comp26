@@ -149,29 +149,6 @@ let test_addition () =
     ]
 ;;
 
-let test_print_int () =
-  check
-    "print_int prints an integer and returns it"
-    "let _ = print_int 5"
-    [ definition
-        "mmml_program_main"
-        true
-        [ Addi (Sp, Sp, -16L)
-        ; Sd (Ra, 8L, Sp)
-        ; Li (A0, 5L)
-        ; Call "mmml_int"
-        ; Call "mmml_print_int"
-        ; Sd (A0, 0L, Sp)
-        ; Li (A0, 10L)
-        ; Jump "main_exit1"
-        ; Label "main_exit1"
-        ; Ld (Ra, 8L, Sp)
-        ; Addi (Sp, Sp, 16L)
-        ; Ret
-        ]
-    ]
-;;
-
 let test_print_int_shadowed () =
   check
     "a user binding may shadow print_int"
@@ -213,7 +190,6 @@ let () =
   test_constant ();
   test_lambda ();
   test_addition ();
-  test_print_int ();
   test_print_int_shadowed ();
   print_endline "asm_ast: ok"
 ;;

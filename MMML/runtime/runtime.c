@@ -2,7 +2,6 @@
 #include "runtime_internal.h"
 
 #include <alloca.h>
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,10 +62,6 @@ bool mmml_is_closure(mmml_value value) {
   return value != 0 && (value & UINT64_C(7)) == 0;
 }
 
-mmml_value mmml_print_int(mmml_value value) {
-  printf("%" PRId64 "\n", mmml_unbox_int(value));
-  return value;
-}
 
 static mmml_closure *closure_of(mmml_value value) {
   if (!mmml_is_closure(value)) mmml_fail("expected closure");

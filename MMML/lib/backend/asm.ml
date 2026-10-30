@@ -57,6 +57,7 @@ type binop =
   | Sub
   | Mul
   | Div
+  | Rem
 
 type instruction =
   | Label of string
@@ -66,6 +67,7 @@ type instruction =
   | Binop of binop * register * register * register
   | Ld of register * int64 * register
   | Sd of register * int64 * register
+  | Sb of register * int64 * register
   | Branch of condition * register * register * string
   | Jump of string
   | Call of string

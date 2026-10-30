@@ -21,6 +21,7 @@ let binop = function
   | A.Sub -> "sub"
   | A.Mul -> "mul"
   | A.Div -> "div"
+  | A.Rem -> "rem"
 ;;
 
 let pp_instruction formatter = function
@@ -53,6 +54,8 @@ let pp_instruction formatter = function
       (register base)
   | A.Sd (source, value, base) ->
     Format.fprintf formatter "\tsd %s, %Ld(%s)@." (register source) value (register base)
+  | A.Sb (source, value, base) ->
+    Format.fprintf formatter "\tsb %s, %Ld(%s)@." (register source) value (register base)
   | A.Branch (kind, left, right, label) ->
     Format.fprintf
       formatter

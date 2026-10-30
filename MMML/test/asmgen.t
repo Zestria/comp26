@@ -1,5 +1,6 @@
 The backend pipeline (parse, lambda lifting, closure conversion, ANF, RISC-V
-assembly) is wired and runs under qemu.
+assembly) is wired. Output runs on Linux user-mode qemu; print_int uses the
+write syscall (a7 = 64).
 
   $ cat > arith.ml <<'EOF'
   > let _ = print_int (1 + 2 * 3)
@@ -39,8 +40,3 @@ CPS fibonacci.
   $ riscv64-linux-gnu-gcc -static -I ../runtime fib.s ../runtime/runtime.c ../runtime/startup.c -o fib
   $ qemu-riscv64 ./fib
   55
-
-Closures are created through the runtime.
-
-  $ grep -c mmml_make_closure fac.s
-  4

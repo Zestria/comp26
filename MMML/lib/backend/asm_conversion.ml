@@ -130,7 +130,51 @@ let unboxed g env self left right =
 
 let print_int g env self argument =
   imm g env self argument;
-  push g (A.Call "mmml_print_int")
+  let value = save g in
+  push g (A.Call "mmml_unbox_int");
+  let buffer = alloc g in
+  let _ = alloc g in
+  let _ = alloc g in
+  let _ = alloc g in
+  let base_offset = offset buffer in
+  let negative = A.T6 in
+  push g (A.Addi (A.T0, A.Sp, base_offset));
+  push g (A.Li (A.T4, 10L));
+  push g (A.Sb (A.T4, 31L, A.T0));
+  push g (A.Addi (A.T1, A.T0, 30L));
+  push g (A.Addi (A.T2, A.A0, 0L));
+  push g (A.Li (negative, 0L));
+  let negate = fresh g "print_negate" in
+  let digits = fresh g "print_digits" in
+  push g (A.Branch (A.Lt, A.T2, A.Zero, negate));
+  push g (A.Jump digits);
+  push g (A.Label negate);
+  push g (A.Binop (A.Sub, A.T2, A.Zero, A.T2));
+  push g (A.Li (negative, 1L));
+  push g (A.Label digits);
+  push g (A.Li (A.T3, 10L));
+  let loop = fresh g "print_loop" in
+  push g (A.Label loop);
+  push g (A.Binop (A.Rem, A.T4, A.T2, A.T3));
+  push g (A.Addi (A.T4, A.T4, 48L));
+  push g (A.Sb (A.T4, 0L, A.T1));
+  push g (A.Binop (A.Div, A.T2, A.T2, A.T3));
+  push g (A.Addi (A.T1, A.T1, -1L));
+  push g (A.Branch (A.Ne, A.T2, A.Zero, loop));
+  let unsigned = fresh g "print_unsigned" in
+  push g (A.Branch (A.Eq, negative, A.Zero, unsigned));
+  push g (A.Li (A.T4, 45L));
+  push g (A.Sb (A.T4, 0L, A.T1));
+  push g (A.Addi (A.T1, A.T1, -1L));
+  push g (A.Label unsigned);
+  push g (A.Addi (A.T1, A.T1, 1L));
+  push g (A.Addi (A.T5, A.T0, 32L));
+  push g (A.Binop (A.Sub, A.A2, A.T5, A.T1));
+  push g (A.Addi (A.A0, A.Zero, 1L));
+  push g (A.Addi (A.A1, A.T1, 0L));
+  push g (A.Li (A.A7, 64L));
+  push g (A.Ecall);
+  ld g A.A0 value
 ;;
 
 let rec compound g env self = function
