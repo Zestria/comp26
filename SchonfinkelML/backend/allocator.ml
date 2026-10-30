@@ -14,14 +14,4 @@ module Allocator = struct
   let registers =
     [ T0; T1; T2; T3; T4; T5; T6; S1; S2; S3; S4; S5; S6; S7; S8; S9; S10; S11 ]
   ;;
-
-  let next_register = ref registers
-
-  let alloc () =
-    match !next_register with
-    | r :: rest ->
-      next_register := rest;
-      r
-    | [] -> failwith "get_rtl: register allocation exhausted"
-  ;;
 end

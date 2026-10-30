@@ -23,7 +23,8 @@ module Monad = struct
   type state =
     { current_rev : item list
     ; functions_rev : item list list
-    ; counter : int
+    ; fresh_counter : int
+    ; reg_counter : int
     }
 
   type 'a t = state -> ('a * state, error) result
@@ -78,7 +79,9 @@ module Monad = struct
   ;;
 
   let run (program : unit t) : (item list, error) result =
-    let initial_state = { current_rev = []; functions_rev = []; counter = 0 } in
+    let initial_state =
+      { current_rev = []; functions_rev = []; fresh_counter = 0; reg_counter = 0 }
+    in
     match program initial_state with
     | Error e -> Error e
     | Ok ((), final_state) ->
@@ -89,8 +92,14 @@ module Monad = struct
 
   let fresh_label (prefix : string) : string t =
     fun state ->
-    let n = state.counter in
-    Ok (Printf.sprintf "%s_%d" prefix n, { state with counter = n + 1 })
+    let n = state.fresh_counter in
+    Ok (Printf.sprintf "%s_%d" prefix n, { state with fresh_counter = n + 1 })
+  ;;
+
+  let alloc () =
+    fun state ->
+    let n = state.reg_counter in
+    Ok (List.nth Allocator.registers n, { state with reg_counter = n + 1 })
   ;;
 
   let rec map_m f = function
@@ -126,22 +135,22 @@ let get_rtl anf =
   let open Allocator in
   let materialize env = function
     | Anf.ImmNum n ->
-      let reg = alloc () in
+      let* reg = alloc () in
       let* () = emit (li reg n) in
       return reg
     | Anf.ImmBool b ->
-      let reg = alloc () in
+      let* reg = alloc () in
       let* () = emit (li reg (Bool.to_int b)) in
       return reg
     | Anf.ImmUnit ->
-      let reg = alloc () in
+      let* reg = alloc () in
       let* () = emit (li reg 0) in
       return reg
     | Anf.ImmId name ->
       (match SMap.find_opt name env with
        | Some (Reg r) -> return r
        | Some (Function _) ->
-         let reg = alloc () in
+         let* reg = alloc () in
          let* () = emit (la reg name) in
          return reg
        | None -> error Symbol_table_error)
@@ -303,7 +312,7 @@ let get_rtl anf =
       compile_aexpr env dst body
     (* | ALet (Recursive, _, _, _) -> error (Unsupported "recursive bindings") *)
     | ALet (_, name, rhs, body) ->
-      let reg = alloc () in
+      let* reg = alloc () in
       let env = SMap.add name (Reg reg) env in
       let* () = compile_aexpr env reg rhs in
       compile_aexpr env dst body
@@ -338,9 +347,9 @@ let get_rtl anf =
        | Closures.Over _ -> error (Unsupported "over-application")
        | Closures.Unknown -> compile_apply_closure env dst head args)
   in
-  let dst = alloc () in
   let env = SMap.empty in
-  (let* () = compile_aexpr env dst anf in
+  (let* dst = alloc () in
+   let* () = compile_aexpr env dst anf in
    let* () = emit (li A7 94) in
    let* () = emit (mv A0 Zero) in
    emit ecall)

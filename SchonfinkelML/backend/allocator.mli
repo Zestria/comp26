@@ -8,6 +8,4 @@
 
 module Allocator : sig
   val registers : Common.reg list
-  val next_register : Common.reg list ref
-  val alloc : unit -> Common.reg
 end
