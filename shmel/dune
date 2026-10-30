@@ -3,11 +3,16 @@
  (applies_to NewGVNtricky)
  (deps NewGVNtricky.ll))
 
+(alias
+ (name runtest-docker)
+ (deps
+  (alias test/riscv/runtest-docker)))
+
 (executable
  (public_name shmel)
  (package shmel)
  (name compiler)
  (modules compiler)
- (libraries shmel_lib shmel_middleend Shmel)
+ (libraries shmel_lib shmel_middleend shmel_backend Shmel)
  (instrumentation
   (backend bisect_ppx_ng)))

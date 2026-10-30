@@ -37,7 +37,7 @@ type expr =
 type decl =
   | DLet of name * expr (** [let x = e]; [let f x = e] is [let f = fun x -> e] *)
   | DLetRec of name * name * expr (** [let rec f x = e] *)
-  | DExpr of expr (** an expression at the beginning of the program *)
+  | DExpr of expr (** an expression at the beginning of the program or after [;;] *)
 [@@deriving show { with_path = false }]
 
 (** A program is a sequence of declarations, e.g.

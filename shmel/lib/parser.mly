@@ -31,6 +31,7 @@
 %token FUN
 %token REC
 %token ARROW
+%token SEMISEMI
 %token EOF
 
 %nonassoc IN
@@ -39,11 +40,26 @@
 %left TIMES DIVISION
 
 %start <Ast.expr> prog
+%start <Ast.program> program
 
 %%
 
 prog:
   | e = expr; EOF { e }
+  ;
+
+program:
+  | rest = declarations { rest }
+  | e = expr; rest = declarations { DExpr e :: rest }
+  ;
+
+declarations:
+  | EOF { [] }
+  | SEMISEMI; rest = program { rest }
+  | LET; x = ID; args = list(ID); EQUALS; body = expr; rest = declarations
+      { DLet (x, List.fold_right (fun p e -> Abs (p, e)) args body) :: rest }
+  | LET; REC; f = ID; p = ID; args = list(ID); EQUALS; body = expr; rest = declarations
+      { DLetRec (f, p, List.fold_right (fun p e -> Abs (p, e)) args body) :: rest }
   ;
 
 
@@ -74,7 +90,8 @@ operation:
   | e1 = operation; PLUS; e2 = operation { BinOp (Add, e1, e2) }
 
 control:
-  | LET; x = ID; EQUALS; e1 = expr; IN; e2 = expr { Let (x, e1, e2) }
+  | LET; x = ID; args = list(ID); EQUALS; e1 = expr; IN; e2 = expr
+      { Let (x, List.fold_right (fun p e -> Abs (p, e)) args e1, e2) }
   | IF; e1 = expr; THEN; e2 = expr; ELSE; e3 = expr { If (e1, e2, e3) }
   | FUN; args = nonempty_list(ID); ARROW; body = expr {List.fold_right (fun x y -> Abs(x, y)) args body}
   | LET; REC; fun_id = ID; arg1 = ID; args = list(ID); EQUALS; body = expr; IN; e = expr

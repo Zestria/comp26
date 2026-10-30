@@ -10,14 +10,15 @@
 open Parser
 }
 
-let white = [' ' '\t' '\n' '\r']+
+let blank = [' ' '\t' '\r']+
 let digit = ['0'-'9']
 let const = digit+
 let id = ['a'-'z' '_'] ['A'-'Z' 'a'-'z' '0'-'9' '_' '\'']*
 
 rule read =
   parse
-  | white { read lexbuf }
+  | blank { read lexbuf }
+  | '\n' { Lexing.new_line lexbuf; read lexbuf }
   | "<=" { LE}
   | "<" { LT}
   | ">=" { GE}
@@ -37,6 +38,8 @@ rule read =
   | "fun" { FUN }
   | "rec" {REC}
   | "->" { ARROW }
+  | ";;" { SEMISEMI }
+  | "and" { raise (Failure "let ... and ... is not supported") }
   | id { ID (Lexing.lexeme lexbuf) }
   | const { CONST (int_of_string (Lexing.lexeme lexbuf)) }
   | eof { EOF }

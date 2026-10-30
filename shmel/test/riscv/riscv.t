@@ -88,7 +88,48 @@ Arithmetic; small constants go into the instruction itself:
     ld t0, -32(s0)
     mul a0, t0, a0
     ld t1, -24(s0)
+    bnez t1, .Lcalc_div0
+    call shmel_div_by_zero
+  .Lcalc_div0:
     div a0, a0, t1
+    addi sp, s0, -16
+    ld ra, 8(sp)
+    ld s0, 0(sp)
+    addi sp, sp, 16
+    ret
+  
+
+Division by a non-zero constant needs no check. Any other divisor is checked:
+[div] gives -1 for zero, but OCaml raises Division_by_zero, so the runtime
+function shmel_div_by_zero prints the same message and exits with code 2:
+
+  $ cat > division.ml <<'EOF'
+  > let half a = a / 2
+  > let ratio a b = a / b
+  > EOF
+  $ ./riscv_tests.exe asm < division.ml
+  half:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd s0, 0(sp)
+    addi s0, sp, 16
+    li t1, 2
+    div a0, a0, t1
+    addi sp, s0, -16
+    ld ra, 8(sp)
+    ld s0, 0(sp)
+    addi sp, sp, 16
+    ret
+  
+  ratio:
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    sd s0, 0(sp)
+    addi s0, sp, 16
+    bnez a1, .Lratio_div0
+    call shmel_div_by_zero
+  .Lratio_div0:
+    div a0, a0, a1
     addi sp, s0, -16
     ld ra, 8(sp)
     ld s0, 0(sp)

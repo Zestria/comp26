@@ -150,22 +150,53 @@ let toolchain_available () =
     [ "riscv64-linux-gnu-gcc"; "qemu-riscv64" ]
 ;;
 
-(* Compiles the cases into one program, runs it, returns the printed lines. *)
-let run_on_qemu functions =
+let write_program functions =
   let code =
     ((Riscv.Directive ".text" :: ext_functions)
      @ List.concat (List.mapi (fun i (asm, args) -> asm @ entry i args) functions))
     @ table (List.length functions)
   in
-  write_file "tests.s" (Format.asprintf "%a@." Riscv.pp_instrs code);
-  let commands =
-    [ "riscv64-linux-gnu-gcc -march=rv64gc harness.c tests.s -o tests.exe"
-    ; "qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu max ./tests.exe > tests.out"
-    ]
+  write_file "tests.s" (Format.asprintf "%a@." Riscv.pp_instrs code)
+;;
+
+let runner ~docker =
+  if docker then "sh docker_runner.sh codegen" else "sh run_riscv.sh codegen"
+;;
+
+(* Compiles the cases into one program, runs it, returns the printed lines. *)
+let run_on_qemu ~docker functions =
+  write_program functions;
+  let command = runner ~docker ^ " > tests.out" in
+  if Sys.command command = 0
+  then Ok (In_channel.with_open_text "tests.out" In_channel.input_lines)
+  else Error (Printf.sprintf "command failed: %s" command)
+;;
+
+let contains text part =
+  let n = String.length part in
+  let rec from i =
+    i + n <= String.length text
+    && (String.equal (String.sub text i n) part || from (i + 1))
   in
-  match List.find_opt (fun c -> Sys.command c <> 0) commands with
-  | None -> Ok (In_channel.with_open_text "tests.out" In_channel.input_lines)
-  | Some failed -> Error (Printf.sprintf "command failed: %s" failed)
+  from 0
+;;
+
+(* Division by zero stops the program like an uncaught OCaml exception: the
+   message on stderr and exit code 2. *)
+let check_division_by_zero ~docker =
+  match compile ~name:"f0" (parse "let f a b = a / b") with
+  | Error msg ->
+    Format.printf "FAIL division by zero: %s@." msg;
+    false
+  | Ok asm ->
+    write_program [ asm, [ 7; 0 ] ];
+    let code = Sys.command (runner ~docker ^ " > tests.out 2> tests.err") in
+    let errors = In_channel.with_open_text "tests.err" In_channel.input_all in
+    let ok = code = 2 && contains errors "Fatal error: exception Division_by_zero" in
+    if ok
+    then print_endline "division by zero: exit code 2 and the OCaml message"
+    else Format.printf "FAIL division by zero: exit code %d, stderr %S@." code errors;
+    ok
 ;;
 
 (* ---------- hand-written cases ---------- *)
@@ -196,6 +227,8 @@ let unit_cases =
     ; "mul", "let f a b = a * b", [ -6; 7 ]
     ; "div", "let f a b = a / b", [ 17; 5 ]
     ; "div negative", "let f a b = a / b", [ -7; 2 ]
+    ; "div by constant", "let f a = a / 3", [ -10 ]
+    ; "div of constant", "let f a = 100 / a", [ 7 ]
     ; "unary minus", "let f a = - a", [ 9 ]
     ; "double minus", "let f a = - (- a)", [ 9 ]
     ; "minus of expression", "let f a b = - (a * b)", [ 3; 4 ]
@@ -378,7 +411,7 @@ let report case asm actual expected =
     asm
 ;;
 
-let check cases =
+let check ~docker cases =
   (* Cases the interpreter rejects (division by zero) are skipped, and so are
      the ones where ANF reduced [fun p q -> ext2 p q] to [ext2]: [f] then has
      no parameters and cannot be called with the arguments. *)
@@ -408,7 +441,7 @@ let check cases =
   let functions =
     List.map (fun (case, _, code) -> Result.value code ~default:[], case.args) compiled
   in
-  match errors, run_on_qemu functions with
+  match errors, run_on_qemu ~docker functions with
   | _ :: _, _ ->
     List.iter print_endline errors;
     false
@@ -450,15 +483,25 @@ let print_asm () =
     (Anf.of_program program)
 ;;
 
-let () =
-  match Array.to_list Sys.argv with
-  | [ _; "asm" ] -> print_asm ()
-  | _ when not (toolchain_available ()) ->
-    print_endline "skipped: riscv64-linux-gnu-gcc or qemu-riscv64 not found"
-  | _ ->
+let run ~docker =
+  if (not docker) && not (toolchain_available ())
+  then print_endline "skipped: riscv64-linux-gnu-gcc or qemu-riscv64 not found"
+  else (
     let seed = Random.State.bits (Random.State.make_self_init ()) in
     Format.printf "random seed: %d@." seed;
     let rand = Random.State.make [| seed |] in
     let random = List.init 500 (fun i -> Gen.generate1 ~rand (gen_case i)) in
-    if not (check (unit_cases @ random)) then exit 1
+    let results = check ~docker (unit_cases @ random) in
+    let division = check_division_by_zero ~docker in
+    if not (results && division) then exit 1)
+;;
+
+let () =
+  match Array.to_list Sys.argv with
+  | [ _; "asm" ] -> print_asm ()
+  | [ _ ] | [ _; "--runner"; "local" ] -> run ~docker:false
+  | [ _; "--runner"; "docker" ] -> run ~docker:true
+  | _ ->
+    prerr_endline "usage: riscv_tests.exe [asm | --runner local|docker]";
+    exit 2
 ;;

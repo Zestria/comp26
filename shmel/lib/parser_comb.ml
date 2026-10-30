@@ -33,7 +33,7 @@ let is_ident_char = function
   | _ -> false
 ;;
 
-let keywords = [ "if"; "then"; "else"; "let"; "rec"; "in"; "fun" ]
+let keywords = [ "if"; "then"; "else"; "let"; "rec"; "in"; "fun"; "and" ]
 
 type error = [ `Parsing_error of string ]
 
@@ -186,22 +186,30 @@ let make_parser ~extended =
         ; cmp
         ])
   in
-  (* A program may start with an expression; the other items are declarations.
-     A [let] followed by [in] is an expression. *)
+  (* A program may start with an expression; the other items are declarations,
+     as in OCaml an expression may also follow [;;]. A [let] followed by [in]
+     is an expression. *)
   let first_item =
     binding expr
     >>= (fun b ->
     option (declaration b) (keyword "in" *> expr >>| fun e -> Ast.DExpr (let_in b e)))
     <|> (expr >>| fun e -> Ast.DExpr e)
   in
+  let separators = many (spaces *> string ";;") in
+  let item =
+    many1 (spaces *> string ";;") *> first_item <|> (binding expr >>| declaration)
+  in
   let program =
     lift2
       (fun first rest -> Option.to_list first @ rest)
       (option None (first_item >>| Option.some))
-      (many (binding expr >>| declaration))
+      (many item)
+    <* separators
   in
   option None (expr >>| Option.some), program >>| Option.some
 ;;
+
+let and_not_supported = "let ... and ... is not supported"
 
 let syntax_error text offset =
   let line, column =
@@ -211,7 +219,13 @@ let syntax_error text offset =
       (1, 1)
       (String.sub text 0 offset)
   in
-  Printf.sprintf "syntax error at line %d, column %d" line column
+  let at_and =
+    offset + 3 <= String.length text
+    && String.equal (String.sub text offset 3) "and"
+    && not (offset + 3 < String.length text && is_ident_char text.[offset + 3])
+  in
+  let message = if at_and then and_not_supported else "syntax error" in
+  Printf.sprintf "%s at line %d, column %d" message line column
 ;;
 
 (* Parses as much as possible; if something is left, the error points to it. *)

@@ -1,9 +1,94 @@
 (test
  (name riscv_tests)
+ (modules riscv_tests)
  (package shmel)
  (libraries qcheck shmel.Lib shmel.Middleend shmel.Backend)
- (deps harness.c))
+ (deps
+  harness.c
+  run_riscv.sh
+  (env_var SHMEL_QEMU_TIMEOUT)))
+
+(test
+ (name closure_layout_tests)
+ (modules closure_layout_tests)
+ (package shmel)
+ (libraries shmel.Backend))
+
+(test
+ (name calls_tests)
+ (modules calls_tests)
+ (package shmel)
+ (libraries shmel.Backend shmel.Middleend))
+
+(test
+ (name calls_integration_tests)
+ (modules calls_integration_tests)
+ (package shmel)
+ (libraries qcheck shmel.Lib shmel.Middleend shmel.Backend)
+ (deps
+  run_riscv.sh
+  (env_var RISCV_PKG_CONFIG_LIBDIR)
+  (env_var SHMEL_QEMU_TIMEOUT)
+  ../../backend/closure_runtime.h
+  ../../backend/closure_runtime.c))
+
+(test
+ (name program_tests)
+ (modules program_tests)
+ (package shmel)
+ (libraries shmel.Lib shmel.Middleend)
+ (deps
+  ../../compiler.exe
+  fac_cps.ml
+  fib_cps.ml
+  run_riscv.sh
+  (env_var RISCV_PKG_CONFIG_LIBDIR)
+  (env_var SHMEL_QEMU_TIMEOUT)
+  ../../backend/closure_runtime.h
+  ../../backend/closure_runtime.c
+  ../../backend/print_runtime.c))
 
 (cram
  (package shmel)
- (deps riscv_tests.exe))
+ (deps riscv_tests.exe ../../compiler.exe))
+
+(rule
+ (alias runtest)
+ (package shmel)
+ (deps
+  check_closure_runtime.sh
+  run_riscv.sh
+  (env_var RISCV_PKG_CONFIG_LIBDIR)
+  (env_var SHMEL_QEMU_TIMEOUT)
+  closure_runtime_tests.c
+  ../../backend/closure_runtime.h
+  ../../backend/closure_runtime.c)
+ (action
+  (run sh %{dep:check_closure_runtime.sh})))
+
+(rule
+ (alias runtest-docker)
+ (package shmel)
+ (locks docker-riscv)
+ (deps
+  (universe)
+  riscv_tests.exe
+  calls_integration_tests.exe
+  program_tests.exe
+  ../../compiler.exe
+  fac_cps.ml
+  fib_cps.ml
+  harness.c
+  Dockerfile
+  run_riscv.sh
+  docker_runner.sh
+  closure_runtime_tests.c
+  ../../backend/closure_runtime.h
+  ../../backend/closure_runtime.c
+  ../../backend/print_runtime.c)
+ (action
+  (progn
+   (run ./riscv_tests.exe --runner docker)
+   (run ./calls_integration_tests.exe --runner docker)
+   (run ./program_tests.exe --runner docker)
+   (run sh docker_runner.sh runtime))))
