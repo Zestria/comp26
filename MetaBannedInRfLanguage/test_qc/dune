@@ -27,3 +27,16 @@
   metabannedinrflanguage_frontend
   metabannedinrflanguage_middleend
   metabannedinrflanguage_typed_gen))
+
+(test
+ (name test_codegen)
+ (package MetaBannedInRfLanguage)
+ (modules test_codegen)
+ (libraries
+  unix
+  qcheck
+  metabannedinrflanguage_frontend
+  metabannedinrflanguage_middleend
+  metabannedinrflanguage_backend
+  metabannedinrflanguage_typed_gen)
+ (deps ../tests/runtime_riscv.o))

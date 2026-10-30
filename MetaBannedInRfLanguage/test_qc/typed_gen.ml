@@ -39,7 +39,8 @@ let rec default_expr = function
   | TBool -> Ast.EConst (Ast.CBool false)
   | TUnit -> Ast.EConst Ast.CUnit
   | TFun (_, t2) -> Ast.EFun (Ast.PAny, default_expr t2)
-  | TTuple (t1, t2, rest) -> Ast.ETuple (default_expr t1, default_expr t2, List.map default_expr rest)
+  | TTuple (t1, t2, rest) ->
+    Ast.ETuple (default_expr t1, default_expr t2, List.map default_expr rest)
 ;;
 
 let vars_of_type (ctx : ctx) ty =
@@ -70,7 +71,9 @@ let rec gen_expr (ctx : ctx) ty n : Ast.expression Gen.t =
   let applications =
     List.map
       (fun (name, targ) ->
-         Gen.map (fun arg -> Ast.EApply (Ast.EIdent name, arg)) (gen_expr ctx targ (n / 2)))
+         Gen.map
+           (fun arg -> Ast.EApply (Ast.EIdent name, arg))
+           (gen_expr ctx targ (n / 2)))
       (funs_returning ctx ty)
   in
   let if_gen =
@@ -114,7 +117,9 @@ let rec gen_expr (ctx : ctx) ty n : Ast.expression Gen.t =
     | TFun (t1, t2) ->
       let param = fresh_name ctx in
       let plain =
-        Gen.map (fun body -> Ast.EFun (Ast.PVar param, body)) (gen_expr ((param, t1) :: ctx) t2 (n / 2))
+        Gen.map
+          (fun body -> Ast.EFun (Ast.PVar param, body))
+          (gen_expr ((param, t1) :: ctx) t2 (n / 2))
       in
       let recursive : Ast.expression Gen.t =
         fun st ->
@@ -138,7 +143,9 @@ let rec gen_expr (ctx : ctx) ty n : Ast.expression Gen.t =
       ]
   in
   let candidates =
-    leaves @ vars @ if (n <= 0) then [] else applications @ [ if_gen; let_gen ] @ type_specific
+    leaves
+    @ vars
+    @ if n <= 0 then [] else applications @ [ if_gen; let_gen ] @ type_specific
   in
   match candidates with
   | [] -> default_expr ty
@@ -152,25 +159,91 @@ let gen_structure_item (ctx : ctx) name ty n : Ast.structure_item Gen.t =
     let rec_ctx = (name, ty) :: ctx in
     let param = fresh_name rec_ctx in
     let body = gen_expr ((param, t1) :: rec_ctx) t2 n st in
-    Ast.SValue (Ast.Rec, { Ast.vb_pat = Ast.PVar name; vb_expr = Ast.EFun (Ast.PVar param, body) }, [])
+    Ast.SValue
+      ( Ast.Rec
+      , { Ast.vb_pat = Ast.PVar name; vb_expr = Ast.EFun (Ast.PVar param, body) }
+      , [] )
   | _ ->
     let expr = gen_expr ctx ty n st in
     Ast.SValue (Ast.NonRec, { Ast.vb_pat = Ast.PVar name; vb_expr = expr }, [])
 ;;
 
-let gen_structure : Ast.structure Gen.t =
+let gen_typed_structure =
   fun st ->
   let count = Gen.int_range 1 5 st in
   let rec go (ctx : ctx) i n =
     if n <= 0
-    then []
+    then [], ctx
     else (
       let ty = gen_type 2 st in
       let name = Printf.sprintf "top%d" i in
       let item = gen_structure_item ctx name ty 6 st in
-      item :: go ((name, ty) :: ctx) (i + 1) (n - 1))
+      let rest, ctx = go ((name, ty) :: ctx) (i + 1) (n - 1) in
+      item :: rest, ctx)
   in
   go [] 0 count
 ;;
 
-let arb_structure = QCheck.make ~print:Ast.show_structure gen_structure
+let arb_structure =
+  QCheck.make ~print:Ast.show_structure (Gen.map fst gen_typed_structure)
+;;
+
+(* Reduce a value to an observable integer. Functions are applied; a tuple
+   observation follows a randomly selected field rather than comparing pointers. *)
+let rec observe ctx ty expr depth st =
+  match ty with
+  | TInt -> expr
+  | TBool -> Ast.EIf (expr, Ast.EConst (Ast.CInt 1), Some (Ast.EConst (Ast.CInt 0)))
+  | TUnit ->
+    Ast.ELet
+      (Ast.NonRec, { Ast.vb_pat = Ast.PAny; vb_expr = expr }, [], Ast.EConst (Ast.CInt 0))
+  | TFun (arg_ty, result_ty) ->
+    let arg = gen_expr ctx arg_ty 3 st in
+    observe ctx result_ty (Ast.EApply (expr, arg)) (depth + 1) st
+  | TTuple (first, second, rest) ->
+    let types = first :: second :: rest in
+    let index = Gen.int_bound (List.length types - 1) st in
+    let name = Printf.sprintf "qc_field%d" depth in
+    let patterns =
+      List.mapi (fun i _ -> if i = index then Ast.PVar name else Ast.PAny) types
+    in
+    let pattern =
+      match patterns with
+      | first :: second :: rest -> Ast.PTuple (first, second, rest)
+      | _ -> assert false
+    in
+    let body = observe ctx (List.nth types index) (Ast.EIdent name) (depth + 1) st in
+    Ast.ELet (Ast.NonRec, { Ast.vb_pat = pattern; vb_expr = expr }, [], body)
+;;
+
+let value_item name expr =
+  Ast.SValue (Ast.NonRec, { Ast.vb_pat = Ast.PVar name; vb_expr = expr }, [])
+;;
+
+let observed_structure st =
+  let structure, ctx = gen_typed_structure st in
+  let name, ty = List.hd ctx in
+  let expr = observe ctx ty (Ast.EIdent name) 0 st in
+  structure @ [ value_item "qc_result" expr ], "qc_result"
+;;
+
+let applied_structure st =
+  let structure, ctx = gen_typed_structure st in
+  let fn = gen_expr ctx (TFun (TInt, TFun (TInt, TInt))) 8 st in
+  let first = Ast.EConst (Ast.CInt (Gen.int_range (-20) 20 st)) in
+  let second = Ast.EConst (Ast.CInt (Gen.int_range (-20) 20 st)) in
+  ( structure
+    @ [ value_item "qc_function" fn
+        (* Separate top-level bindings prevent LL from merging these applications. *)
+      ; value_item "qc_partial" (Ast.EApply (Ast.EIdent "qc_function", first))
+      ; value_item "qc_result" (Ast.EApply (Ast.EIdent "qc_partial", second))
+      ]
+  , "qc_result" )
+;;
+
+let observable_arbitrary gen =
+  QCheck.make ~print:(fun (structure, _) -> Pprint.string_of_structure structure) gen
+;;
+
+let arb_observed_structure = observable_arbitrary observed_structure
+let arb_applied_structure = observable_arbitrary applied_structure
