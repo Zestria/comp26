@@ -1,13 +1,25 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, BDSMl contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 type t
 
 (** Stable slots for alpha-renamed parameters/locals. The low end of the frame
     is a reusable outgoing argument/argv area, followed by two temporaries,
     locals, and saved [ra]. [sp] stays 16-byte aligned. *)
-val create : BDSMl_frontend.Ast.pattern list -> BDSMl_middleend.Anf.Anf_ast.aexpr list -> t
+val create
+  :  BDSMl_frontend.Ast.pattern list
+  -> BDSMl_middleend.Anf.Anf_ast.aexpr list
+  -> t
+
 val size : t -> int
 val slot : t -> string -> int
 val callee_slot : t -> int
 val operand_slot : t -> int
 val argument_offset : int -> int
-val prologue : Assembly.Asm.buffer -> t -> BDSMl_frontend.Ast.pattern list -> unit
-val epilogue : Assembly.Asm.buffer -> t -> unit
+val prologue : t -> BDSMl_frontend.Ast.pattern list -> unit Assembly.Asm.code
+val epilogue : t -> unit Assembly.Asm.code
