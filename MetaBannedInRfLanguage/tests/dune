@@ -8,3 +8,160 @@
 (cram
  (package MetaBannedInRfLanguage)
  (deps ../driver/compiler.exe ./interp_check.exe ../backend/runtime.c))
+
+(rule
+ (targets runtime_riscv.o)
+ (deps ../backend/runtime.c)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   riscv64-linux-gnu-gcc
+   -march=rv64gc
+   -O2
+   -Wall
+   -Wextra
+   -Werror
+   -c
+   %{dep:../backend/runtime.c}
+   -o
+   %{targets})))
+
+(rule
+ (targets riscv_program.s)
+ (deps ../driver/compiler.exe riscv_program.ml)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   %{dep:../driver/compiler.exe}
+   --stop-after
+   riscv
+   -o
+   %{targets}
+   %{dep:riscv_program.ml})))
+
+(rule
+ (targets riscv_program.o)
+ (deps riscv_program.s)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   riscv64-linux-gnu-as
+   -march=rv64gc
+   %{dep:riscv_program.s}
+   -o
+   %{targets})))
+
+(rule
+ (targets riscv_program.exe)
+ (deps riscv_program.o runtime_riscv.o)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   riscv64-linux-gnu-gcc
+   %{dep:riscv_program.o}
+   %{dep:runtime_riscv.o}
+   -o
+   %{targets})))
+
+(rule
+ (alias runtest)
+ (deps riscv_program.exe)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (with-accepted-exit-codes
+   0
+   (run
+    qemu-riscv64
+    -L
+    /usr/riscv64-linux-gnu
+    -cpu
+    rv64
+    %{dep:riscv_program.exe}))))
+
+(rule
+ (targets riscv_failure.s)
+ (deps ../driver/compiler.exe riscv_failure.ml)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   %{dep:../driver/compiler.exe}
+   --stop-after
+   riscv
+   -o
+   %{targets}
+   %{dep:riscv_failure.ml})))
+
+(rule
+ (targets riscv_failure.o)
+ (deps riscv_failure.s)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   riscv64-linux-gnu-as
+   -march=rv64gc
+   %{dep:riscv_failure.s}
+   -o
+   %{targets})))
+
+(rule
+ (targets riscv_failure.exe)
+ (deps riscv_failure.o runtime_riscv.o)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (run
+   riscv64-linux-gnu-gcc
+   %{dep:riscv_failure.o}
+   %{dep:runtime_riscv.o}
+   -o
+   %{targets})))
+
+(rule
+ (alias runtest)
+ (deps riscv_failure.exe)
+ (enabled_if
+  (and
+   %{bin-available:riscv64-linux-gnu-gcc}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:qemu-riscv64}))
+ (action
+  (with-accepted-exit-codes
+   1
+   (run
+    qemu-riscv64
+    -L
+    /usr/riscv64-linux-gnu
+    -cpu
+    rv64
+    %{dep:riscv_failure.exe}))))

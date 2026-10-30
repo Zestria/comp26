@@ -83,6 +83,82 @@ Nested refutable patterns fall through to later cases without losing fields.
   $ run patterns
   42-142
 
+A tuple match checks fields from left to right and selects the first matching
+case. The variable case must handle the value rejected by the constant case.
+
+  $ cat > cases.ml <<EOF
+  > let choose triple = match triple with
+  >   | (true, 0, x) -> x
+  >   | (true, n, x) -> n + x
+  >   | (false, _, _) -> -1
+  > ;;
+  > let () = print_int (choose (true, 0, 42));;
+  > let () = print_int (choose (true, 20, 22));;
+  > let () = print_int (choose (false, 0, 42))
+  > EOF
+  $ compile cases
+  $ run cases
+  4242-1
+  $ ../driver/compiler.exe -parsing menhir --stop-after riscv -o cases_menhir.s cases.ml
+  $ riscv64-linux-gnu-gcc -static cases_menhir.s runtime.o -o cases_menhir.exe
+  $ run cases_menhir
+  4242-1
+
+A wildcard can match the whole tuple after a more specific case fails.
+
+  $ cat > wildcard.ml <<EOF
+  > let choose pair = match pair with
+  >   | (0, x) -> x
+  >   | _ -> 42
+  > ;;
+  > let () = print_int (choose (0, 7));;
+  > let () = print_int (choose (1, 99))
+  > EOF
+  $ compile wildcard
+  $ run wildcard
+  742
+
+Names bound in different nested patterns may occupy different fields. They
+shadow the function parameter only inside the selected match branch.
+
+  $ cat > match_scope.ml <<EOF
+  > let choose x pair =
+  >   let result = match pair with
+  >     | (0, (x, y)) -> x - y
+  >     | (_, (y, x)) -> x - y
+  >   in result + x
+  > ;;
+  > let () = print_int (choose 10 (0, (40, 8)));;
+  > let () = print_int (choose 10 (1, (8, 40)))
+  > EOF
+  $ compile match_scope
+  $ run match_scope
+  4242
+
+The function syntax uses the same tuple matching rules.
+
+  $ cat > function_cases.ml <<EOF
+  > let choose = function | (0, x) -> x | (_, x) -> x + 1;;
+  > let () = print_int (choose (0, 42));;
+  > let () = print_int (choose (1, 41))
+  > EOF
+  $ compile function_cases
+  $ run function_cases
+  4242
+
+An incomplete explicit match fails when a nested constant does not match.
+It must neither return a field from the rejected case nor run the continuation.
+
+  $ cat > match_failure.ml <<EOF
+  > let choose pair = match pair with | (0, (true, x)) -> x;;
+  > let () = print_int (choose (0, (false, 42)));;
+  > let () = print_int 99
+  > EOF
+  $ compile match_failure
+  $ qemu-riscv64 ./match_failure.exe
+  match failure: no case matched
+  [1]
+
 Equality compares contents of separately allocated nested tuples. It also
 works through an operator value and a partially applied operator closure.
 
