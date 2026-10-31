@@ -186,6 +186,6 @@ Printer: negative numbers, operators as values, match failure, top-level express
 
 The printed ANF is read back the same by both parsers
 
-  $ ../driver/compiler.exe -parsing topdown print_anf.ml > topdown.txt
-  $ ../driver/compiler.exe -parsing menhir print_anf.ml > menhir.txt
+  $ ../driver/compiler.exe --stop-after parsing -parsing topdown print_anf.ml > topdown.txt
+  $ ../driver/compiler.exe --stop-after parsing -parsing menhir print_anf.ml > menhir.txt
   $ diff topdown.txt menhir.txt

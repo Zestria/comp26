@@ -45,6 +45,6 @@ CPS factorial
 
 Both parsers produce the same AST
 
-  $ ../driver/compiler.exe -parsing topdown fac_cps.ml > topdown.txt
-  $ ../driver/compiler.exe -parsing menhir fac_cps.ml > menhir.txt
+  $ ../driver/compiler.exe --stop-after parsing -parsing topdown fac_cps.ml > topdown.txt
+  $ ../driver/compiler.exe --stop-after parsing -parsing menhir fac_cps.ml > menhir.txt
   $ diff topdown.txt menhir.txt

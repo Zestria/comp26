@@ -63,6 +63,6 @@ CPS fibonacci
 
 Both parsers produce the same AST
 
-  $ ../driver/compiler.exe -parsing topdown fib_cps.ml > topdown.txt
-  $ ../driver/compiler.exe -parsing menhir fib_cps.ml > menhir.txt
+  $ ../driver/compiler.exe --stop-after parsing -parsing topdown fib_cps.ml > topdown.txt
+  $ ../driver/compiler.exe --stop-after parsing -parsing menhir fib_cps.ml > menhir.txt
   $ diff topdown.txt menhir.txt
