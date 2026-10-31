@@ -14,6 +14,10 @@
 type t
 
 val arbitrary : t QCheck.arbitrary
+
+(** The same independent generator and oracle, restricted to integer results. *)
+val arbitrary_int : t QCheck.arbitrary
+
 val source : t -> string
 val expected : t -> string
 val size : t -> int

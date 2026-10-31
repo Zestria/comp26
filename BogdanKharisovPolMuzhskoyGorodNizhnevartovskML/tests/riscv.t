@@ -1,12 +1,13 @@
 End-to-end regression tests for the RISC-V 64 backend.  Every program is
-compiled by the compiler, assembled and linked against the runtime by
-riscv64-linux-gnu-gcc and executed under qemu-riscv64, with both stdout and
-the exit code checked.  The test runs the real toolchain with no guards,
-so a missing assembler or emulator fails it loudly.  Expected outputs were
-cross-checked against the OCaml 5.5.1 toplevel.
+compiled by the compiler, assembled and linked with riscv64-linux-gnu-gcc
+against runtime/runtime.c and run under qemu-riscv64, each run bounded
+by timeout --kill-after=1s 10 so a runaway program fails instead of
+hanging, with both stdout and the exit code checked.  Expected outputs
+were checked against the OCaml toplevel.  riscv64-linux-gnu-gcc,
+qemu-riscv64 and coreutils timeout must be installed; the test fails
+otherwise.
 
-A tiny CPS factorial compiles to compact assembly, one code label per
-lifted function and no runtime helpers for arithmetic.
+The first case also snapshots the assembly for a small CPS factorial.
 
   $ cat > fac.ml <<'EOF'
   > let rec fact n k = if n = 0 then k 1 else fact (n - 1) (fun v -> k (n * v));;
@@ -138,7 +139,7 @@ lifted function and no runtime helpers for arithmetic.
 
   $ ../compiler.exe fac.ml -o fac.s || exit $?
   $ riscv64-linux-gnu-gcc -static fac.s ../runtime/runtime.c -o fac.bin || exit $?
-  $ qemu-riscv64 ./fac.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./fac.bin && echo " exit=0" || echo " exit=$?"
   120 exit=0
 
 CPS factorial for several inputs.
@@ -153,7 +154,7 @@ CPS factorial for several inputs.
   > EOF
   $ ../compiler.exe cps_fact.ml -o cps_fact.s || exit $?
   $ riscv64-linux-gnu-gcc -static cps_fact.s ../runtime/runtime.c -o cps_fact.bin || exit $?
-  $ qemu-riscv64 ./cps_fact.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cps_fact.bin && echo " exit=0" || echo " exit=$?"
   1112036288002432902008176640000 exit=0
 
 CPS fibonacci for several inputs.
@@ -167,7 +168,7 @@ CPS fibonacci for several inputs.
   > EOF
   $ ../compiler.exe cps_fib.ml -o cps_fib.s || exit $?
   $ riscv64-linux-gnu-gcc -static cps_fib.s ../runtime/runtime.c -o cps_fib.bin || exit $?
-  $ qemu-riscv64 ./cps_fib.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cps_fib.bin && echo " exit=0" || echo " exit=$?"
   01556765 exit=0
 
 Closures capture free variables, partial application returns a closure,
@@ -188,7 +189,7 @@ and over-application of a known-arity function applies the result again.
   > EOF
   $ ../compiler.exe closures.ml -o closures.s || exit $?
   $ riscv64-linux-gnu-gcc -static closures.s ../runtime/runtime.c -o closures.bin || exit $?
-  $ qemu-riscv64 ./closures.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./closures.bin && echo " exit=0" || echo " exit=$?"
   2030442310 exit=0
 
 Functions and primitives are first-class values.
@@ -201,7 +202,7 @@ Functions and primitives are first-class values.
   > EOF
   $ ../compiler.exe closure_as_value.ml -o closure_as_value.s || exit $?
   $ riscv64-linux-gnu-gcc -static closure_as_value.s ../runtime/runtime.c -o closure_as_value.bin || exit $?
-  $ qemu-riscv64 ./closure_as_value.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./closure_as_value.bin && echo " exit=0" || echo " exit=$?"
   421 exit=0
 
 A generic apply over-applies a nine-argument function by one argument.
@@ -213,7 +214,7 @@ A generic apply over-applies a nine-argument function by one argument.
   > EOF
   $ ../compiler.exe over.ml -o over.s || exit $?
   $ riscv64-linux-gnu-gcc -static over.s ../runtime/runtime.c -o over.bin || exit $?
-  $ qemu-riscv64 ./over.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./over.bin && echo " exit=0" || echo " exit=$?"
   55 exit=0
 
 A captured primitive is applied partially and destructured from a tuple.
@@ -225,7 +226,7 @@ A captured primitive is applied partially and destructured from a tuple.
   > EOF
   $ ../compiler.exe prim_capture.ml -o prim_capture.s || exit $?
   $ riscv64-linux-gnu-gcc -static prim_capture.s ../runtime/runtime.c -o prim_capture.bin || exit $?
-  $ qemu-riscv64 ./prim_capture.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./prim_capture.bin && echo " exit=0" || echo " exit=$?"
   36 exit=0
 
 Nine arguments: a direct call, a partial application and an unknown callee.
@@ -240,7 +241,7 @@ Nine arguments: a direct call, a partial application and an unknown callee.
   > EOF
   $ ../compiler.exe args9.ml -o args9.s || exit $?
   $ riscv64-linux-gnu-gcc -static args9.s ../runtime/runtime.c -o args9.bin || exit $?
-  $ qemu-riscv64 ./args9.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./args9.bin && echo " exit=0" || echo " exit=$?"
   454545 exit=0
 
 Twelve arguments: a direct call, a partial application and an unknown callee.
@@ -255,12 +256,14 @@ Twelve arguments: a direct call, a partial application and an unknown callee.
   > EOF
   $ ../compiler.exe args12.ml -o args12.s || exit $?
   $ riscv64-linux-gnu-gcc -static args12.s ../runtime/runtime.c -o args12.bin || exit $?
-  $ qemu-riscv64 ./args12.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./args12.bin && echo " exit=0" || echo " exit=$?"
   787878 exit=0
 
-Sixteen live values across calls force the register allocator to spill.
+Sixteen constant arguments combined through nested direct calls.  The
+constants fold into the literal arguments of each call, so only the
+intermediate results stay live across calls and they fit in registers.
 
-  $ cat > spills.ml <<'EOF'
+  $ cat > nested.ml <<'EOF'
   > let s x y = x + y;;
   > let a = 1 in
   > let b = 2 in
@@ -280,10 +283,245 @@ Sixteen live values across calls force the register allocator to spill.
   > let p = 16 in
   > print_int (s (s (s (s a b) (s c d)) (s (s e f) (s g h))) (s (s (s (s i j) (s k l)) (s (s m n) (s o p))) 0))
   > EOF
-  $ ../compiler.exe spills.ml -o spills.s || exit $?
-  $ riscv64-linux-gnu-gcc -static spills.s ../runtime/runtime.c -o spills.bin || exit $?
-  $ qemu-riscv64 ./spills.bin && echo " exit=0" || echo " exit=$?"
+  $ ../compiler.exe nested.ml -o nested.s || exit $?
+  $ riscv64-linux-gnu-gcc -static nested.s ../runtime/runtime.c -o nested.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./nested.bin && echo " exit=0" || echo " exit=$?"
   136 exit=0
+
+Twelve values computed at run time by a recursive function stay live
+across calls inside both arms of a branch and are all consumed after the
+join by a Horner-style weighted sum, so a permutation of the values
+cannot hide; that is more than the eleven allocatable registers, so the
+allocator spills the extras to stack slots.
+
+  $ cat > branch_spill.ml <<'EOF'
+  > let rec value x = if x = 0 then 0 else 1 + value (x - 1);;
+  > let busy flag =
+  >   let a = value 1 in
+  >   let b = a + value 2 in
+  >   let c = b + value 3 in
+  >   let d = c + value 4 in
+  >   let e = d + value 5 in
+  >   let f = e + value 6 in
+  >   let g = f + value 7 in
+  >   let h = g + value 8 in
+  >   let i = h + value 9 in
+  >   let j = i + value 10 in
+  >   let k = j + value 11 in
+  >   let l = k + value 12 in
+  >   let m =
+  >     if flag
+  >     then let u = value 13 in let v = u + value 14 in u + v
+  >     else let w = value 15 in let z = w + value 16 in w + z
+  >   in
+  >   (((((((((((a * 3 + b) * 3 + c) * 3 + d) * 3 + e) * 3 + f) * 3 + g) * 3 + h) * 3 + i) * 3 + j) * 3 + k) * 3 + l) * 3 + m;;
+  > print_int (busy true);;
+  > print_int (busy false)
+  > EOF
+  $ ../compiler.exe branch_spill.ml -o branch_spill.s || exit $?
+  $ riscv64-linux-gnu-gcc -static branch_spill.s ../runtime/runtime.c -o branch_spill.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./branch_spill.bin && echo " exit=0" || echo " exit=$?"
+  17935061793512 exit=0
+
+Runtime-computed arguments reach an unknown callee in a permuted order,
+through an exact application, a partial application completed later and
+an over-application; the weighted body makes the argument order affect
+the result.
+
+  $ cat > perm_apply.ml <<'EOF'
+  > let rec value x = if x = 0 then 0 else 1 + value (x - 1);;
+  > let w a b c d e f g h i j k l =
+  >   a + b * 2 + c * 3 + d * 4 + e * 5 + f * 6 + g * 7 + h * 8 + i * 9 + j * 10 + k * 11 + l * 12;;
+  > let u a b c d e f g h i j k l = fun z ->
+  >   a + b * 2 + c * 3 + d * 4 + e * 5 + f * 6 + g * 7 + h * 8 + i * 9 + j * 10 + k * 11 + l * 12 + z * 13;;
+  > let exact h = h (value 2) (value 9) (value 4) (value 11) (value 6) (value 1) (value 8) (value 12) (value 3) (value 10) (value 5) (value 7);;
+  > let part h = h (value 1) (value 2) (value 3) (value 4) (value 5) (value 6) (value 7) (value 8);;
+  > let overap h = h (value 2) (value 9) (value 4) (value 11) (value 6) (value 1) (value 8) (value 12) (value 3) (value 10) (value 5) (value 7) (value 13);;
+  > print_int (exact w);;
+  > print_int (part w (value 9) (value 10) (value 11) (value 12));;
+  > print_int (overap u)
+  > EOF
+  $ ../compiler.exe perm_apply.ml -o perm_apply.s || exit $?
+  $ riscv64-linux-gnu-gcc -static perm_apply.s ../runtime/runtime.c -o perm_apply.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./perm_apply.bin && echo " exit=0" || echo " exit=$?"
+  530650699 exit=0
+
+A closure capturing 300 runtime values; the last environment slots lie
+beyond the 12-bit immediate range on both the capturing stores and the
+callee's entry loads.  The program is generated by awk to keep this file
+small.
+
+  $ awk 'BEGIN {
+  >   print "let rec value x = if x = 0 then 0 else 1 + value (x - 1);;";
+  >   printf "let make";
+  >   for (i = 1; i <= 300; i++) printf " a%d", i;
+  >   printf " = fun y -> a1 * 1";
+  >   for (i = 2; i <= 300; i++) printf " + a%d * %d", i, i;
+  >   print " + y * 301;;";
+  >   printf "let clo = make";
+  >   for (i = 1; i <= 300; i++) printf " (value %d)", i;
+  >   print ";;";
+  >   print "print_int (clo (value 301))";
+  > }' > env300.ml
+  $ ../compiler.exe env300.ml -o env300.s || exit $?
+  $ riscv64-linux-gnu-gcc -static env300.s ../runtime/runtime.c -o env300.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./env300.bin && echo " exit=0" || echo " exit=$?"
+  9135651 exit=0
+
+print_int reads a spilled value directly into its argument register and
+travels through an unknown function parameter.
+
+  $ cat > print_paths.ml <<'EOF'
+  > let rec value x = if x = 0 then 0 else 1 + value (x - 1);;
+  > let app f x = f x;;
+  > let show s =
+  >   let a = value 1 in
+  >   let b = a + value 2 in
+  >   let c = b + value 3 in
+  >   let d = c + value 4 in
+  >   let e = d + value 5 in
+  >   let f = e + value 6 in
+  >   let g = f + value 7 in
+  >   let h = g + value 8 in
+  >   let i = h + value 9 in
+  >   let j = i + value 10 in
+  >   let k = j + value 11 in
+  >   let l = k + value 12 in
+  >   let total = a + b + c + d + e + f + g + h + i + j + k + l in
+  >   let p = print_int l in
+  >   total * 1000 + l;;
+  > print_int (show 0);;
+  > app print_int (value 7)
+  > EOF
+  $ ../compiler.exe print_paths.ml -o print_paths.s || exit $?
+  $ riscv64-linux-gnu-gcc -static print_paths.s ../runtime/runtime.c -o print_paths.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./print_paths.bin && echo " exit=0" || echo " exit=$?"
+  783640787 exit=0
+
+Every comparison branches directly on the comparison bit in tail
+position, with the constant operand on the left and on the right,
+including the signed bounds of the 63-bit range.  All sixteen fuse, so
+counting beqz t2, the shape a fused comparison branches with, gives
+seventeen sites together with the helper's own comparison; a
+materialized boolean is instead tested with beq against the false
+immediate, and no comparison in the file has two variable operands,
+whose slow-path test would also be a beqz t2.
+
+  $ cat > cmp_fusion.ml <<'EOF'
+  > let rec value x = if x = 0 then 0 else 1 + value (x - 1);;
+  > let lt_l t = if 1 < t then 10 else 20;;
+  > let lt_r t = if t < 5 then 30 else 40;;
+  > let le_l t = if 1 <= t then 50 else 60;;
+  > let le_r t = if t <= 2 then 70 else 80;;
+  > let gt_l t = if 5 > t then 90 else 100;;
+  > let gt_r t = if t > 1 then 110 else 120;;
+  > let eq_l t = if 3 = t then 130 else 140;;
+  > let eq_r t = if t = 4 then 150 else 160;;
+  > let ne_l t = if 3 <> t then 170 else 180;;
+  > let ne_r t = if t <> 4 then 190 else 200;;
+  > let ge_l t = if 3 >= t then 210 else 220;;
+  > let ge_r t = if t >= 4 then 230 else 240;;
+  > let bmax t = if t < 4611686018427387903 then 1 else 2;;
+  > let bmin t = if t > (-4611686018427387904) then 3 else 4;;
+  > let bemax t = if t = 4611686018427387903 then 5 else 6;;
+  > let bemin t = if t = (-4611686018427387904) then 7 else 8;;
+  > print_int (lt_l (value 3));;
+  > print_int (lt_r (value 3));;
+  > print_int (le_l (value 3));;
+  > print_int (le_r (value 3));;
+  > print_int (gt_l (value 3));;
+  > print_int (gt_r (value 3));;
+  > print_int (eq_l (value 3));;
+  > print_int (eq_r (value 3));;
+  > print_int (ne_l (value 3));;
+  > print_int (ne_r (value 3));;
+  > print_int (ge_l (value 3));;
+  > print_int (ge_r (value 3));;
+  > print_int (bmax (value 9));;
+  > print_int (bmin (value 9));;
+  > print_int (bemax 4611686018427387903);;
+  > print_int (bemin (-4611686018427387904))
+  > EOF
+  $ ../compiler.exe cmp_fusion.ml -o cmp_fusion.s || exit $?
+  $ riscv64-linux-gnu-gcc -static cmp_fusion.s ../runtime/runtime.c -o cmp_fusion.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cmp_fusion.bin && echo " exit=0" || echo " exit=$?"
+  10305080901101301601801902102401357 exit=0
+  $ grep -c 'beqz	t2' cmp_fusion.s
+  17
+
+Inside a let-bound branch the inner comparisons fuse in nested
+position while twelve values stay live; the outer comparison
+materializes its boolean, since its if is bound by let, and is tested
+with beq against the false immediate.  The two fused sites plus the
+helper's own comparison are the three beqz t2 sites of the file.
+
+  $ cat > cmp_nested.ml <<'EOF'
+  > let rec value x = if x = 0 then 0 else 1 + value (x - 1);;
+  > let press s =
+  >   let a = value 1 in
+  >   let b = a + value 2 in
+  >   let c = b + value 3 in
+  >   let d = c + value 4 in
+  >   let e = d + value 5 in
+  >   let f = e + value 6 in
+  >   let g = f + value 7 in
+  >   let h = g + value 8 in
+  >   let i = h + value 9 in
+  >   let j = i + value 10 in
+  >   let k = j + value 11 in
+  >   let l = k + value 12 in
+  >   let r =
+  >     if l < 900
+  >     then (if 1 < b then a * 100 + b else b * 100 + a)
+  >     else (if 1 > c then c * 3 else a + c)
+  >   in
+  >   r * 2 + a + b + c + d + e + f + g + h + i + j + k + l;;
+  > print_int (press 0)
+  > EOF
+  $ ../compiler.exe cmp_nested.ml -o cmp_nested.s || exit $?
+  $ riscv64-linux-gnu-gcc -static cmp_nested.s ../runtime/runtime.c -o cmp_nested.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cmp_nested.bin && echo " exit=0" || echo " exit=$?"
+  570 exit=0
+  $ grep -c 'beqz	t2' cmp_nested.s
+  3
+
+The comparison result is captured by a closure or stored in a recursive
+tuple, so the branch must not fuse and the boolean stays materialized;
+only the helper's own comparison fuses, leaving a single beqz t2 site
+in the file.
+
+  $ cat > cmp_nofuse.ml <<'EOF'
+  > let rec value x = if x = 0 then 0 else 1 + value (x - 1);;
+  > let cap t = let c = t < 5 in if c then (fun z -> if c then z else 20) 10 else 30;;
+  > print_int (cap (value 3));;
+  > print_int (cap (value 9));;
+  > let userec t =
+  >   let c = t < 5 in
+  >   if c then (let rec p = (c, 1) in let (x, y) = p in if x then 14 else 15) else 16;;
+  > print_int (userec (value 3));;
+  > print_int (userec (value 9))
+  > EOF
+  $ ../compiler.exe cmp_nofuse.ml -o cmp_nofuse.s || exit $?
+  $ riscv64-linux-gnu-gcc -static cmp_nofuse.s ../runtime/runtime.c -o cmp_nofuse.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cmp_nofuse.bin && echo " exit=0" || echo " exit=$?"
+  10301416 exit=0
+  $ grep -c 'beqz	t2' cmp_nofuse.s
+  1
+
+Boundary literals, an underscored literal, and the dynamic negation of
+the smallest integer, which wraps like in OCaml.
+
+  $ cat > literals.ml <<'EOF'
+  > print_int 4611686018427387903;;
+  > print_int (-4611686018427387904);;
+  > print_int 1_000_000;;
+  > let m = -4611686018427387904 in print_int (- m);;
+  > let m = -4611686018427387904 in print_int (~- m)
+  > EOF
+  $ ../compiler.exe literals.ml -o literals.s || exit $?
+  $ riscv64-linux-gnu-gcc -static literals.s ../runtime/runtime.c -o literals.bin || exit $?
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./literals.bin && echo " exit=0" || echo " exit=$?"
+  4611686018427387903-46116860184273879041000000-4611686018427387904-4611686018427387904 exit=0
 
 A function of 300 parameters needs an outgoing argument area larger than
 2 KiB; the program is generated by awk to keep this file small.
@@ -291,7 +529,7 @@ A function of 300 parameters needs an outgoing argument area larger than
   $ awk 'BEGIN { printf "let f"; for (i = 1; i <= 300; i++) printf " p%d", i; printf " = p1 + p2 + p300;;\nprint_int (f"; for (i = 1; i <= 300; i++) printf " %d", i; printf ")\n" }' > params300.ml
   $ ../compiler.exe params300.ml -o params300.s || exit $?
   $ riscv64-linux-gnu-gcc -static params300.s ../runtime/runtime.c -o params300.bin || exit $?
-  $ qemu-riscv64 ./params300.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./params300.bin && echo " exit=0" || echo " exit=$?"
   303 exit=0
 
 Constants around the 12-bit immediate boundary, the 63-bit integer bounds
@@ -314,7 +552,7 @@ and wrap-around of addition, division, negation and multiplication.
   > EOF
   $ ../compiler.exe constants.ml -o constants.s || exit $?
   $ riscv64-linux-gnu-gcc -static constants.s ../runtime/runtime.c -o constants.bin || exit $?
-  $ qemu-riscv64 ./constants.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./constants.bin && echo " exit=0" || echo " exit=$?"
   4611686018427387903-4611686018427387904-4611686018427387904-4611686018427387904020472048-2049404840004094-20 exit=0
 
 Arguments and tuple fields are evaluated right to left.
@@ -328,7 +566,7 @@ Arguments and tuple fields are evaluated right to left.
   > EOF
   $ ../compiler.exe order.ml -o order.s || exit $?
   $ riscv64-linux-gnu-gcc -static order.s ../runtime/runtime.c -o order.bin || exit $?
-  $ qemu-riscv64 ./order.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./order.bin && echo " exit=0" || echo " exit=$?"
   210213 exit=0
 
 A shadowed print_int is an ordinary function and prints nothing.
@@ -340,7 +578,7 @@ A shadowed print_int is an ordinary function and prints nothing.
   > EOF
   $ ../compiler.exe shadow.ml -o shadow.s || exit $?
   $ riscv64-linux-gnu-gcc -static shadow.s ../runtime/runtime.c -o shadow.bin || exit $?
-  $ qemu-riscv64 ./shadow.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./shadow.bin && echo " exit=0" || echo " exit=$?"
    exit=0
 
 Division by zero, modulus zero and comparing functions are fatal errors
@@ -351,7 +589,7 @@ with exit code 2; 2>&1 shows the message of the runtime.
   > EOF
   $ ../compiler.exe div0.ml -o div0.s || exit $?
   $ riscv64-linux-gnu-gcc -static div0.s ../runtime/runtime.c -o div0.bin || exit $?
-  $ qemu-riscv64 ./div0.bin 2>&1 && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./div0.bin 2>&1 && echo " exit=0" || echo " exit=$?"
   Fatal error: exception Division_by_zero
    exit=2
 
@@ -360,7 +598,7 @@ with exit code 2; 2>&1 shows the message of the runtime.
   > EOF
   $ ../compiler.exe mod0.ml -o mod0.s || exit $?
   $ riscv64-linux-gnu-gcc -static mod0.s ../runtime/runtime.c -o mod0.bin || exit $?
-  $ qemu-riscv64 ./mod0.bin 2>&1 && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./mod0.bin 2>&1 && echo " exit=0" || echo " exit=$?"
   Fatal error: exception Division_by_zero
    exit=2
 
@@ -369,7 +607,7 @@ with exit code 2; 2>&1 shows the message of the runtime.
   > EOF
   $ ../compiler.exe cmp_eq.ml -o cmp_eq.s || exit $?
   $ riscv64-linux-gnu-gcc -static cmp_eq.s ../runtime/runtime.c -o cmp_eq.bin || exit $?
-  $ qemu-riscv64 ./cmp_eq.bin 2>&1 && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cmp_eq.bin 2>&1 && echo " exit=0" || echo " exit=$?"
   Fatal error: exception Invalid_argument("compare: functional value")
    exit=2
 
@@ -381,7 +619,7 @@ reaching the closures, and answers true.
   > EOF
   $ ../compiler.exe cmp_lt.ml -o cmp_lt.s || exit $?
   $ riscv64-linux-gnu-gcc -static cmp_lt.s ../runtime/runtime.c -o cmp_lt.bin || exit $?
-  $ qemu-riscv64 ./cmp_lt.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./cmp_lt.bin && echo " exit=0" || echo " exit=$?"
   1 exit=0
 
 Recursive values: a tuple captures its own address in a back-edge.
@@ -391,7 +629,7 @@ Recursive values: a tuple captures its own address in a back-edge.
   > EOF
   $ ../compiler.exe rec_tuple.ml -o rec_tuple.s || exit $?
   $ riscv64-linux-gnu-gcc -static rec_tuple.s ../runtime/runtime.c -o rec_tuple.bin || exit $?
-  $ qemu-riscv64 ./rec_tuple.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./rec_tuple.bin && echo " exit=0" || echo " exit=$?"
   42 exit=0
 
 A recursive value aliased by a closure.
@@ -401,7 +639,7 @@ A recursive value aliased by a closure.
   > EOF
   $ ../compiler.exe rec_fun.ml -o rec_fun.s || exit $?
   $ riscv64-linux-gnu-gcc -static rec_fun.s ../runtime/runtime.c -o rec_fun.bin || exit $?
-  $ qemu-riscv64 ./rec_fun.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./rec_fun.bin && echo " exit=0" || echo " exit=$?"
   42 exit=0
 
 A recursive scalar computed at run time goes through the rec slot.
@@ -411,7 +649,7 @@ A recursive scalar computed at run time goes through the rec slot.
   > EOF
   $ ../compiler.exe rec_arith.ml -o rec_arith.s || exit $?
   $ riscv64-linux-gnu-gcc -static rec_arith.s ../runtime/runtime.c -o rec_arith.bin || exit $?
-  $ qemu-riscv64 ./rec_arith.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./rec_arith.bin && echo " exit=0" || echo " exit=$?"
   42 exit=0
 
 A discarded self-reference is allowed.
@@ -421,7 +659,7 @@ A discarded self-reference is allowed.
   > EOF
   $ ../compiler.exe rec_discard.ml -o rec_discard.s || exit $?
   $ riscv64-linux-gnu-gcc -static rec_discard.s ../runtime/runtime.c -o rec_discard.bin || exit $?
-  $ qemu-riscv64 ./rec_discard.bin && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./rec_discard.bin && echo " exit=0" || echo " exit=$?"
   42 exit=0
 
 A recursive initializer that divides by zero dies at definition time.
@@ -431,6 +669,6 @@ A recursive initializer that divides by zero dies at definition time.
   > EOF
   $ ../compiler.exe rec_div0.ml -o rec_div0.s || exit $?
   $ riscv64-linux-gnu-gcc -static rec_div0.s ../runtime/runtime.c -o rec_div0.bin || exit $?
-  $ qemu-riscv64 ./rec_div0.bin 2>&1 && echo " exit=0" || echo " exit=$?"
+  $ timeout --kill-after=1s 10 qemu-riscv64 ./rec_div0.bin 2>&1 && echo " exit=0" || echo " exit=$?"
   Fatal error: exception Division_by_zero
    exit=2

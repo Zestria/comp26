@@ -92,3 +92,10 @@
  (modules test_regalloc)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries bkml_frontend bkml_middleend bkml_backend))
+
+(test
+ (name test_backend_random)
+ (modules test_backend_random typed_terms)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries bkml_frontend bkml_middleend bkml_backend qcheck unix)
+ (deps ../runtime/runtime.c))

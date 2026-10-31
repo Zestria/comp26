@@ -56,6 +56,9 @@ comp26 $ riscv64-linux-gnu-gcc -static program.s BogdanKharisovPolMuzhskoyGorodN
 comp26 $ qemu-riscv64 ./program
 ```
 
+`dune test` runs these steps for its end-to-end tests, so it needs
+`riscv64-linux-gnu-gcc`, `qemu-riscv64` and coreutils `timeout`.
+
 `print_int` prints an integer without a newline; it is an ordinary builtin
 and can be shadowed. Integers are 63-bit and wrap like OCaml's `int`. Integer
 literals are checked during lowering, so every stage after parsing rejects one
