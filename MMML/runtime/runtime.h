@@ -13,7 +13,7 @@ typedef mmml_value (*mmml_code)(const mmml_value *args);
 #define MMML_TRUE UINT64_C(6)
 #define MMML_UNIT UINT64_C(10)
 
-/* The first implementation retains allocated closures until shutdown.
+/* Closures are collected by a conservative mark-sweep GC (see below).
    Initialization is performed by startup.c before generated code runs. */
 void mmml_init(void);
 void mmml_shutdown(void);
@@ -31,5 +31,23 @@ mmml_value mmml_print_int(mmml_value value);
 /* Arity includes captured arguments. Each application supplies one argument. */
 mmml_value mmml_make_closure(mmml_code code, size_t arity);
 mmml_value mmml_apply(mmml_value function, mmml_value argument);
+
+/* ---- Garbage collection ---- */
+
+/* Records the address of a local in the outermost frame (main). The
+   collector conservatively scans the stack between its own frame and this
+   address. Call once, before mmml_init; startup.c does this. */
+void mmml_set_stack_base(const void *outermost);
+
+/* Sets the allocation threshold in bytes (default: 1 MiB). Collection runs
+   from mmml_make_closure before allocating once the threshold is exceeded. */
+void mmml_set_gc_threshold(size_t bytes);
+
+/* Runs a collection immediately: frees every closure unreachable from the
+   stack. May be called from generated assembly (no arguments, no result).
+   Root protocol: every live mmml_value must be stored in stack slots when a
+   runtime call that may collect is made; argument and caller-saved registers
+   are not roots. Closures never move, so stored pointers stay valid. */
+void mmml_collect(void);
 
 #endif

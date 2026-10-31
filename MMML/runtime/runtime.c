@@ -1,5 +1,7 @@
 #include "runtime.h"
+#include "runtime_internal.h"
 
+#include <alloca.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,15 +10,7 @@
 _Static_assert(sizeof(void *) == 8 && sizeof(mmml_value) == 8,
                "MMML runtime requires a 64-bit target");
 
-typedef struct mmml_closure {
-  struct mmml_closure *next;
-  mmml_code code;
-  size_t arity;
-  size_t filled;
-  mmml_value args[];
-} mmml_closure;
-
-static mmml_closure *allocated;
+mmml_closure *mmml_allocated;
 static bool initialized;
 
 _Noreturn void mmml_fail(const char *message) {
@@ -24,22 +18,23 @@ _Noreturn void mmml_fail(const char *message) {
   exit(EXIT_FAILURE);
 }
 
-static void require_init(void) {
+void mmml_require_init(void) {
   if (!initialized) mmml_fail("mmml_init must be called first");
 }
 
 void mmml_init(void) {
   if (initialized) mmml_fail("already initialized");
-  allocated = NULL;
+  mmml_allocated = NULL;
+  mmml_gc_reset();
   initialized = true;
 }
 
 void mmml_shutdown(void) {
-  require_init();
-  while (allocated != NULL) {
-    mmml_closure *next = allocated->next;
-    free(allocated);
-    allocated = next;
+  mmml_require_init();
+  while (mmml_allocated != NULL) {
+    mmml_closure *next = mmml_allocated->next;
+    free(mmml_allocated);
+    mmml_allocated = next;
   }
   initialized = false;
 }
@@ -76,29 +71,32 @@ mmml_value mmml_print_int(mmml_value value) {
 static mmml_closure *closure_of(mmml_value value) {
   if (!mmml_is_closure(value)) mmml_fail("expected closure");
   mmml_closure *candidate = (mmml_closure *)(uintptr_t)value;
-  for (mmml_closure *it = allocated; it != NULL; it = it->next)
+  for (mmml_closure *it = mmml_allocated; it != NULL; it = it->next)
     if (it == candidate) return it;
   mmml_fail("invalid closure");
 }
 
 mmml_value mmml_make_closure(mmml_code code, size_t arity) {
-  require_init();
+  mmml_require_init();
   if (code == NULL || arity == 0) mmml_fail("closure needs code and positive arity");
   if (arity > (SIZE_MAX - sizeof(mmml_closure)) / sizeof(mmml_value))
     mmml_fail("closure too large");
   size_t bytes = sizeof(mmml_closure) + arity * sizeof(mmml_value);
+  mmml_maybe_collect(bytes);
   mmml_closure *object = malloc(bytes);
   if (object == NULL) mmml_fail("out of memory allocating closure");
-  object->next = allocated;
+  mmml_account_allocation(bytes);
+  object->next = mmml_allocated;
   object->code = code;
   object->arity = arity;
   object->filled = 0;
-  allocated = object;
+  object->marked = false;
+  mmml_allocated = object;
   return (mmml_value)(uintptr_t)object;
 }
 
 mmml_value mmml_apply(mmml_value function, mmml_value argument) {
-  require_init();
+  mmml_require_init();
   mmml_closure *old = closure_of(function);
   if (old->filled + 1 < old->arity) {
     mmml_value result = mmml_make_closure(old->code, old->arity);
@@ -109,11 +107,10 @@ mmml_value mmml_apply(mmml_value function, mmml_value argument) {
     return result;
   }
 
-  mmml_value *args = malloc(old->arity * sizeof(*args));
-  if (args == NULL) mmml_fail("out of memory preparing call");
+  /* The buffer lives on the C stack so the conservative collector sees the
+     applied values while the callee runs (a callee may trigger a collection). */
+  mmml_value *args = alloca(old->arity * sizeof(*args));
   memcpy(args, old->args, old->filled * sizeof(*args));
   args[old->filled] = argument;
-  mmml_value result = old->code(args);
-  free(args);
-  return result;
+  return old->code(args);
 }

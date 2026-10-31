@@ -65,7 +65,9 @@ static void test_closures(void) {
   assert(mmml_unbox_int(mmml_apply(fact, id)) == 120);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  (void)argv;
+  mmml_set_stack_base(&argc);
   mmml_init();
   test_values();
   test_closures();
