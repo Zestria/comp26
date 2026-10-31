@@ -106,7 +106,7 @@ type partial =
 let default_partial =
   { p_input_file = None
   ; p_parsing = Topdown
-  ; p_stop_after = Stop_after_parsing
+  ; p_stop_after = Stop_after_riscv
   ; p_output = To_stdout
   ; p_operator_settings = None
   }
