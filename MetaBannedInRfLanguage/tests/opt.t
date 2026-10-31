@@ -37,6 +37,94 @@ or closure allocation, even when combined in one expression.
   $ grep -E '^  (add |div |call |slli |srai )' identity.s
   [1]
 
+Peephole reuses the register saved by the immediately preceding stack store.
+The store itself remains; returning the parameter needs no reload.
+
+  $ grep -A2 '^  ld t0, 0(a0)$' identity.s
+    ld t0, 0(a0)
+    sd t0, -24(fp)
+    mv a0, t0
+
+Squaring a parameter originally reloads its stack slot into both t0 and t1.
+The first load disappears because the store's source is already t0. This
+exposes the second load to the same store, so it becomes a single move.
+The spill stays in place, and the two operands are still decoded separately.
+
+  $ printf 'let square x = x * x\n' > square.ml
+  $ ../driver/compiler.exe --stop-after riscv -o square.s square.ml
+  $ grep -A4 '^  sd t0, -24(fp)$' square.s
+    sd t0, -24(fp)
+    mv t1, t0
+    srai t0, t0, 1
+    srai t1, t1, 1
+    mul a0, t0, t1
+
+A computed value is stored from a0. Its immediately following use in t0
+becomes a move. The later load into t1 remains: this is a local rewrite.
+
+  $ printf 'let fourth x = let squared = x * x in squared * squared\n' > fourth.ml
+  $ ../driver/compiler.exe --stop-after riscv -o fourth.s fourth.ml
+  $ grep -A4 '^  sd a0, -32(fp)$' fourth.s
+    sd a0, -32(fp)
+    mv t0, a0
+    ld t1, -32(fp)
+    srai t0, t0, 1
+    srai t1, t1, 1
+
+Different stack slots must not be confused. After spilling the second
+parameter, returning the first still needs its own load. Returning the
+second parameter can reuse t0. Both stores remain.
+
+  $ cat > slots.ml <<EOF
+  > let first x y = x;;
+  > let second x y = y
+  > EOF
+  $ ../driver/compiler.exe --stop-after riscv -o slots.s slots.ml
+  $ sed -n '/^  sd t0, -32(fp)$/,+1p' slots.s
+    sd t0, -32(fp)
+    ld a0, -24(fp)
+    sd t0, -32(fp)
+    mv a0, t0
+
+Passing a freshly computed value to print_int needs no reload or mv a0, a0.
+After the call the saved value must be loaded again: a0 now contains unit.
+Keeping the original store is necessary for that later use.
+
+  $ printf 'let save x = let y = x * x in let () = print_int y in y\n' > saved.ml
+  $ ../driver/compiler.exe --stop-after riscv -o saved.s saved.ml
+  $ grep -A5 '^  sd a0, -32(fp)$' saved.s
+    sd a0, -32(fp)
+    call print_int
+    # print_int returns void; ML result is tagged unit
+    li a0, 1
+    sd a0, -40(fp)
+    ld a0, -32(fp)
+
+An intervening store prevents forwarding even within the argument buffer.
+Structural equality saves both operands before loading the C arguments.
+
+  $ printf 'let same x y = x = y\n' > heap_equality.ml
+  $ ../driver/compiler.exe --stop-after riscv -o heap_equality.s heap_equality.ml
+  $ grep -A3 '^  sd t0, 0(sp)$' heap_equality.s
+    sd t0, 0(sp)
+    sd t1, 8(sp)
+    ld a0, 0(sp)
+    ld a1, 8(sp)
+
+The jump at the end of the then branch must skip the else branch.
+The next label is its alternative entry, not the jump's destination.
+Both branches retain their own stack loads.
+
+  $ printf 'let choose flag x y = if flag then x else y\n' > branches.ml
+  $ ../driver/compiler.exe --stop-after riscv -o branches.s branches.ml
+  $ sed -n '/^  beq /,/^  ld ra,/p' branches.s | sed '$d'
+    beq a0, t0, .L1
+    ld a0, -32(fp)
+    j .L2
+  .L1:
+    ld a0, -40(fp)
+  .L2:
+
 Division by -1 becomes tagged negation. A known nonzero divisor needs no
 division-by-zero handler; division by a parameter still needs it.
 
