@@ -22,6 +22,7 @@ type t =
   | And
   | Or
   | Not
+  | Print_int
 
 val name : t -> string
 val all : t list

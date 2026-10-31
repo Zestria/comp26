@@ -42,6 +42,7 @@ type error =
 type heap =
   { next : int
   ; nodes : node Address_map.t
+  ; output : string list
   }
 
 and node =
@@ -220,6 +221,8 @@ let comparison predicate a b heap =
   Result.bind (compare_values heap a b) (fun order -> make (Bool (predicate order)) heap)
 ;;
 
+let print text heap = Ok ((), { heap with output = text :: heap.output })
+
 let arithmetic operator a b =
   let* a = integer a in
   let* b = integer b in
@@ -260,6 +263,11 @@ let primitive = function
     unary (fun a ->
       let* a = boolean a in
       make (Bool (not a)))
+  | Print_int ->
+    unary (fun a ->
+      let* a = integer a in
+      let* () = print (string_of_int a) in
+      make Unit)
 ;;
 
 let function_ environment parameters body =
@@ -301,10 +309,14 @@ let rec show ancestors value =
       return ("(" ^ String.concat ", " fields ^ ")")
 ;;
 
-let observe run =
+let observe_with_output run =
   let evaluation =
     let* value = run () in
     show Address_set.empty value
   in
-  Result.map fst (evaluation { next = 0; nodes = Address_map.empty })
+  match evaluation { next = 0; nodes = Address_map.empty; output = [] } with
+  | Ok (value, heap) -> Ok (value, String.concat "" (List.rev heap.output))
+  | Error error -> Error error
 ;;
+
+let observe run = Result.map fst (observe_with_output run)

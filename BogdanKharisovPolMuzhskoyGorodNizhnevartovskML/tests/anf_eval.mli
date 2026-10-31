@@ -10,3 +10,7 @@
 val closed : Middleend.Closure.expression -> (string, Eval_value.error) result
 
 val lifted : Middleend.Lifted.program -> (string, Eval_value.error) result
+
+val lifted_with_output
+  :  Middleend.Lifted.program
+  -> (string * string, Eval_value.error) result

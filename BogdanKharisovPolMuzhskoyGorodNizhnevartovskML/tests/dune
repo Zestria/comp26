@@ -74,3 +74,9 @@
  (modules test_primitive_simplify)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (libraries frontend middleend middleend_test_support qcheck))
+
+(test
+ (name test_print_int)
+ (modules test_print_int)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend middleend_test_support qcheck))

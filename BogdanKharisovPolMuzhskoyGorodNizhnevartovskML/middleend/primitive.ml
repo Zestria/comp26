@@ -22,6 +22,7 @@ type t =
   | And
   | Or
   | Not
+  | Print_int
 
 let name = function
   | Add -> "+"
@@ -39,6 +40,7 @@ let name = function
   | And -> "&&"
   | Or -> "||"
   | Not -> "not"
+  | Print_int -> "print_int"
 ;;
 
 let all =
@@ -57,5 +59,6 @@ let all =
   ; And
   ; Or
   ; Not
+  ; Print_int
   ]
 ;;

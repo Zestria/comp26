@@ -82,7 +82,7 @@ let closed expression =
   Eval_value.observe (fun () -> term function_ generic Id.Map.empty expression)
 ;;
 
-let lifted (program : Lifted.program) =
+let lifted_with observe (program : Lifted.program) =
   let declarations =
     List.fold_left
       (fun definitions (definition : Lifted.function_definition) ->
@@ -116,5 +116,8 @@ let lifted (program : Lifted.program) =
       in
       term function_ callee local definition.body
   in
-  Eval_value.observe (fun () -> term function_ callee Id.Map.empty program.body)
+  observe (fun () -> term function_ callee Id.Map.empty program.body)
 ;;
+
+let lifted = lifted_with Eval_value.observe
+let lifted_with_output = lifted_with Eval_value.observe_with_output

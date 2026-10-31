@@ -75,3 +75,6 @@ val apply_arguments : t -> t list -> t evaluation
 (** Run with a fresh heap. Successful values are rendered for test comparison.
     Runtime errors remain distinct from invalid IR and interpreter limitations. *)
 val observe : (unit -> t evaluation) -> (string, error) result
+
+(** As [observe], but also return all text printed by the program, in order. *)
+val observe_with_output : (unit -> t evaluation) -> (string * string, error) result
