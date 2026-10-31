@@ -204,13 +204,12 @@ let rec observe ctx ty expr depth st =
     let types = first :: second :: rest in
     let index = Gen.int_bound (List.length types - 1) st in
     let name = Printf.sprintf "qc_field%d" depth in
-    let patterns =
-      List.mapi (fun i _ -> if i = index then Ast.PVar name else Ast.PAny) types
-    in
+    let field_pattern i = if i = index then Ast.PVar name else Ast.PAny in
     let pattern =
-      match patterns with
-      | first :: second :: rest -> Ast.PTuple (first, second, rest)
-      | _ -> assert false
+      Ast.PTuple
+        ( field_pattern 0
+        , field_pattern 1
+        , List.mapi (fun i _ -> field_pattern (i + 2)) rest )
     in
     let body = observe ctx (List.nth types index) (Ast.EIdent name) (depth + 1) st in
     Ast.ELet (Ast.NonRec, { Ast.vb_pat = pattern; vb_expr = expr }, [], body)

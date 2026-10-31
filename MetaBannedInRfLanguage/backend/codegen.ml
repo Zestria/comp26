@@ -345,14 +345,13 @@ let alloc_closure ~symbol ~arity ~received =
    Raw machine quantities such as frame sizes and offsets are not tagged. *)
 
 let gen_imm ~dst = function
+  | ImmInt n when n >= min_int / 2 && n <= max_int / 2 ->
+    emit li dst ((n lsl 1) lor 1)
   | ImmInt n ->
-    if n >= min_int / 2 && n <= max_int / 2
-    then emit li dst ((n lsl 1) lor 1)
-    else
-      (* Form a full-width tagged constant in the target register. *)
-      let* () = emit li dst n in
-      let* () = emit slli dst dst 1 in
-      emit addi dst dst 1
+    (* Form a full-width tagged constant in the target register. *)
+    let* () = emit li dst n in
+    let* () = emit slli dst dst 1 in
+    emit addi dst dst 1
   | ImmBool b -> emit li dst (if b then 3 else 1)
   | ImmUnit -> emit li dst 1
   | ImmVar name ->
@@ -400,7 +399,11 @@ let gen_operand ~scratch imm =
    already in registers need no moves, even when they occupy t0 and t1. *)
 let gen_binary_operands left right =
   let* right_reg = get_imm_register right in
-  let left_scratch = if right_reg = Some T0 then t1 else t0 in
+  let left_scratch =
+    match right_reg with
+    | Some T0 -> t1
+    | _ -> t0
+  in
   let* left_reg = gen_operand ~scratch:left_scratch left in
   let right_scratch = if left_reg = T1 then t0 else t1 in
   let+ right_reg = gen_operand ~scratch:right_scratch right in
