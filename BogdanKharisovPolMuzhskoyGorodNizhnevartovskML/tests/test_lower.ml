@@ -108,9 +108,32 @@ let examples =
       "nested functions retain their evaluation boundary"
       "(fun x -> let n = x / 0 in fun y -> n + y) 1"
       "Division_by_zero"
+  ; example
+      "largest integer literal is accepted"
+      "4611686018427387903"
+      "4611686018427387903"
+  ; example
+      "smallest integer literal is accepted"
+      "-4611686018427387904"
+      "-4611686018427387904"
   ; example "CPS factorial" factorial "720"
   ; example "CPS fibonacci" fibonacci "55"
   ; rejects "unbound variable" "unknown" "Unbound value unknown"
+  ; rejects
+      "unused out-of-range integer literal"
+      "let _ = 4611686018427387904 in 42"
+      "Integer literal exceeds the range of representable integers of type int: \
+       4611686018427387904"
+  ; rejects
+      "positive integer literal above maximum"
+      "4611686018427387904"
+      "Integer literal exceeds the range of representable integers of type int: \
+       4611686018427387904"
+  ; rejects
+      "negative integer literal below minimum"
+      "-4611686018427387905"
+      "Integer literal exceeds the range of representable integers of type int: \
+       -4611686018427387905"
   ; rejects
       "nonrecursive binding cannot refer to itself"
       "let x = x in x"

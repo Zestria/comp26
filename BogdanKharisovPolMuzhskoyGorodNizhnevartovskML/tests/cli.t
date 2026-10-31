@@ -416,19 +416,56 @@ RISC-V assembly is emitted by default and with an explicit stage.
   $ grep -c '^ml_main:' explicit-riscv-output
   1
 
-A codegen error preserves an existing output file and reports to stderr.
+An out-of-range integer is rejected during lowering and preserves an existing output file.
 
   $ printf 'keep me\n' > preserved-riscv-output
   $ printf 'print_int 4611686018427387904' | ../compiler.exe -o preserved-riscv-output >out 2>err
   [1]
   $ cat out
   $ cat err
-  Codegen error: Integer literal out of range: 4611686018427387904
+  Middleend error: Integer literal exceeds the range of representable integers of type int: 4611686018427387904
   $ cat preserved-riscv-output
   keep me
 
-A codegen error also does not create a new output file.
+A lowering error also does not create a new output file.
 
   $ printf 'print_int 4611686018427387904' | ../compiler.exe -o absent-riscv-output >out 2>err
   [1]
+  $ cat out
+  $ cat err
+  Middleend error: Integer literal exceeds the range of representable integers of type int: 4611686018427387904
   $ test ! -e absent-riscv-output
+
+An unused out-of-range integer is rejected before it can be optimized away.
+
+  $ printf 'let _ = 4611686018427387904 in print_int 42' | ../compiler.exe >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: Integer literal exceeds the range of representable integers of type int: 4611686018427387904
+
+Menhir accepts the boundary literals and an underscored literal.
+
+  $ printf '4611686018427387903' | ../compiler.exe -parsing menhir --stop-after parsing
+  [Evaluation (Int "4611686018427387903")]
+  $ printf '(-4611686018427387904)' | ../compiler.exe -parsing menhir --stop-after parsing
+  [Evaluation (Int "-4611686018427387904")]
+  $ printf '1_000_000' | ../compiler.exe -parsing menhir --stop-after parsing
+  [Evaluation (Int "1_000_000")]
+
+An out-of-range negative literal is rejected even inside a dead branch.
+
+  $ printf 'if false then print_int (-4611686018427387905) else print_int 1' | ../compiler.exe -parsing menhir >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: Integer literal exceeds the range of representable integers of type int: -4611686018427387905
+
+An out-of-range literal is rejected even inside a function that is never called.
+
+  $ printf 'let f x = 4611686018427387904;; print_int 1' | ../compiler.exe >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Middleend error: Integer literal exceeds the range of representable integers of type int: 4611686018427387904
+
