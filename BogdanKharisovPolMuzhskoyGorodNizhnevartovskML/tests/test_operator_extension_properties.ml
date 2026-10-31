@@ -10,7 +10,7 @@ open Frontend
 open Ast
 
 let variable text = Var (Test_support.identifier text)
-let name text = Test_support.operator text
+let name = Test_support.operator
 let binary text left right = Apply (Var (name text), left, [ right ])
 let show program = Format.asprintf "%a" Ast_print.program program
 

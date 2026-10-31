@@ -1,5 +1,5 @@
 (library
  (name top_down)
  (modules operators parser)
- (libraries frontend)
+ (libraries SchonfinkelML_frontend)
  (package SchonfinkelML))

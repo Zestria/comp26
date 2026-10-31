@@ -1,0 +1,4 @@
+(library
+ (name middleend)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend))

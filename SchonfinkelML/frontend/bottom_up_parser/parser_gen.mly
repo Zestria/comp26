@@ -3,7 +3,7 @@
 
   (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-  open Frontend.Common
+  open SchonfinkelML_frontend.Common
 
   let curry params body = List.fold_right elambda params body
 %}
@@ -19,9 +19,9 @@
 %token LPAREN RPAREN
 %token EOF
 
-%start <Frontend.Common.program> program
+%start <SchonfinkelML_frontend.Common.program> program
 
-%type <Frontend.Common.expr> expr app_expr atom
+%type <SchonfinkelML_frontend.Common.expr> expr app_expr atom
 
 %nonassoc IN RIGHTARROW
 %nonassoc THEN

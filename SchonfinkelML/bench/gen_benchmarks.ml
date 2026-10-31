@@ -1,7 +1,17 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2023-2025, Kakadu and contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 module Gen = QCheck.Gen
 open Ast_gen
 open Arg
-open Frontend.Common
+open SchonfinkelML_frontend.Common
+
+[@@@zanuda "-mutability_check"] (* For Config lib *)
 
 type config =
   { mutable height : int
