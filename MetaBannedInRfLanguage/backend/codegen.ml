@@ -345,8 +345,7 @@ let alloc_closure ~symbol ~arity ~received =
    Raw machine quantities such as frame sizes and offsets are not tagged. *)
 
 let gen_imm ~dst = function
-  | ImmInt n when n >= min_int / 2 && n <= max_int / 2 ->
-    emit li dst ((n lsl 1) lor 1)
+  | ImmInt n when n >= min_int / 2 && n <= max_int / 2 -> emit li dst ((n lsl 1) lor 1)
   | ImmInt n ->
     (* Form a full-width tagged constant in the target register. *)
     let* () = emit li dst n in
@@ -458,9 +457,19 @@ let gen_binop ~dst op left right =
     let* () = emit sub dst left_reg right_reg in
     emit addi dst dst 1 ~comm:"tag(x-y) = tag(x) - tag(y) + 1"
   | "*" ->
-    let* () = untag_operands left_reg right_reg in
+    (* tag(x*y) = x * (tag(y) - 1) + 1. Swap the roles when t0 holds
+       the right operand, so preparing either temporary preserves the other. *)
+    let* () =
+      if right_reg = t0
+      then
+        let* () = emit addi t1 left_reg (-1) in
+        emit srai t0 right_reg 1
+      else
+        let* () = emit srai t0 left_reg 1 in
+        emit addi t1 right_reg (-1)
+    in
     let* () = emit mul dst t0 t1 in
-    tag_result dst
+    emit addi dst dst 1
   | "/" ->
     let* () = untag_operands left_reg right_reg in
     let* () =
