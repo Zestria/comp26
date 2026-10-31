@@ -220,7 +220,7 @@ let inline env name arguments state =
 ;;
 
 (* Переход на [otherwise], если условие ложно. *)
-let condition env otherwise condition state =
+let branch_unless env otherwise condition state =
   match condition with
   | CondImm value -> state |> load env T0 value |> emit (Beq (T0, Zero, otherwise))
   | CondCmp (operator, left, right) ->
@@ -238,7 +238,7 @@ let condition env otherwise condition state =
     emit branch state
 ;;
 
-let tuple env fields state =
+let allocate_tuple env fields state =
   let bytes = 8 * List.length fields in
   if bytes > 2047 then error "кортеж слишком велик для inline-аллокации";
   let enough = fresh_label () in
@@ -258,7 +258,7 @@ let tuple env fields state =
        fields
 ;;
 
-let field env value index size state =
+let load_field env value index size state =
   if size < 2 || index < 0 || index >= size || index > 255
   then error "неверное поле %d кортежа размера %d" index size;
   state |> load env T0 value |> emit (Ld (A0, 8 * index, T0))
@@ -319,7 +319,7 @@ and action env destination rhs state =
     let finish = fresh_label () in
     (* Обе ветки пишут в одно место. Общий хвост не копируем. *)
     state
-    |> condition env otherwise test
+    |> branch_unless env otherwise test
     |> expression env destination yes
     |> emit (J finish)
     |> mark otherwise
@@ -330,8 +330,8 @@ and action env destination rhs state =
       match rhs with
       | CImmExpr value -> load env A0 value state
       | CApp (function_, arguments) -> application env function_ arguments state
-      | CTuple (first, second, rest) -> tuple env (first :: second :: rest) state
-      | CField (value, index, size) -> field env value index size state
+      | CTuple (first, second, rest) -> allocate_tuple env (first :: second :: rest) state
+      | CField (value, index, size) -> load_field env value index size state
       | CIf _ -> error "условие попало в обработчик простого действия"
     in
     save destination state
@@ -348,14 +348,17 @@ let prologue env code frame parameters state =
   |> emit (Addi (S0, Sp, frame))
   |> foldi
        (fun index name state ->
-          let offset = slot env name in
           if index < 8
-          then emit (Sd (List.nth argument_registers index, offset, S0)) state
-          else state |> emit (Ld (T0, 8 * (index - 8), S0)) |> emit (Sd (T0, offset, S0)))
+          then emit (Sd (List.nth argument_registers index, slot env name, S0)) state
+          else (
+            (* [slot] может бросить [error], поэтому он идёт после [Ld], как и
+               прежде. *)
+            let state = emit (Ld (T0, 8 * (index - 8), S0)) state in
+            emit (Sd (T0, slot env name, S0)) state))
        parameters
 ;;
 
-let body env (body, global_result) state =
+let compile_body env (body, global_result) state =
   let state = expression env Result body state in
   match global_result with
   | None -> state
@@ -391,7 +394,7 @@ let compile_function globals code parameters bodies state =
   let env = { globals; slots } in
   state
   |> prologue env code frame parameters
-  |> fold (body env) bodies
+  |> fold (compile_body env) bodies
   |> epilogue frame parameters
 ;;
 
