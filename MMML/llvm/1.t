@@ -38,7 +38,7 @@ $ export SHORT=""
     %24 = add nsw i32 %22, %23
     ret i32 %24
   }
-  declare void @_Z3useRi(ptr noundef nonnull align 4 dereferenceable(4)) #1
+  declare dso_local void @_Z3useRi(ptr noundef nonnull align 4 dereferenceable(4)) #1
 
 
   $ opt-18 -passes=mem2reg fO0.ll -S -o - | grep -v -e datalay -e attributes  -e triple -e source_filename -e '!llvm.' -e  '^;' -e '^$' -e 'clang version' -e lifetime -e ' = !{!' -e ' = !{'
@@ -68,7 +68,7 @@ $ export SHORT=""
     %19 = add nsw i32 %18, %15
     ret i32 %19
   }
-  declare void @_Z3useRi(ptr noundef nonnull align 4 dereferenceable(4)) #1
+  declare dso_local void @_Z3useRi(ptr noundef nonnull align 4 dereferenceable(4)) #1
 
 $ opt-18 -passes=mem2reg fO0.bc -S -o - | grep -v -e datalay -e attributes  -e triple -e source_filename -e '!llvm.' -e  '^;' -e '^$' -e 'clang version' -e lifetime -e ' = !{!' -e ' = !{i32'
 

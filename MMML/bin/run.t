@@ -15,6 +15,6 @@
 
 
 
-  $ clang-18 out.ll runtime.o -o demo1.exe
+  $ clang-18 -Wno-override-module out.ll runtime.o -o demo1.exe
   $ echo "Press $(./demo1.exe) to pay respect"
   Press F to pay respect
