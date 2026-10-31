@@ -1,0 +1,5 @@
+(library
+ (name backend)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries frontend middleend)
+ (modules abi codegen liveness regalloc riscv))

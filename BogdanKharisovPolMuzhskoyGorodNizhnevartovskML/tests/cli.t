@@ -110,10 +110,10 @@ Multiple files are rejected.
 Help succeeds without opening the input file.
 
   $ ../compiler.exe missing-input --help
-  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o FILE] [--operator-extension] [FILE]
+  Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll|riscv] [-o FILE] [--operator-extension] [FILE]
   Without FILE, read standard input.
     -parsing NAME Use topdown (default) or menhir
-    --stop-after STAGE Stop after parsing, anf, cc or ll (default: ll)
+    --stop-after STAGE Stop after parsing, anf, cc, ll or riscv (default: riscv)
     -o FILE Write to FILE or - for stdout (default)
     --operator-extension  Enable operator declarations (Angstrom only)
     -  Read standard input
@@ -227,7 +227,7 @@ An unknown stage fails before opening input or output.
   [2]
   $ cat out
   $ head -n 1 err
-  ../compiler.exe: Unknown stage: unknown; expected parsing, anf, cc or ll.
+  ../compiler.exe: Unknown stage: unknown; expected parsing, anf, cc, ll or riscv.
   $ test ! -e absent-stage-result
 
 An unknown stage preserves an existing output file.
@@ -270,10 +270,10 @@ Option order does not bypass the parser restriction.
   $ cat err
   --operator-extension requires the Angstrom parser
 
-Without --stop-after, nested code is lifted and closure captures are explicit.
+The LL stage lifts nested code and makes closure captures explicit.
 
   $ printf 'let make x = fun y -> x + y;; make 40 2' > closure-input
-  $ ../compiler.exe closure-input | sed '/^$/d'
+  $ ../compiler.exe --stop-after ll closure-input | sed '/^$/d'
   code code_0 [x_1] y_2 =
     (+) x_1 y_2
   code code_3 [] x_4 =
@@ -284,7 +284,7 @@ Without --stop-after, nested code is lifted and closure captures are explicit.
 
 Menhir also runs the full pipeline and writes lifted code to a file.
 
-  $ ../compiler.exe -parsing menhir closure-input -o closure-output
+  $ ../compiler.exe -parsing menhir --stop-after ll closure-input -o closure-output
   $ sed '/^$/d' closure-output
   code code_0 [x_1] y_2 =
     (+) x_1 y_2
@@ -318,12 +318,12 @@ Menhir also stops after CC and writes the nested code to a file.
   let _ = make_0 40 2 in
   ()
 
-Explicit LL with topdown and stdout is identical to the default full pipeline.
+Explicit LL with topdown and stdout is identical to LL file output.
 
   $ ../compiler.exe -parsing topdown closure-input --stop-after ll -o - > explicit-ll-output
   $ cmp closure-output explicit-ll-output
 
-Explicit LL with Menhir and file output is also identical to the default pipeline.
+Explicit LL with Menhir and file output is also identical.
 
   $ ../compiler.exe -parsing menhir closure-input --stop-after ll -o explicit-ll-file
   $ cmp closure-output explicit-ll-file
@@ -368,14 +368,14 @@ An empty program can stop after CC.
   $ printf '' | ../compiler.exe --stop-after cc
   ()
 
-An empty program also passes through the full pipeline.
+An empty program also passes through the LL pipeline.
 
-  $ printf '' | ../compiler.exe
+  $ printf '' | ../compiler.exe --stop-after ll
   ()
 
 A recursive tuple captures its own address without inspecting it during construction.
 
-  $ printf 'let rec p = (42, fun () -> let (n, _) = p in n)' | ../compiler.exe | sed '/^$/d'
+  $ printf 'let rec p = (42, fun () -> let (n, _) = p in n)' | ../compiler.exe --stop-after ll | sed '/^$/d'
   code code_0 [p_1] arg_2 =
     field[0] p_1
   let rec p_3 = (let tmp_4 = closure code_0 [p_3] in
@@ -385,7 +385,7 @@ A recursive tuple captures its own address without inspecting it during construc
 An unsafe recursive initializer is rejected before replacing the output.
 
   $ printf 'keep me\n' > preserved-rec-output
-  $ printf 'let rec x = x + 1' | ../compiler.exe -o preserved-rec-output >out 2>err
+  $ printf 'let rec x = x + 1' | ../compiler.exe --stop-after ll -o preserved-rec-output >out 2>err
   [1]
   $ cat out
   $ cat err
@@ -395,15 +395,40 @@ An unsafe recursive initializer is rejected before replacing the output.
 
 An unsafe initializer also does not create an absent output file.
 
-  $ printf 'let rec x = x' | ../compiler.exe -parsing menhir -o absent-rec-output >out 2>err
+  $ printf 'let rec x = x' | ../compiler.exe -parsing menhir --stop-after ll -o absent-rec-output >out 2>err
   [1]
   $ test ! -e absent-rec-output
 
 The operator extension also reaches the full middleend with its declared arity.
 
-  $ printf 'prefix 3 (%%%%);; let (%%%%) a b c = a + b + c;; %%%% 1 2 3' | ../compiler.exe --operator-extension | sed '/^$/d'
+  $ printf 'prefix 3 (%%%%);; let (%%%%) a b c = a + b + c;; %%%% 1 2 3' | ../compiler.exe --stop-after ll --operator-extension | sed '/^$/d'
   code code_0 [] a_1 b_2 c_3 =
     let tmp_4 = (+) a_1 b_2 in
     (+) tmp_4 c_3
   let _ = direct code_0 1 2 3 in
   ()
+
+RISC-V assembly is emitted by default and with an explicit stage.
+
+  $ printf 'print_int 42' | ../compiler.exe --stop-after riscv > explicit-riscv-output
+  $ printf 'print_int 42' | ../compiler.exe > default-riscv-output
+  $ cmp explicit-riscv-output default-riscv-output
+  $ grep -c '^ml_main:' explicit-riscv-output
+  1
+
+A codegen error preserves an existing output file and reports to stderr.
+
+  $ printf 'keep me\n' > preserved-riscv-output
+  $ printf 'print_int 4611686018427387904' | ../compiler.exe -o preserved-riscv-output >out 2>err
+  [1]
+  $ cat out
+  $ cat err
+  Codegen error: Integer literal out of range: 4611686018427387904
+  $ cat preserved-riscv-output
+  keep me
+
+A codegen error also does not create a new output file.
+
+  $ printf 'print_int 4611686018427387904' | ../compiler.exe -o absent-riscv-output >out 2>err
+  [1]
+  $ test ! -e absent-riscv-output
