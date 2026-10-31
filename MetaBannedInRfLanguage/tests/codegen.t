@@ -247,6 +247,90 @@ continuation.
   $ run plain
   72055
 
+Multiplication keeps signed 63-bit integer semantics, including wraparound.
+Check both direct calls and the first-class operator wrapper. Repeated
+operands also exercise forwarding a parameter into both temporaries.
+
+  $ cat > multiply.ml <<EOF
+  > let mul x y = x * y;;
+  > let square x = x * x;;
+  > let op = ( * );;
+  > let check x y expected =
+  >   if mul x y = expected && op x y = expected then print_int 1 else print_int 0;;
+  > let low = -4611686018427387903 - 1;;
+  > let high = 4611686018427387903;;
+  > let () = check (-7) 6 (-42);;
+  > let () = check (-7) (-6) 42;;
+  > let () = check 0 (-9) 0;;
+  > let () = check low (-1) low;;
+  > let () = check high 2 (-2);;
+  > let () = check low 2 0;;
+  > let () = check high high 1;;
+  > let () = check low low 0;;
+  > let () = if square (-7) = 49 && square high = 1 && square low = 0
+  >   then print_int 1 else print_int 0
+  > EOF
+  $ compile multiply
+  $ run multiply
+  111111111
+
+Reused branch slots preserve outer values and results consumed after the
+join. Exercise both choices of the larger branch and all nested paths.
+
+  $ cat > branch_slots.ml <<EOF
+  > let choose flag x =
+  >   if flag then let a = x * x in let b = a * x in b + x
+  >   else let c = x * x in c - x;;
+  > let join flag x =
+  >   let outer = x + 1 in
+  >   let y = if flag then let a = x * x in a + outer
+  >     else let a = x * x in let b = a * x in let c = b * x in c + outer in
+  >   let z = y * y in z + outer;;
+  > let nested p q x =
+  >   let base = x + 1 in
+  >   let y = if p then
+  >     let a = x * x in
+  >     if q then let b = a * x in b + base
+  >     else let c = a * a in c - base
+  >   else let a = x * x in a - base in
+  >   let z = y * x in z + base;;
+  > let check actual expected = if actual = expected then print_int 1 else print_int 0;;
+  > let () = check (choose true 3) 30;;
+  > let () = check (choose false 3) 6;;
+  > let () = check (join true 3) 173;;
+  > let () = check (join false 3) 7229;;
+  > let () = check (nested true true 3) 97;;
+  > let () = check (nested true false 3) 235;;
+  > let () = check (nested false true 3) 19
+  > EOF
+  $ compile branch_slots
+  $ run branch_slots
+  1111111
+
+Closures escaping either branch copy their captured values. Builtin wrappers
+requested in different branches must both survive the state merge.
+
+  $ cat > branch_closures.ml <<EOF
+  > let make flag x =
+  >   let base = x + 1 in
+  >   if flag then let a = x * x in fun y -> a + y + base
+  >   else let a = x * x in let b = a * x in fun y -> b - y + base;;
+  > let select flag = if flag then (+) else ( * );;
+  > let f = make true 3;;
+  > let g = make false 3;;
+  > let plus = select true;;
+  > let times = select false;;
+  > let check actual expected = if actual = expected then print_int 1 else print_int 0;;
+  > let () = check (f 4) 17;;
+  > let () = check (g 4) 27;;
+  > let () = check (f 5) 18;;
+  > let () = check (plus 20 22) 42;;
+  > let () = check (times (-7) (-6)) 42
+  > EOF
+  $ compile branch_closures
+  $ run branch_closures
+  11111
+
 Closures passed as arguments are applied indirectly.
 
   $ cat > higher_order.ml <<EOF

@@ -48,7 +48,7 @@ The store itself remains; returning the parameter needs no reload.
 Squaring a parameter originally reloads its stack slot into both t0 and t1.
 The first load disappears because the store's source is already t0. This
 exposes the second load to the same store, so it becomes a single move.
-The spill stays in place, and the two operands are still decoded separately.
+The spill stays in place while both copies are prepared for multiplication.
 
   $ printf 'let square x = x * x\n' > square.ml
   $ ../driver/compiler.exe --stop-after riscv -o square.s square.ml
@@ -56,7 +56,7 @@ The spill stays in place, and the two operands are still decoded separately.
     sd t0, -24(fp)
     mv t1, t0
     srai t0, t0, 1
-    srai t1, t1, 1
+    addi t1, t1, -1
     mul a0, t0, t1
 
 A computed value is stored from a0. Its immediately following use in t0
@@ -69,7 +69,7 @@ becomes a move. The later load into t1 remains: this is a local rewrite.
     mv t0, a0
     ld t1, -32(fp)
     srai t0, t0, 1
-    srai t1, t1, 1
+    addi t1, t1, -1
 
 Different stack slots must not be confused. After spilling the second
 parameter, returning the first still needs its own load. Returning the
@@ -124,6 +124,51 @@ Both branches retain their own stack loads.
   .L1:
     ld a0, -40(fp)
   .L2:
+
+Exclusive branches reuse local slots. The longer then branch needs two
+slots below the two parameters; the else branch reuses the first slot.
+The function's frame is 48 bytes rather than 64.
+
+  $ cat > branch_slots.ml <<EOF
+  > let choose flag x =
+  >   if flag then
+  >     let a = x * x in let b = a * x in b + x
+  >   else
+  >     let c = x * x in c - x
+  > EOF
+  $ ../driver/compiler.exe --stop-after riscv -o branch_slots.s branch_slots.ml
+  $ grep -E '^  addi sp, sp, -|^  sd a0, -' branch_slots.s
+    addi sp, sp, -16
+    addi sp, sp, -48
+    sd a0, -40(fp)
+    sd a0, -48(fp)
+    sd a0, -40(fp)
+
+When else needs more slots, its deepest offset determines the frame size.
+The outer value stays at fp-40. Bindings after the join start below both
+branches, at fp-72 and fp-80. This frame shrinks from 96 to 80 bytes.
+
+  $ cat > branch_join.ml <<EOF
+  > let join flag x =
+  >   let outer = x + 1 in
+  >   let y = if flag then
+  >     let a = x * x in a + outer
+  >   else
+  >     let a = x * x in let b = a * x in let c = b * x in c + outer
+  >   in
+  >   let z = y * y in z + outer
+  > EOF
+  $ ../driver/compiler.exe --stop-after riscv -o branch_join.s branch_join.ml
+  $ grep -E '^  addi sp, sp, -|^  sd a0, -' branch_join.s
+    addi sp, sp, -16
+    addi sp, sp, -80
+    sd a0, -40(fp)
+    sd a0, -48(fp)
+    sd a0, -48(fp)
+    sd a0, -56(fp)
+    sd a0, -64(fp)
+    sd a0, -72(fp)
+    sd a0, -80(fp)
 
 Division by -1 becomes tagged negation. A known nonzero divisor needs no
 division-by-zero handler; division by a parameter still needs it.
@@ -270,8 +315,8 @@ Source-level short-circuit semantics are checked in ops.t and codegen.t.
     or a0, t0, t1
     ret
 
-Multiplication decodes the two temporary registers in place and immediately
-tags its result in a0. Even this wrapper has no frame or runtime arithmetic call.
+Multiplication uses tag(x*y) = x * (tag(y) - 1) + 1: four arithmetic
+instructions, with no final shift, frame, or runtime arithmetic call.
 
   $ printf 'let op = ( * )\n' > multiplication.ml
   $ ../driver/compiler.exe --stop-after riscv -o multiplication.s multiplication.ml
@@ -279,9 +324,8 @@ tags its result in a0. Even this wrapper has no frame or runtime arithmetic call
     ld t0, 0(a0)
     ld t1, 8(a0)
     srai t0, t0, 1
-    srai t1, t1, 1
+    addi t1, t1, -1
     mul a0, t0, t1
-    slli a0, a0, 1
     addi a0, a0, 1
     ret
 
