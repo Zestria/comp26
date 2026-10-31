@@ -88,12 +88,315 @@ let symbol kind index name =
   label (Printf.sprintf "vc_%s_%s_%d" kind readable index)
 ;;
 
-(* Накопители инструкций и использованных замыканий принадлежат одному
-   запуску generate. Изменяемое состояние позволяет вложенным обработчикам
-   выдавать код за линейное время. Отключаем только проверку изменяемости
-   на время этой функции и явно возвращаем её после функции: в установленной
-   Zanuda выход из модуля сам по себе не восстанавливает настройку. *)
-[@@@zanuda "-mutability_check"]
+(* Состояние выдачи одного запуска generate. Все списки обратные:
+   новый элемент лежит в голове. *)
+type state =
+  { output : item list
+  ; closures : function_symbol list
+  ; wrappers : (string * function_symbol) list
+  }
+
+(* Состояние идёт последним аргументом, чтобы свёртки вставали в конвейер. *)
+let fold step items state = List.fold_left (fun state item -> step item state) state items
+
+let foldi step items state =
+  let _, state =
+    List.fold_left
+      (fun (index, state) item -> index + 1, step index item state)
+      (0, state)
+      items
+  in
+  state
+;;
+
+(* Окружение кода одной функции: глобальные символы программы и слоты
+   параметров и локальных имён относительно s0. *)
+type env =
+  { globals : (string * global) list
+  ; slots : (string * int) list
+  }
+
+let emit ?comm instruction state =
+  { state with output = Instr (instruction, comm) :: state.output }
+;;
+
+let mark name state = { state with output = Label name :: state.output }
+let directive value state = { state with output = Directive value :: state.output }
+
+let use_closure function_ state =
+  let closures =
+    if List.mem function_ state.closures
+    then state.closures
+    else function_ :: state.closures
+  in
+  function_.closure, { state with closures }
+;;
+
+let builtin name state =
+  match List.assoc_opt name state.wrappers with
+  | Some function_ -> function_, state
+  | None ->
+    let index = List.length state.wrappers in
+    let function_ =
+      { code = symbol "builtin" index name
+      ; closure = symbol "builtin_closure" index name
+      ; arity = builtin_arity name
+      }
+    in
+    function_, { state with wrappers = (name, function_) :: state.wrappers }
+;;
+
+let slot env name =
+  match List.assoc_opt name env.slots with
+  | Some offset -> offset
+  | None -> error "нет слота для %S" name
+;;
+
+let load env register value state =
+  match value with
+  | ImmNum n -> emit (Li (register, n)) state
+  | ImmBool value -> emit (Li (register, if value then 1 else 0)) state
+  | ImmUnit -> emit (Li (register, 0)) state
+  | ImmId name ->
+    (match List.assoc_opt name env.slots with
+     | Some offset -> emit (Ld (register, offset, S0)) state
+     | None ->
+       (match List.assoc_opt name env.globals with
+        | Some (Value address) ->
+          state |> emit (La (register, address)) |> emit (Ld (register, 0, register))
+        | Some (Function function_) ->
+          let closure, state = use_closure function_ state in
+          emit (La (register, closure)) state
+        | None ->
+          let function_, state = builtin name state in
+          let closure, state = use_closure function_ state in
+          emit (La (register, closure)) state))
+;;
+
+let save destination state =
+  match destination with
+  | Result -> state
+  | Slot offset -> emit (Sd (A0, offset, S0)) state
+;;
+
+let fail_divisor state =
+  let safe = fresh_label () in
+  state
+  |> emit (Bne (T1, Zero, safe))
+  |> emit (Li (A0, 0))
+  |> emit (Call (label "vc_fail"))
+  |> mark safe
+;;
+
+let inline env name arguments state =
+  match name, arguments with
+  | "print_int", [ value ] ->
+    state |> load env A0 value |> emit (Call (label "vc_print_int"))
+  | "~-", [ value ] -> state |> load env T0 value |> emit (Neg (A0, T0))
+  | _, [ left; right ] ->
+    let state = state |> load env T0 left |> load env T1 right in
+    (match name with
+     | "+" -> emit (Add (A0, T0, T1)) state
+     | "-" -> emit (Sub (A0, T0, T1)) state
+     | "*" -> emit (Mul (A0, T0, T1)) state
+     | "/" -> state |> fail_divisor |> emit (Div (A0, T0, T1))
+     | "mod" -> state |> fail_divisor |> emit (Rem (A0, T0, T1))
+     | "land" | "&&" -> emit (And (A0, T0, T1)) state
+     | "lor" | "||" -> emit (Or (A0, T0, T1)) state
+     | "lxor" -> emit (Xor (A0, T0, T1)) state
+     | "lsl" -> emit (Sll (A0, T0, T1)) state
+     | "lsr" -> emit (Srl (A0, T0, T1)) state
+     | "asr" -> emit (Sra (A0, T0, T1)) state
+     | "=" | "<>" ->
+       state
+       |> emit (Xor (A0, T0, T1))
+       |> emit (if name = "=" then Seqz (A0, A0) else Snez (A0, A0))
+     | "<" -> emit (Slt (A0, T0, T1)) state
+     | ">" -> emit (Slt (A0, T1, T0)) state
+     | "<=" -> state |> emit (Slt (A0, T1, T0)) |> emit (Seqz (A0, A0))
+     | ">=" -> state |> emit (Slt (A0, T0, T1)) |> emit (Seqz (A0, A0))
+     | _ -> error "неподдержанная операция %S" name)
+  | _ -> error "неверная арность операции %S" name
+;;
+
+(* Переход на [otherwise], если условие ложно. *)
+let branch_unless env otherwise condition state =
+  match condition with
+  | CondImm value -> state |> load env T0 value |> emit (Beq (T0, Zero, otherwise))
+  | CondCmp (operator, left, right) ->
+    let state = state |> load env T0 left |> load env T1 right in
+    let branch =
+      match operator with
+      | "=" -> Bne (T0, T1, otherwise)
+      | "<>" -> Beq (T0, T1, otherwise)
+      | "<" -> Bge (T0, T1, otherwise)
+      | "<=" -> Blt (T1, T0, otherwise)
+      | ">" -> Bge (T1, T0, otherwise)
+      | ">=" -> Blt (T0, T1, otherwise)
+      | _ -> error "неподдержанное условие %S" operator
+    in
+    emit branch state
+;;
+
+let allocate_tuple env fields state =
+  let bytes = 8 * List.length fields in
+  if bytes > 2047 then error "кортеж слишком велик для inline-аллокации";
+  let enough = fresh_label () in
+  state
+  |> emit (Mv (A0, S10))
+  |> emit (Addi (T1, S10, bytes))
+  |> emit (La (T2, label "vc_heap_end"))
+  |> emit (Ld (T2, 0, T2))
+  |> emit (Bge (T2, T1, enough))
+  |> emit (Li (A0, 1))
+  |> emit (Call (label "vc_fail"))
+  |> mark enough
+  |> emit (Mv (S10, T1))
+  |> foldi
+       (fun index value state ->
+          state |> load env T0 value |> emit (Sd (T0, 8 * index, A0)))
+       fields
+;;
+
+let load_field env value index size state =
+  if size < 2 || index < 0 || index >= size || index > 255
+  then error "неверное поле %d кортежа размера %d" index size;
+  state |> load env T0 value |> emit (Ld (A0, 8 * index, T0))
+;;
+
+let application env function_ arguments state =
+  let known =
+    match function_ with
+    | ImmId name when not (List.mem_assoc name env.slots) ->
+      List.assoc_opt name env.globals
+    | _ -> None
+  in
+  let intrinsic =
+    match function_ with
+    | ImmId name
+      when (not (List.mem_assoc name env.slots)) && not (List.mem_assoc name env.globals)
+      -> Some name
+    | ImmId _ -> None
+    | _ -> error "применение константы как функции"
+  in
+  match known, intrinsic with
+  | None, Some name when List.length arguments = builtin_arity name ->
+    inline env name arguments state
+  | Some (Function function_), _ when List.length arguments = function_.arity ->
+    state
+    |> foldi
+         (fun index value state ->
+            if index < 8
+            then load env (List.nth argument_registers index) value state
+            else state |> load env T0 value |> emit (Sd (T0, 8 * (index - 8), Sp)))
+         arguments
+    |> emit (Call function_.code)
+  | _ ->
+    (* argv лежит в заранее выделенной нижней части кадра. Вызов
+       может испортить t*/a*, но живые значения остаются в слотах. *)
+    state
+    |> foldi
+         (fun index value state ->
+            state |> load env T0 value |> emit (Sd (T0, 8 * index, Sp)))
+         arguments
+    |> load env A0 function_
+    |> emit (Li (A1, List.length arguments))
+    |> emit (Mv (A2, Sp))
+    |> emit (Call (label "vc_apply"))
+;;
+
+let rec expression env destination body state =
+  match body with
+  | ALet (name, rhs, body) ->
+    let target = Slot (slot env name) in
+    state |> action env target rhs |> expression env destination body
+  | ACExpr rhs -> action env destination rhs state
+
+and action env destination rhs state =
+  match rhs with
+  | CIf (test, yes, no) ->
+    let otherwise = fresh_label () in
+    let finish = fresh_label () in
+    (* Обе ветки пишут в одно место. Общий хвост не копируем. *)
+    state
+    |> branch_unless env otherwise test
+    |> expression env destination yes
+    |> emit (J finish)
+    |> mark otherwise
+    |> expression env destination no
+    |> mark finish
+  | rhs ->
+    let state =
+      match rhs with
+      | CImmExpr value -> load env A0 value state
+      | CApp (function_, arguments) -> application env function_ arguments state
+      | CTuple (first, second, rest) -> allocate_tuple env (first :: second :: rest) state
+      | CField (value, index, size) -> load_field env value index size state
+      | CIf _ -> error "условие попало в обработчик простого действия"
+    in
+    save destination state
+;;
+
+let prologue env code frame parameters state =
+  state
+  |> directive Text
+  |> directive (Globl code)
+  |> mark code
+  |> emit ~comm:"кадр: ra, fp, локальные и исходящие аргументы" (Addi (Sp, Sp, -frame))
+  |> emit (Sd (Ra, frame - 8, Sp))
+  |> emit (Sd (S0, frame - 16, Sp))
+  |> emit (Addi (S0, Sp, frame))
+  |> foldi
+       (fun index name state ->
+          if index < 8
+          then emit (Sd (List.nth argument_registers index, slot env name, S0)) state
+          else (
+            (* [slot] может бросить [error], поэтому он идёт после [Ld], как и
+               прежде. *)
+            let state = emit (Ld (T0, 8 * (index - 8), S0)) state in
+            emit (Sd (T0, slot env name, S0)) state))
+       parameters
+;;
+
+let compile_body env (body, global_result) state =
+  let state = expression env Result body state in
+  match global_result with
+  | None -> state
+  | Some address -> state |> emit (La (T0, address)) |> emit (Sd (A0, 0, T0))
+;;
+
+(* Эпилог общий, и здесь нет TCO: это отдельное задание. *)
+let epilogue frame parameters state =
+  let state =
+    match parameters with
+    | [] -> emit (Li (A0, 0)) state
+    | _ -> state
+  in
+  state
+  |> emit (Ld (Ra, frame - 8, Sp))
+  |> emit (Ld (S0, frame - 16, Sp))
+  |> emit (Addi (Sp, Sp, frame))
+  |> emit Ret
+;;
+
+let compile_function globals code parameters bodies state =
+  let local_names = parameters @ List.concat_map (fun (body, _) -> locals body) bodies in
+  if List.length local_names <> List.length (List.sort_uniq String.compare local_names)
+  then error "повторное локальное имя: нарушен контракт rename/CC";
+  let slots = List.mapi (fun index name -> name, -24 - (8 * index)) local_names in
+  let outgoing =
+    List.fold_left (fun n (body, _) -> max n (argument_space body)) 0 bodies
+  in
+  let frame = align16 (16 + (8 * (List.length local_names + outgoing))) in
+  (* И положительный addi эпилога, и все смещения должны влезть в imm12.
+     Большие кадры отвергаем до передачи инструкций принтеру с assert. *)
+  if frame > 2032 then error "кадр %d байт превышает поддерживаемые 2032" frame;
+  let env = { globals; slots } in
+  state
+  |> prologue env code frame parameters
+  |> fold (compile_body env) bodies
+  |> epilogue frame parameters
+;;
 
 let generate program =
   try
@@ -117,259 +420,16 @@ let generate program =
     let names = List.map fst globals in
     if List.length names <> List.length (List.sort_uniq String.compare names)
     then error "повторное имя верхнего уровня: сначала нужен rename";
-    (* Обратные списки позволяют выдавать инструкции за линейное время.
-       Всё состояние принадлежит одному запуску, а не модулю в целом. *)
-    let output = ref [] in
-    let closures = ref [] in
-    let wrappers = ref [] in
-    let emit ?comm instruction = output := Instr (instruction, comm) :: !output in
-    let mark name = output := Label name :: !output in
-    let directive value = output := Directive value :: !output in
-    let use_closure function_ =
-      if not (List.mem function_ !closures) then closures := function_ :: !closures;
-      function_.closure
+    let state =
+      fold
+        (fun (name, parameters, body) state ->
+           match List.assoc name globals with
+           | Function function_ ->
+             compile_function globals function_.code parameters [ body, None ] state
+           | Value _ -> state)
+        bindings
+        { output = []; closures = []; wrappers = [] }
     in
-    let builtin name =
-      match List.assoc_opt name !wrappers with
-      | Some function_ -> function_
-      | None ->
-        let index = List.length !wrappers in
-        let function_ =
-          { code = symbol "builtin" index name
-          ; closure = symbol "builtin_closure" index name
-          ; arity = builtin_arity name
-          }
-        in
-        wrappers := (name, function_) :: !wrappers;
-        function_
-    in
-    let compile_function code parameters bodies =
-      let local_names =
-        parameters @ List.concat_map (fun (body, _) -> locals body) bodies
-      in
-      if
-        List.length local_names <> List.length (List.sort_uniq String.compare local_names)
-      then error "повторное локальное имя: нарушен контракт rename/CC";
-      let slots = List.mapi (fun index name -> name, -24 - (8 * index)) local_names in
-      let outgoing =
-        List.fold_left (fun n (body, _) -> max n (argument_space body)) 0 bodies
-      in
-      let frame = align16 (16 + (8 * (List.length local_names + outgoing))) in
-      (* И положительный addi эпилога, и все смещения должны влезть в imm12.
-         Большие кадры отвергаем до передачи инструкций принтеру с assert. *)
-      if frame > 2032 then error "кадр %d байт превышает поддерживаемые 2032" frame;
-      let slot name =
-        match List.assoc_opt name slots with
-        | Some offset -> offset
-        | None -> error "нет слота для %S" name
-      in
-      let load register = function
-        | ImmNum n -> emit (Li (register, n))
-        | ImmBool value -> emit (Li (register, if value then 1 else 0))
-        | ImmUnit -> emit (Li (register, 0))
-        | ImmId name ->
-          (match List.assoc_opt name slots with
-           | Some offset -> emit (Ld (register, offset, S0))
-           | None ->
-             (match List.assoc_opt name globals with
-              | Some (Value address) ->
-                emit (La (register, address));
-                emit (Ld (register, 0, register))
-              | Some (Function function_) -> emit (La (register, use_closure function_))
-              | None -> emit (La (register, use_closure (builtin name)))))
-      in
-      let save = function
-        | Result -> ()
-        | Slot offset -> emit (Sd (A0, offset, S0))
-      in
-      let fail_divisor () =
-        let safe = fresh_label () in
-        emit (Bne (T1, Zero, safe));
-        emit (Li (A0, 0));
-        emit (Call (label "vc_fail"));
-        mark safe
-      in
-      let inline name arguments =
-        match name, arguments with
-        | "print_int", [ value ] ->
-          load A0 value;
-          emit (Call (label "vc_print_int"))
-        | "~-", [ value ] ->
-          load T0 value;
-          emit (Neg (A0, T0))
-        | _, [ left; right ] ->
-          load T0 left;
-          load T1 right;
-          (match name with
-           | "+" -> emit (Add (A0, T0, T1))
-           | "-" -> emit (Sub (A0, T0, T1))
-           | "*" -> emit (Mul (A0, T0, T1))
-           | "/" ->
-             fail_divisor ();
-             emit (Div (A0, T0, T1))
-           | "mod" ->
-             fail_divisor ();
-             emit (Rem (A0, T0, T1))
-           | "land" | "&&" -> emit (And (A0, T0, T1))
-           | "lor" | "||" -> emit (Or (A0, T0, T1))
-           | "lxor" -> emit (Xor (A0, T0, T1))
-           | "lsl" -> emit (Sll (A0, T0, T1))
-           | "lsr" -> emit (Srl (A0, T0, T1))
-           | "asr" -> emit (Sra (A0, T0, T1))
-           | "=" | "<>" ->
-             emit (Xor (A0, T0, T1));
-             emit (if name = "=" then Seqz (A0, A0) else Snez (A0, A0))
-           | "<" -> emit (Slt (A0, T0, T1))
-           | ">" -> emit (Slt (A0, T1, T0))
-           | "<=" ->
-             emit (Slt (A0, T1, T0));
-             emit (Seqz (A0, A0))
-           | ">=" ->
-             emit (Slt (A0, T0, T1));
-             emit (Seqz (A0, A0))
-           | _ -> error "неподдержанная операция %S" name)
-        | _ -> error "неверная арность операции %S" name
-      in
-      let rec expression destination = function
-        | ALet (name, rhs, body) ->
-          action (Slot (slot name)) rhs;
-          expression destination body
-        | ACExpr rhs -> action destination rhs
-      and action destination = function
-        | CIf (condition, yes, no) ->
-          let otherwise = fresh_label () in
-          let finish = fresh_label () in
-          (match condition with
-           | CondImm value ->
-             load T0 value;
-             emit (Beq (T0, Zero, otherwise))
-           | CondCmp (operator, left, right) ->
-             load T0 left;
-             load T1 right;
-             emit
-               (match operator with
-                | "=" -> Bne (T0, T1, otherwise)
-                | "<>" -> Beq (T0, T1, otherwise)
-                | "<" -> Bge (T0, T1, otherwise)
-                | "<=" -> Blt (T1, T0, otherwise)
-                | ">" -> Bge (T1, T0, otherwise)
-                | ">=" -> Blt (T0, T1, otherwise)
-                | _ -> error "неподдержанное условие %S" operator));
-          (* Обе ветки пишут в одно место. Общий хвост не копируем. *)
-          expression destination yes;
-          emit (J finish);
-          mark otherwise;
-          expression destination no;
-          mark finish
-        | rhs ->
-          (match rhs with
-           | CImmExpr value -> load A0 value
-           | CApp (function_, arguments) -> application function_ arguments
-           | CTuple (first, second, rest) ->
-             let fields = first :: second :: rest in
-             let bytes = 8 * List.length fields in
-             if bytes > 2047 then error "кортеж слишком велик для inline-аллокации";
-             let enough = fresh_label () in
-             emit (Mv (A0, S10));
-             emit (Addi (T1, S10, bytes));
-             emit (La (T2, label "vc_heap_end"));
-             emit (Ld (T2, 0, T2));
-             emit (Bge (T2, T1, enough));
-             emit (Li (A0, 1));
-             emit (Call (label "vc_fail"));
-             mark enough;
-             emit (Mv (S10, T1));
-             List.iteri
-               (fun index value ->
-                  load T0 value;
-                  emit (Sd (T0, 8 * index, A0)))
-               fields
-           | CField (value, index, size) ->
-             if size < 2 || index < 0 || index >= size || index > 255
-             then error "неверное поле %d кортежа размера %d" index size;
-             load T0 value;
-             emit (Ld (A0, 8 * index, T0))
-           | CIf _ -> error "условие попало в обработчик простого действия");
-          save destination
-      and application function_ arguments =
-        let known =
-          match function_ with
-          | ImmId name when not (List.mem_assoc name slots) -> List.assoc_opt name globals
-          | _ -> None
-        in
-        let intrinsic =
-          match function_ with
-          | ImmId name
-            when (not (List.mem_assoc name slots)) && not (List.mem_assoc name globals) ->
-            Some name
-          | ImmId _ -> None
-          | _ -> error "применение константы как функции"
-        in
-        match known, intrinsic with
-        | None, Some name when List.length arguments = builtin_arity name ->
-          inline name arguments
-        | Some (Function function_), _ when List.length arguments = function_.arity ->
-          List.iteri
-            (fun index value ->
-               if index < 8
-               then load (List.nth argument_registers index) value
-               else (
-                 load T0 value;
-                 emit (Sd (T0, 8 * (index - 8), Sp))))
-            arguments;
-          emit (Call function_.code)
-        | _ ->
-          (* argv лежит в заранее выделенной нижней части кадра. Вызов
-             может испортить t*/a*, но живые значения остаются в слотах. *)
-          List.iteri
-            (fun index value ->
-               load T0 value;
-               emit (Sd (T0, 8 * index, Sp)))
-            arguments;
-          load A0 function_;
-          emit (Li (A1, List.length arguments));
-          emit (Mv (A2, Sp));
-          emit (Call (label "vc_apply"))
-      in
-      directive Text;
-      directive (Globl code);
-      mark code;
-      emit ~comm:"кадр: ra, fp, локальные и исходящие аргументы" (Addi (Sp, Sp, -frame));
-      emit (Sd (Ra, frame - 8, Sp));
-      emit (Sd (S0, frame - 16, Sp));
-      emit (Addi (S0, Sp, frame));
-      List.iteri
-        (fun index name ->
-           if index < 8
-           then emit (Sd (List.nth argument_registers index, slot name, S0))
-           else (
-             emit (Ld (T0, 8 * (index - 8), S0));
-             emit (Sd (T0, slot name, S0))))
-        parameters;
-      List.iter
-        (fun (body, global_result) ->
-           expression Result body;
-           match global_result with
-           | None -> ()
-           | Some address ->
-             emit (La (T0, address));
-             emit (Sd (A0, 0, T0)))
-        bodies;
-      (match parameters with
-       | [] -> emit (Li (A0, 0))
-       | _ -> ());
-      (* Эпилог общий, и здесь нет TCO: это отдельное задание. *)
-      emit (Ld (Ra, frame - 8, Sp));
-      emit (Ld (S0, frame - 16, Sp));
-      emit (Addi (Sp, Sp, frame));
-      emit Ret
-    in
-    List.iter
-      (fun (name, parameters, body) ->
-         match List.assoc name globals with
-         | Function function_ -> compile_function function_.code parameters [ body, None ]
-         | Value _ -> ())
-      bindings;
     (* Каждое значение вычисляется в порядке исходных объявлений. Хвост
        маленького ANF-блока сохраняет результат в его глобальный слот. *)
     let values =
@@ -387,37 +447,43 @@ let generate program =
            | Function _ -> error "ожидалось глобальное значение %S" name)
         values
     in
-    compile_function (label "vc_main") [] value_bodies;
-    List.iter
-      (fun (name, function_) ->
-         let parameters =
-           List.init function_.arity (fun n -> "builtin_arg" ^ string_of_int n)
-         in
-         let body =
-           ACExpr (CApp (ImmId name, List.map (fun name -> ImmId name) parameters))
-         in
-         compile_function function_.code parameters [ body, None ])
-      (List.rev !wrappers);
-    directive Data;
-    directive (Align 3);
-    List.iter
-      (fun (_, global) ->
-         match global with
-         | Value address ->
-           mark address;
-           directive (Dword 0)
-         | Function _ -> ())
-      globals;
-    List.iter
-      (fun function_ ->
-         mark function_.closure;
-         directive (Dword_label function_.code);
-         directive (Dword function_.arity);
-         directive (Dword 0))
-      (List.rev !closures);
-    Ok (List.rev !output)
+    let state = compile_function globals (label "vc_main") [] value_bodies state in
+    let state =
+      fold
+        (fun (name, function_) state ->
+           let parameters =
+             List.init function_.arity (fun n -> "builtin_arg" ^ string_of_int n)
+           in
+           let body =
+             ACExpr (CApp (ImmId name, List.map (fun name -> ImmId name) parameters))
+           in
+           compile_function globals function_.code parameters [ body, None ] state)
+        (List.rev state.wrappers)
+        state
+    in
+    let state =
+      state
+      |> directive Data
+      |> directive (Align 3)
+      |> fold
+           (fun (_, global) state ->
+              match global with
+              | Value address -> state |> mark address |> directive (Dword 0)
+              | Function _ -> state)
+           globals
+    in
+    let state =
+      fold
+        (fun function_ state ->
+           state
+           |> mark function_.closure
+           |> directive (Dword_label function_.code)
+           |> directive (Dword function_.arity)
+           |> directive (Dword 0))
+        (List.rev state.closures)
+        state
+    in
+    Ok (List.rev state.output)
   with
   | Unsupported message -> Error message
 ;;
-
-[@@@zanuda "+mutability_check"]
