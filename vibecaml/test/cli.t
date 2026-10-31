@@ -182,3 +182,57 @@
   $ vibecamlc -o --stop-after ll small.ml
   vibecaml: после -o ожидается значение
   [1]
+
+С `--ext-glued-keywords` слово, которое нельзя разобрать, не пропадает молча:
+ошибка та же, что и без опции.
+
+  $ echo 'let x = class 1' > class_value.ml
+
+  $ vibecamlc --stop-after parsing class_value.ml
+  vibecaml: 1:9: ключевое слово class вне подмножества
+  [1]
+
+  $ vibecamlc --stop-after parsing --ext-glued-keywords class_value.ml
+  vibecaml: 1:9: ключевое слово class вне подмножества
+  [1]
+
+  $ echo 'let class = 1' > class_name.ml
+
+  $ vibecamlc --stop-after parsing class_name.ml
+  vibecaml: 1:5: ключевое слово class вне подмножества
+  [1]
+
+  $ vibecamlc --stop-after parsing --ext-glued-keywords class_name.ml
+  vibecaml: 1:5: ключевое слово class вне подмножества
+  [1]
+
+  $ echo 'class' > class_alone.ml
+
+  $ vibecamlc --stop-after parsing class_alone.ml
+  vibecaml: 1:1: ключевое слово class вне подмножества
+  [1]
+
+  $ vibecamlc --stop-after parsing --ext-glued-keywords class_alone.ml
+  vibecaml: 1:1: ключевое слово class вне подмножества
+  [1]
+
+`letclass` нельзя разбить на `let` и `class`, поэтому с опцией это тот же
+идентификатор, что и без неё.
+
+  $ echo 'letclass' > letclass.ml
+
+  $ vibecamlc --stop-after parsing letclass.ml
+  vibecaml: 1:1: в структуре ожидалось let
+  [1]
+
+  $ vibecamlc --stop-after parsing --ext-glued-keywords letclass.ml
+  vibecaml: 1:1: в структуре ожидалось let
+  [1]
+
+  $ echo 'let x = 1 letclass' > letclass_arg.ml
+
+  $ vibecamlc --stop-after parsing letclass_arg.ml
+  let x = 1 letclass
+
+  $ vibecamlc --stop-after parsing --ext-glued-keywords letclass_arg.ml
+  let x = 1 letclass

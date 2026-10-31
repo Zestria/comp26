@@ -176,28 +176,23 @@ type region =
    зарезервированным словом и т. п.) пропускаются. Если не годится ни один,
    сообщение об ошибке берём от классификации всего слова. *)
 let word_candidates offset word =
-  let front =
-    try split_glued_front offset word with
-    | Parse_error _ -> []
+  (* Неудачное разбиение --- [None], а не пустой список: пустой кандидат
+     означал бы, что слова во входе нет. *)
+  let attempt split =
+    match split () with
+    | tokens -> Some tokens
+    | exception Parse_error _ -> None
   in
-  let back =
-    try split_glued_back offset word with
-    | Parse_error _ -> []
-  in
-  let whole =
-    try [ { kind = word_kind offset word; offset } ] with
-    | Parse_error _ -> []
-  in
+  let whole () = [ { kind = word_kind offset word; offset } ] in
+  let front = attempt (fun () -> split_glued_front offset word) in
+  let back = attempt (fun () -> split_glued_back offset word) in
   let rec dedup seen = function
     | [] -> List.rev seen
     | candidate :: rest when List.mem candidate seen -> dedup seen rest
     | candidate :: rest -> dedup (candidate :: seen) rest
   in
-  match dedup [] [ front; back; whole ] with
-  | [] ->
-    (match word_kind offset word with
-     | _ -> assert false
-     | exception Parse_error (_, message) -> fail offset message)
+  match dedup [] (List.filter_map Fun.id [ front; back; attempt whole ]) with
+  | [] -> [ whole () ]
   | candidates -> candidates
 ;;
 
