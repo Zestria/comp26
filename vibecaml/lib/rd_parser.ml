@@ -219,7 +219,9 @@ let number_glued_keyword_tokens glue_kw finish glued source =
    видит только токены. При [glue_kw] слова расщепляются по ключевым словам:
    [letx] --- это [let] [x], [1in] --- это [1] [in]. Расщепление обязательным
    не бывает: слово, которое можно оставить идентификатором ([android]), так
-   и остаётся, потому что разбор перебирает кандидатов каждого слова. *)
+   и остаётся, потому что разбор перебирает кандидатов каждого слова.
+   Завершающий [Eof] отдаётся отдельно от регионов: у него нет кандидатов, а
+   состояние разбора строится от него, поэтому непустое по типу. *)
 let lex glue_kw source =
   let length = String.length source in
   let pair_at index =
@@ -242,9 +244,7 @@ let lex glue_kw source =
   in
   let rec loop index regions =
     if index >= length
-    then (
-      let eof = { kind = Eof; offset = length } in
-      List.rev ({ offset = length; candidates = [ [ eof ] ] } :: regions))
+    then List.rev regions, { kind = Eof; offset = length }
     else if is_space source.[index]
     then loop (index + 1) regions
     else if pair_at index = Some ('(', '*')
@@ -297,8 +297,8 @@ let lex glue_kw source =
   loop 0 []
 ;;
 
-(* Состояние разбора --- оставшиеся токены: текущий и хвост. Список
-   непустой по построению, последний токен всегда [Eof]. *)
+(* Состояние разбора --- оставшиеся токены: текущий и хвост. Непустота
+   задана типом; последний токен всегда [Eof], его добавляет [run]. *)
 type tokens = token * token list
 
 let current ((token, _) : tokens) = token
@@ -393,9 +393,6 @@ let parenthesized_operator tokens =
     Some ("=", tokens)
   | _ -> None
 ;;
-
-(* Каждая [parse_*] получает оставшиеся токены и возвращает значение вместе с
-   токенами после него. *)
 
 (* Простой паттерн: без кортежа на верхнем уровне. *)
 let rec parse_pattern tokens =
@@ -660,7 +657,8 @@ let run glue_kw parse source =
   in
   match lex glue_kw source with
   | exception Parse_error (offset, message) -> error offset message
-  | regions ->
+  | lexed ->
+    let regions, eof = lexed in
     let parse_tokens tokens =
       try
         let result, tokens = parse tokens in
@@ -679,10 +677,13 @@ let run glue_kw parse source =
     let rec search acc_tokens pending =
       match pending with
       | [] ->
-        (match List.rev acc_tokens with
-         | first :: rest -> parse_tokens (first, rest)
-         (* Лексер всегда добавляет [Eof], так что пустым список не бывает. *)
-         | [] -> parse_tokens ({ kind = Eof; offset = String.length source }, []))
+        (* [acc_tokens] развёрнут, так что свёртка собирает состояние с конца,
+           начиная с [Eof]. *)
+        List.fold_left
+          (fun (current, rest) token -> token, current :: rest)
+          (eof, [])
+          acc_tokens
+        |> parse_tokens
       | region :: rest ->
         let rec try_candidates = function
           | [] -> Error "нет кандитатов для разбора"
