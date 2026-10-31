@@ -21,6 +21,7 @@ type stop_after =
   | Anf
   | Closure
   | Lambda
+  | Riscv
 
 type opts =
   { parser_kind : Mylittleml.Frontend.Parse.parser_kind
@@ -31,17 +32,18 @@ type opts =
 
 let usage =
   {|Usage: compiler.exe [OPTIONS] [FILE]
-Middle-end for MyLittleML: parse an OCaml subset and run ANF,
-closure conversion and lambda lifting.
+Frontend, middle-end and RISC-V backend for MyLittleML.
 
 Options:
   -parsing topdown|menhir    choose the parser (default: topdown;
                              'bottomup' is accepted as an alias of 'menhir')
   --parser topdown|bottomup  legacy alias of -parsing
   --sticky                   enable sticky-keywords mode (top-down only)
-  --stop-after parsing|anf|closure-conversion|lambda-lifting
-                             stop the pipeline after the given stage
+  --stop-after parsing|anf|closure-conversion|lambda-lifting|riscv
+                             stop the pipeline after the given stage;
+                             'riscv' emits RISC-V 64 assembly
                              (default: run the whole pipeline)
+  --backend riscv            alias of --stop-after riscv
   -o FILE                    write the result to FILE ('-o -' writes
                              to standard output, which is also the default)
   --ast | --dump-ast         legacy: stop after parsing and print the AST
@@ -69,11 +71,13 @@ let parse_stop_after = function
   | "anf" -> Anf
   | "closure-conversion" -> Closure
   | "lambda-lifting" -> Lambda
+  | "riscv" -> Riscv
   | s ->
     fail_usage
       ("unknown stage: "
        ^ s
-       ^ " (expected 'parsing', 'anf', 'closure-conversion' or 'lambda-lifting')")
+       ^ " (expected 'parsing', 'anf', 'closure-conversion' 'lambda-lifting' or 'riscv')"
+      )
 ;;
 
 let parse_args argv =
@@ -87,6 +91,10 @@ let parse_args argv =
     | "--stop-after" :: stage :: rest ->
       loop ~parser_kind ~sticky ~stop_after:(parse_stop_after stage) ~output ~file rest
     | "--stop-after" :: [] -> fail_usage "option '--stop-after' requires an argument"
+    | "--backend" :: "riscv" :: rest ->
+      loop ~parser_kind ~sticky ~stop_after:Riscv ~output ~file rest
+    | "--backend" :: [] -> fail_usage "option '--backend' requires an argument"
+    | "--backend" :: b :: _ -> fail_usage ("unknown backend: " ^ b ^ " (expected 'riscv')")
     | "-o" :: path :: rest ->
       loop ~parser_kind ~sticky ~stop_after ~output:(Some path) ~file rest
     | "-o" :: [] -> fail_usage "option '-o' requires an argument"
@@ -133,19 +141,31 @@ let run opts source =
       prerr_endline ("compiler: " ^ msg);
       exit 1
   in
+  let anf_prog = Mylittleml.Middleend.Anf.anf_prog prog in
   let output =
     match opts.stop_after with
     | Frontend -> Mylittleml.Frontend.Pp.to_string prog
-    | Anf -> Mylittleml.Middleend.Anf.to_string (Mylittleml.Middleend.Anf.anf_prog prog)
+    | Anf -> Mylittleml.Middleend.Anf.to_string anf_prog
     | Closure ->
       Mylittleml.Middleend.Anf.to_string
-        (Mylittleml.Middleend.Closure.convert_prog
-           (Mylittleml.Middleend.Anf.anf_prog prog))
+        (Mylittleml.Middleend.Closure.convert_prog anf_prog)
     | Lambda ->
       Mylittleml.Middleend.Anf.to_string
         (Mylittleml.Middleend.Lambda_lift.lift_prog
-           (Mylittleml.Middleend.Closure.convert_prog
-              (Mylittleml.Middleend.Anf.anf_prog prog)))
+           (Mylittleml.Middleend.Closure.convert_prog anf_prog))
+    | Riscv ->
+      let ll_prog =
+        Mylittleml.Middleend.Lambda_lift.lift_prog
+          (Mylittleml.Middleend.Closure.convert_prog anf_prog)
+      in
+      (match
+         Riscv.Asm.emit
+           (Riscv.Codegen.compile_program (Riscv.Codegen.from_aprogram ll_prog))
+       with
+       | asm -> asm
+       | exception Riscv.Codegen.Unsupported msg ->
+         prerr_endline ("compiler: backend: " ^ msg);
+         exit 1)
   in
   match opts.output with
   | None | Some "-" -> print_endline output

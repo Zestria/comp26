@@ -1,0 +1,9 @@
+(include_subdirs no)
+
+(library
+ (name riscv)
+ (public_name MyLittleML.Riscv)
+ (modules riscv program callconv asm codegen)
+ (libraries mylittleml)
+ (preprocess
+  (pps ppx_deriving.show)))
