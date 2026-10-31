@@ -8,7 +8,7 @@ COV_DIR = /tmp/cov-$(PKG)
 DUNE_ROOT = cd .. &&
 
 .DEFAULT_GOAL = all
-.PHONY: all release test check fmt fmt-check lint deps coverage clean help run
+.PHONY: all release test test-runtime check fmt fmt-check lint deps coverage clean help run
 
 all: ## Собрать пакет (профиль dev, быстрая сборка для разработки)
 	dune build @all
@@ -21,38 +21,10 @@ release: ## Собрать так, как проверяет преподава�
 test: ## Прогнать тесты пакета
 	dune test
 
-test-runtime1:
-	riscv64-linux-gnu-gcc -O3 runtime/runtime.s runtime_test/case1/main.c -nostartfiles -o case1
-	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case1 > case1_actual.txt 2>&1
-	diff runtime_test/case1/expected.txt case1_actual.txt
-	rm case1_actual.txt case1
-
-test-runtime2:
-	riscv64-linux-gnu-gcc -g -O3 runtime/runtime.s runtime_test/case2/main.c -nostartfiles -o case2
-	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case2 > case2_actual.txt 2>&1
-	diff runtime_test/case2/expected.txt case2_actual.txt
-	rm case2_actual.txt case2
-
-test-runtime3:
-	riscv64-linux-gnu-gcc -O3 -g runtime/runtime.s runtime_test/case3/main.c -nostartfiles -o case3
-	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case3 > case3_actual.txt 2>&1
-	diff runtime_test/case3/expected.txt case3_actual.txt
-	rm case3_actual.txt case3
-
-test-runtime4:
-	riscv64-linux-gnu-gcc -O3 runtime/runtime.s runtime_test/case4/main.c -nostartfiles -o case4
-	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case4 > case4_actual.txt 2>&1
-	diff runtime_test/case4/expected.txt case4_actual.txt
-	rm case4_actual.txt case4
-
-test-runtime5:
-	riscv64-linux-gnu-gcc -O3 runtime/runtime.s runtime_test/case5/main.c -nostartfiles -o case5
-	-qemu-riscv64 -L /usr/riscv64-linux-gnu/ ./case5 > case5_actual.txt 2>&1
-	diff runtime_test/case5/expected.txt case5_actual.txt
-	rm case5_actual.txt case5
-
-test-runtime: test-runtime1 test-runtime2 test-runtime3 test-runtime4 test-runtime5
-	echo "Runtime tests passed!"
+# Те же тесты входят в обычный dune runtest и серверный CI. Здесь только
+# удобный отдельный запуск: сборкой, зависимостями и выводом управляет Dune.
+test-runtime: ## Принудительно прогнать C-драйверы runtime под QEMU
+	dune test runtime_test --force
 
 # Алиас ограничен нашим пакетом: @check из этой папки задевает чужие пакеты
 # в общем dune project, и их ошибки роняли make lint.
