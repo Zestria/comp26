@@ -106,3 +106,16 @@
 (env
  (release
   (inline_tests enabled)))
+
+(cram
+ (package SchonfinkelML)
+ (deps
+  ../../compiler.exe
+  ../runtime.c
+  ../runtime.h
+  ../gc.c
+  ../gc.h
+  ../tuple.c
+  ../tuple.h
+  ../closure.c
+  ../closure.h))

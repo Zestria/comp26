@@ -10,6 +10,7 @@
 void schoml_print_int(void *arg) {
   int integer = (int)(intptr_t)arg;
   printf("%d\n", integer);
+  fflush(stdout);
   return;
 }
 
