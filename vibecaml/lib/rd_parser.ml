@@ -674,34 +674,26 @@ let run glue_kw parse source =
     (* Первая комбинация --- жадная, первый кандидат каждого слова. Если она
        не разбирается, перебираем остальные и берём первый успешный разбор.
        Перебор полный, для «обычных» слов кандидат один, так что обычно это
-       ровно один проход. При полном провале отдаём ошибку жадной комбинации. *)
-    let first_error = ref None in
-    let parse_and_record tokens =
-      let result = parse_tokens tokens in
-      (match result, !first_error with
-       | Error message, None -> first_error := Some message
-       | _ -> ());
-      result
-    in
+       ровно один проход. При полном провале отдаём ошибку жадной комбинации:
+       каждый уровень сохраняет ошибку первого кандидата, поэтому наверх доходит
+       ошибка самого первого листа обхода. *)
     let rec search acc_tokens pending =
       match pending with
-      | [] -> parse_and_record (Array.of_list (List.rev acc_tokens))
+      | [] -> parse_tokens (Array.of_list (List.rev acc_tokens))
       | region :: rest ->
         let rec try_candidates = function
           | [] -> Error "нет кандитатов для разбора"
           | candidate :: more ->
             (match search (List.rev_append candidate acc_tokens) rest with
              | Ok _ as ok -> ok
-             | Error _ -> try_candidates more)
+             | Error _ as first_error ->
+               (match try_candidates more with
+                | Ok _ as ok -> ok
+                | Error _ -> first_error))
         in
         try_candidates region.candidates
     in
-    (match search [] regions with
-     | Ok _ as ok -> ok
-     | Error _ ->
-       (match !first_error with
-        | Some message -> Error message
-        | None -> Error "нет кандитатов"))
+    search [] regions
 ;;
 
 let check_extensions extensions =
