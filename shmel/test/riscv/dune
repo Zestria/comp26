@@ -27,7 +27,7 @@
  (libraries qcheck shmel.Lib shmel.Middleend shmel.Backend)
  (deps
   run_riscv.sh
-  (env_var RISCV_PKG_CONFIG_LIBDIR)
+  ../../backend/closure_invoke.S
   (env_var SHMEL_QEMU_TIMEOUT)
   ../../backend/closure_runtime.h
   ../../backend/closure_runtime.c))
@@ -42,7 +42,7 @@
   fac_cps.ml
   fib_cps.ml
   run_riscv.sh
-  (env_var RISCV_PKG_CONFIG_LIBDIR)
+  ../../backend/closure_invoke.S
   (env_var SHMEL_QEMU_TIMEOUT)
   ../../backend/closure_runtime.h
   ../../backend/closure_runtime.c
@@ -57,8 +57,9 @@
  (package shmel)
  (deps
   check_closure_runtime.sh
+  closure_invoke_native.c
+  ../../backend/closure_invoke.S
   run_riscv.sh
-  (env_var RISCV_PKG_CONFIG_LIBDIR)
   (env_var SHMEL_QEMU_TIMEOUT)
   closure_runtime_tests.c
   ../../backend/closure_runtime.h
@@ -74,6 +75,7 @@
   (universe)
   riscv_tests.exe
   calls_integration_tests.exe
+  ../../backend/closure_invoke.S
   program_tests.exe
   ../../compiler.exe
   fac_cps.ml

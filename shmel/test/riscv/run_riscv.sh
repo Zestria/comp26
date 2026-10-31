@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 set -eu
 
-cross_pc="${RISCV_PKG_CONFIG_LIBDIR:-/usr/lib/riscv64-linux-gnu/pkgconfig}"
-
 run_qemu() {
     if command -v timeout >/dev/null 2>&1; then
         timeout "${SHMEL_QEMU_TIMEOUT:-60}" qemu-riscv64 -cpu max "$@"
@@ -16,9 +14,7 @@ run_qemu() {
 case "${1:-}" in
     available)
         command -v riscv64-linux-gnu-gcc >/dev/null 2>&1 &&
-            command -v qemu-riscv64 >/dev/null 2>&1 &&
-            command -v pkg-config >/dev/null 2>&1 &&
-            PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --exists libffi
+            command -v qemu-riscv64 >/dev/null 2>&1
         ;;
     codegen)
         riscv64-linux-gnu-gcc -static -march=rv64gc harness.c tests.s -o tests.exe
@@ -27,16 +23,10 @@ case "${1:-}" in
     runtime|integration|program|programs)
         mode="$1"
         backend="${2:-.}"
-        if ! PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --exists libffi; then
-            echo "RV64 tests require target libffi development files; set RISCV_PKG_CONFIG_LIBDIR" >&2
-            exit 1
-        fi
-        ffi_cflags=$(PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --cflags libffi)
-        ffi_libs=$(PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$cross_pc" pkg-config --libs --static libffi)
         build() {
             riscv64-linux-gnu-gcc -std=c11 -Wall -Wextra -Werror -Wno-cast-function-type \
-                -static -march=rv64gc -mabi=lp64d $ffi_cflags -I "$backend" \
-                "$backend/closure_runtime.c" "$@" -o program_rv64.exe $ffi_libs
+                -static -march=rv64gc -mabi=lp64d -I "$backend" \
+                "$backend/closure_runtime.c" "$backend/closure_invoke.S" "$@" -o program_rv64.exe
         }
         case "$mode" in
             runtime) build closure_runtime_tests.c ;;

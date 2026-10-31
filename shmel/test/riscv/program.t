@@ -30,6 +30,19 @@ An error must not overwrite an existing output file.
   $ ../../compiler.exe -o missing/output.s input.ml > /dev/null 2>&1
   [1]
 
+Code arities above eight, including explicit captures, compile with both parsers.
+
+  $ echo 'let f a b c d e f g h i = a + i in print_int (f 1 2 3 4 5 6 7 8 9)' > wide.ml
+  $ ../../compiler.exe -o wide.s wide.ml
+  $ ../../compiler.exe -parsing menhir -o wide-menhir.s wide.ml
+  $ cmp wide.s wide-menhir.s
+  $ echo 'let bump x = x + 1 in let f a b c d e f g h = bump a + b + c + d + e + f + g + h in print_int (f 1 2 3 4 5 6 7 8)' > captures.ml
+  $ ../../compiler.exe -o captures.s captures.ml
+  $ ../../compiler.exe -parsing menhir -o captures-menhir.s captures.ml
+  $ cmp captures.s captures-menhir.s
+  $ cat output.s
+  keep this file
+
 Earlier stages remain available.
 
   $ ../../compiler.exe --stop-after anf input.ml

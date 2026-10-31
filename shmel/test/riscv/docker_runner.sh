@@ -33,11 +33,11 @@ case "$mode" in
         ;;
     runtime)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh closure_runtime_tests.c \
-            -C "$backend" closure_runtime.c closure_runtime.h
+            -C "$backend" closure_runtime.c closure_runtime.h closure_invoke.S
         ;;
     integration)
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh integration.c integration.s \
-            -C "$backend" closure_runtime.c closure_runtime.h
+            -C "$backend" closure_runtime.c closure_runtime.h closure_invoke.S
         ;;
     program|programs)
         if [ "$mode" = program ]; then
@@ -46,7 +46,7 @@ case "$mode" in
             input=programs
         fi
         COPYFILE_DISABLE=1 tar --format=ustar -chf "$archive" run_riscv.sh "$input" \
-            -C "$backend" closure_runtime.c closure_runtime.h print_runtime.c
+            -C "$backend" closure_runtime.c closure_runtime.h closure_invoke.S print_runtime.c
         ;;
 esac
 

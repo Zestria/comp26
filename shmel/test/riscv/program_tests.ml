@@ -38,7 +38,13 @@ let cases =
   ; ( "partial_effects"
     , "let f x y = let _ = print_int x in y in let g = f 3 in let _ = print_int 1 in \
        print_int (g 7)" )
-  ; ( "ten_arguments"
+  ; ( "eight_arguments"
+    , "let f a b c d e f g h = a+b+c+d+e+f+g+h in print_int (f 1 2 3 4 5 6 7 8)" )
+  ; ( "eight_arguments_with_capture"
+    , "let bump x = x + 1 in let f a b c d e f g = let x = bump a in x+b+c+d+e+f+g in \
+       print_int (f 1 2 3 4 5 6 7)" )
+  ; "nine_arguments", "let f a b c d e f g h i = a + i in print_int (f 1 2 3 4 5 6 7 8 9)"
+  ; ( "ten_arguments_with_capture"
     , "let bump x = x + 1 in let f a b c d e f g h i j = let x = bump a in \
        x+b+c+d+e+f+g+h+i+j in print_int (f 1 2 3 4 5 6 7 8 9 10)" )
   ; ( "reserved_symbols"
@@ -99,8 +105,7 @@ let run ~docker =
   if (not docker) && not available
   then
     Printf.printf
-      "%d whole-program cases compiled; skipped QEMU: cross-compiler, QEMU or target \
-       libffi not found\n"
+      "%d whole-program cases compiled; skipped QEMU: cross-compiler or QEMU not found\n"
       (List.length manifest)
   else (
     let command =

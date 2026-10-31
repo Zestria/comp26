@@ -3,11 +3,13 @@
 
 #include "closure_runtime.h"
 
-#include <ffi.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Architecture-specific dispatcher; the runtime API validates its inputs. */
+extern shmel_word shmel_invoke_abi(shmel_code_address code, uint64_t argc,
+                                  const shmel_word *argv);
 
 static _Noreturn void runtime_error(const char *message) {
   fprintf(stderr, "Shmel runtime: %s\n", message);
@@ -39,35 +41,11 @@ static void validate_closure(const shmel_closure *closure) {
 
 shmel_word shmel_invoke(shmel_code_address code, uint64_t argc,
                         const shmel_word *argv) {
-  if (code == NULL || (argc != 0 && argv == NULL) || argc > UINT_MAX) {
-    runtime_error("invalid libffi invocation");
+  if (code == NULL || (argc != 0 && argv == NULL)) {
+    runtime_error("invalid function invocation");
   }
-  size_t bytes = argument_bytes(argc);
-  ffi_type **types = NULL;
-  void **values = NULL;
-  shmel_word *arguments = NULL;
-  if (argc != 0) {
-    types = allocate((size_t)argc * sizeof(*types));
-    values = allocate((size_t)argc * sizeof(*values));
-    arguments = allocate(bytes);
-    memcpy(arguments, argv, bytes);
-    for (uint64_t i = 0; i < argc; ++i) {
-      types[i] = &ffi_type_uint64;
-      values[i] = &arguments[i];
-    }
-  }
-
-  ffi_cif cif;
-  if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned int)argc, &ffi_type_uint64,
-                   types) != FFI_OK) {
-    runtime_error("libffi could not prepare the call");
-  }
-  shmel_word result;
-  ffi_call(&cif, FFI_FN(code), &result, values);
-  free(arguments);
-  free(values);
-  free(types);
-  return result;
+  (void)argument_bytes(argc);
+  return shmel_invoke_abi(code, argc, argv);
 }
 
 shmel_closure *shmel_make_closure(shmel_code_address code, uint64_t arity) {
