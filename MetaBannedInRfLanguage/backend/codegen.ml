@@ -713,10 +713,21 @@ let rec gen_cexpr = function
     (* Tagged false is 1, not zero. *)
     let* () = emit li t0 1 ~comm:"tagged false is 1" in
     let* () = emit beq a0 t0 else_label in
+    let* before_branches = get in
     let* () = gen_aexpr then_branch in
+    let* after_then = get in
     let* () = emit j end_label in
     let* () = emit label else_label in
+    (* Only one branch runs, so both can allocate from the same stack offset.
+       Keep emitted code, fresh labels and requested builtin wrappers. *)
+    let* () =
+      modify (fun state -> { state with stack_offset = before_branches.stack_offset })
+    in
     let* () = gen_aexpr else_branch in
+    let* () =
+      modify (fun state ->
+        { state with stack_offset = min after_then.stack_offset state.stack_offset })
+    in
     emit label end_label
   | CFun _ -> fail "unexpected function expression after lambda lifting"
   | CTuple (first, second, rest) -> gen_tuple (first :: second :: rest)
