@@ -109,4 +109,6 @@
   ../asmgen.exe
   ../runtime/runtime.c
   ../runtime/runtime.h
+  ../runtime/runtime_internal.h
+  ../runtime/gc.c
   ../runtime/startup.c))
