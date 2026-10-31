@@ -53,7 +53,16 @@ case "$CMD" in
         opam exec -- zanuda -dir "$COMPILER_NAME" -osarif result.sarif -ordjsonl result.rdjsonl
         ;;
     stats)
-        LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats
+        members="$(yq --arg compiler "$COMPILER_NAME" -c \
+            '[.[] | to_entries[] | select(.key == $compiler) | .value[]]' \
+            "$WORKSPACE/teams.yml")"
+        author_pattern="$(printf '%s' "$members" | python3 .sourcecraft/stats-authors.py)"
+        if [ -n "$author_pattern" ]; then
+            LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats \
+                --regexp-ignore-case --extended-regexp "--author=$author_pattern"
+        else
+            LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats
+        fi
         ;;
     *)
         usage
