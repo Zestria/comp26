@@ -28,6 +28,12 @@
  (libraries BDSMl.frontend BDSMl.middleend alcotest))
 
 (test
+ (name allocation_tests)
+ (package BDSMl)
+ (modules allocation_tests)
+ (libraries BDSMl.frontend BDSMl.middleend BDSMl.backend alcotest))
+
+(test
  (name backend_tests)
  (package BDSMl)
  (modules backend_tests)
@@ -39,5 +45,6 @@
   ../runtime/errors.c
   ../runtime/runtime.h
   riscv/programs/print_int.ml
+  riscv/programs/register_chain.ml
   riscv/programs/fac_cps.ml
   riscv/programs/fib_cps.ml))

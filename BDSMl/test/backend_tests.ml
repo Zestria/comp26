@@ -81,6 +81,7 @@ let arithmetic =
   ; "values survive calls", "let g x = x * 2 let f x = let y = g x in let z = g 3 in x + y + z let () = print_int (f 5)", "21"
   ; "shadowing", "let x = 3 let f x = let x = x + 1 in x let () = print_int (f 5 + x)", "9"
   ; "ANF effect order", "let f a b = a + b let () = print_int (f (let () = print_int 1 in 3) (let () = print_int 2 in 4))", "217"
+  ; "outer live across both branches", "let f x flag = let r = if flag then let y = x + 1 in y * 2 else let y = x - 1 in y * 3 in r + x let () = print_int (f 10 true) let () = print_int (f 10 false)", "3237"
   ]
 ;;
 
@@ -147,13 +148,57 @@ let safe_symbols () =
 
 let frame_layout () =
   let module Frame = Allocation.Frame in
-  let parameters = [ PVar "x"; PUnit; PUnderscore ] in
-  let body = ALet (PVar "y", CApp (ImmId "f", List.init 20 (fun i -> ImmInt i)), ACExpr (CImm ImmUnit)) in
+  let parameters = List.init 20 (fun i -> PVar ("x" ^ string_of_int i)) in
+  let body = ACExpr (CApp (ImmId "f", List.init 20 (fun i -> ImmId ("x" ^ string_of_int i)))) in
   let frame = Frame.create parameters [ body ] in
   Alcotest.(check int) "alignment" 0 (Frame.size frame mod Abi.stack_alignment);
-  Alcotest.(check bool) "locals outside outgoing area" true (Frame.slot frame "x" > Frame.operand_slot frame);
-  Alcotest.(check bool) "distinct local slots" true (Frame.slot frame "x" <> Frame.slot frame "y");
-  Alcotest.(check bool) "saved ra after locals" true (Frame.slot frame "y" < Frame.size frame - Abi.word_size)
+  Alcotest.(check int) "only twelve registers saved" 12 (List.length (Frame.saved_registers frame));
+  Alcotest.(check int) "eight spilled parameters" 8 (Frame.spill_count frame);
+  let slots = List.filter_map (fun i -> match Frame.location frame ("x" ^ string_of_int i) with
+    | Frame.Stack offset -> Some offset | Frame.Register _ | Frame.Unused -> None) (List.init 20 Fun.id) in
+  Alcotest.(check bool) "spills after outgoing area, before saves" true
+    (List.for_all (fun offset -> offset > Frame.operand_slot frame && offset < Frame.size frame - Abi.word_size) slots);
+  Alcotest.(check int) "distinct spill slots" 8 (List.length (List.sort_uniq Int.compare slots))
+;;
+
+let pressure_program count =
+  let parameters = List.init count (fun i -> PVar ("p" ^ string_of_int i)) in
+  let rec sum index accumulated =
+    if index = count then ACExpr (CImm accumulated)
+    else
+      let name = "sum" ^ string_of_int index in
+      ALet (PVar name, CBinOp (Plus, accumulated, ImmId ("p" ^ string_of_int index)), sum (index + 1) (ImmId name))
+  in
+  let body = ALet (PVar "unused_effect", CApp (ImmId "print_int", [ ImmInt 9 ]), sum 0 (ImmInt 0)) in
+  let function_ = ADecl (NonRec, PVar "pressure", parameters, body) in
+  let main = ALet (PVar "result", CApp (ImmId "pressure", List.init count (fun i -> ImmInt (i + 1))),
+    ACExpr (CApp (ImmId "print_int", [ ImmId "result" ]))) in
+  function_, main
+;;
+
+let register_pressure () =
+  let function_, main = pressure_program 32 in
+  execute_assembly "9528" (Codegen.generate [ function_; AEval main ] |> unwrap)
+;;
+
+let large_spill_offsets () =
+  let function_, main = pressure_program 300 in
+  execute_assembly "945150" (Codegen.generate [ function_; AEval main ] |> unwrap)
+;;
+
+let long_chain () =
+  let rec chain index =
+    if index = 500 then ACExpr (CImm (ImmId "x499"))
+    else ALet (PVar ("x" ^ string_of_int index),
+      CBinOp (Plus, ImmId ("x" ^ string_of_int (index - 1)), ImmInt 1), chain (index + 1))
+  in
+  let body = ALet (PVar "x0", CImm (ImmInt 1), chain 1) in
+  let frame = Allocation.Frame.create [] [ body ] in
+  Alcotest.(check int) "single register reused 500 times" 1 (List.length (Allocation.Frame.saved_registers frame));
+  Alcotest.(check int) "no spill for sequential lifetimes" 0 (Allocation.Frame.spill_count frame);
+  execute_assembly "500" (Codegen.generate
+    [ ADecl (NonRec, PVar "chain", [ PUnit ], body)
+    ; AEval (ALet (PVar "r", CApp (ImmId "chain", [ ImmUnit ]), ACExpr (CApp (ImmId "print_int", [ ImmId "r" ])))) ] |> unwrap)
 ;;
 
 let short_circuit_diagnostic () =
@@ -178,6 +223,10 @@ let () =
       ; Alcotest.test_case "indirect call with 300 arguments" `Quick large_indirect_frame
       ; Alcotest.test_case "safe assembly symbols" `Quick safe_symbols
       ; Alcotest.test_case "frame layout" `Quick frame_layout
+      ; Alcotest.test_case "pressure across runtime calls" `Quick register_pressure
+      ; Alcotest.test_case "large spill offsets" `Quick large_spill_offsets
+      ; Alcotest.test_case "long chain reuses registers" `Quick long_chain
+      ; Alcotest.test_case "register chain example" `Quick (fun () -> execute_assembly "13" (generate (read_file "riscv/programs/register_chain.ml")))
       ; Alcotest.test_case "direct calls and stable symbols" `Quick check_structure
       ; Alcotest.test_case "reject unlowered short circuit" `Quick short_circuit_diagnostic
       ; Alcotest.test_case "unknown name" `Quick (check_error "let () = print_endline 1" "RISC-V: unknown identifier: print_endline")

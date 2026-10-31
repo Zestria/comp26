@@ -11,6 +11,10 @@ open Asm
 (* Only adjacent instructions are forwarded: calls, labels and branches
    terminate the opportunity, so no control-flow or alias assumptions leak. *)
 let rec adjacent = function
+  | Instruction (Mv (destination, source))
+    :: Instruction (Mv (back, value)) :: rest
+    when back = source && value = destination ->
+    adjacent (Instruction (Mv (destination, source)) :: rest)
   | Instruction (Sd (source, offset, base))
     :: Instruction (Ld (destination, other_offset, other_base))
     :: rest

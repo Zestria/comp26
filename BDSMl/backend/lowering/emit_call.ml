@@ -10,7 +10,7 @@ open BDSMl_middleend.Anf.Anf_ast
 open Assembly.Asm
 module Frame = Allocation.Frame
 
-type environment = (string * int) list
+type environment = (string * Frame.location) list
 
 type context =
   { symbols : Symbols.t
@@ -33,7 +33,7 @@ let value context environment destination immediate =
   | ImmUnit -> instruction (Li (destination, Abi.unit_value))
   | ImmId name ->
     (match List.assoc_opt name environment with
-     | Some offset -> load destination ~base:Sp ~offset
+     | Some location -> Frame.read location destination
      | None ->
        (match Symbols.require context.symbols name with
         | Symbols.Global symbol ->
@@ -44,6 +44,19 @@ let value context environment destination immediate =
           let* () = instruction (Li (A1, Int64.of_int function_.arity)) in
           let* () = instruction (Call Abi.Runtime.make_closure) in
           if destination <> A0 then instruction (Mv (destination, A0)) else return ()))
+;;
+
+let operand context environment scratch immediate =
+  match immediate with
+  | ImmId name ->
+    (match List.assoc_opt name environment with
+     | Some (Frame.Register register) -> return register
+     | Some (Frame.Stack _ | Frame.Unused) | None ->
+       let* () = value context environment scratch immediate in
+       return scratch)
+  | ImmInt _ | ImmBool _ | ImmUnit ->
+    let* () = value context environment scratch immediate in
+    return scratch
 ;;
 
 let direct_target context environment function_ count =

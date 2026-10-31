@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-(** Locally bound identifiers and their frame offsets. *)
-type environment = (string * int) list
+(** Locally bound identifiers and their allocated register/spill locations. *)
+type environment = (string * Allocation.Frame.location) list
 
 type context =
   { symbols : Symbols.t
@@ -15,13 +15,22 @@ type context =
   }
 
 (** Load an immediate. Function values allocate closures and may clobber
-    caller-saved registers; local values remain in stable stack slots. *)
+    caller-saved registers; locals use callee-saved registers or spill slots. *)
 val value
   :  context
   -> environment
   -> Assembly.Asm.register
   -> BDSMl_middleend.Anf.Anf_ast.immexpr
   -> unit Assembly.Asm.code
+
+(** Reuse an allocated register directly as an operation operand; otherwise
+    materialize into the supplied scratch register. *)
+val operand
+  : context
+  -> environment
+  -> Assembly.Asm.register
+  -> BDSMl_middleend.Anf.Anf_ast.immexpr
+  -> Assembly.Asm.register Assembly.Asm.code
 
 (** Whether loading the immediate can invoke [bd_make_closure]. *)
 val allocates : context -> environment -> BDSMl_middleend.Anf.Anf_ast.immexpr -> bool

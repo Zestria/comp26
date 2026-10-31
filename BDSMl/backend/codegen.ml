@@ -29,7 +29,7 @@ let emit_function symbols name parameters body =
   let environment =
     List.filter_map
       (function
-        | PVar name -> Some (name, Frame.slot frame name)
+        | PVar name -> Some (name, Frame.location frame name)
         | PUnit | PUnderscore -> None)
       parameters
   in
