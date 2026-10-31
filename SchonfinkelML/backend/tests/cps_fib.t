@@ -16,5 +16,5 @@ Using gcc only for runtime and linking with clib
   $ riscv64-linux-gnu-gcc -c ../tuple.c -o tuple.o
   $ riscv64-linux-gnu-gcc -c ../closure.c -o closure.o
   $ riscv64-linux-gnu-gcc -nostartfiles fib.o runtime.o gc.o tuple.o closure.o -o fib.exe
-  $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64,c=true ./fib.exe
+  $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu max ./fib.exe
   8

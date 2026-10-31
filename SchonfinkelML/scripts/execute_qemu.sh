@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 $1
+qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu max $1
