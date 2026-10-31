@@ -8,7 +8,7 @@
 
 (** Untyped functional IR with resolved binding identities and no patterns. *)
 type expression =
-  | Constant of Frontend.Constant.t
+  | Constant of Bkml_frontend.Constant.t
   | Var of Id.t
   | Primitive of Primitive.t
   (** Primitive function values are strict, including [And] and [Or]. Direct

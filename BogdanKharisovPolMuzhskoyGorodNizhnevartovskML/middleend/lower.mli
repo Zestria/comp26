@@ -7,8 +7,8 @@
 [@@@ocaml.text "/*"]
 
 type error =
-  | Unbound_name of Frontend.Name.t
-  | Duplicate_pattern_name of Frontend.Name.t
+  | Unbound_name of Bkml_frontend.Name.t
+  | Duplicate_pattern_name of Bkml_frontend.Name.t
   | Invalid_recursive_pattern
   | Identifier_error of Id.error
 
@@ -21,10 +21,10 @@ val error_to_string : error -> string
     by later passes or translations whose results will be combined. *)
 val expression
   :  Id.supply
-  -> Frontend.Ast.expression
+  -> Bkml_frontend.Ast.expression
   -> (Lambda.expression * Id.supply, error) result
 
 val program
   :  Id.supply
-  -> Frontend.Ast.program
+  -> Bkml_frontend.Ast.program
   -> (Lambda.program * Id.supply, error) result

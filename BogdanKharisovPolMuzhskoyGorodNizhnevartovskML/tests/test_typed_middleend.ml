@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
-open Middleend_test_support
+open Bkml_middleend
+open Bkml_middleend_test_support
 
 let valid source stage render check value =
   match check value with
@@ -86,7 +86,7 @@ let shrink_contract =
          (* Exercise printed lexical names too, including alpha-renaming required
             by substitutions across a same-spelled inner binding. *)
          let lowered, _ =
-           lower_source Frontend.Parser.parse_expression candidate_source
+           lower_source Bkml_frontend.Parser.parse_expression candidate_source
          in
          let actual = observe candidate_source Lambda_eval.observe lowered in
          let _ = equal candidate_source (Typed_terms.expected candidate) actual in
@@ -106,7 +106,7 @@ let mutant input =
   let rec function_ (definition : Anf.function_definition) =
     { definition with body = Anf.map ~atom ~callee ~function_ definition.body }
   in
-  let lambda, supply = lower_source Frontend.Parser.parse_expression source in
+  let lambda, supply = lower_source Bkml_frontend.Parser.parse_expression source in
   let anf, _ = allocated source (Anf.of_lambda supply lambda) in
   let changed = Anf.map ~atom ~callee ~function_ anf in
   observe source Lambda_eval.observe (Anf.to_lambda changed)
@@ -120,7 +120,7 @@ let shrinking_finds_counterexample =
     QCheck.unit
     (fun () ->
        let initial = Typed_terms.shrink_witness () in
-       let _ = check_every_pass Frontend.Parser.parse_expression initial in
+       let _ = check_every_pass Bkml_frontend.Parser.parse_expression initial in
        let arb =
          QCheck.make
            ~print:Typed_terms.source
@@ -147,7 +147,7 @@ let shrinking_finds_counterexample =
              fail
                source
                ("A smaller failing candidate remains: " ^ Typed_terms.source candidate));
-         check_every_pass Frontend.Parser.parse_expression minimal
+         check_every_pass Bkml_frontend.Parser.parse_expression minimal
        | _ ->
          fail
            (Typed_terms.source initial)
@@ -194,8 +194,8 @@ let live_combinations =
 
 let () =
   run_tests
-    [ preserves_semantics "Angstrom" Frontend.Parser.parse_expression
-    ; preserves_semantics "Menhir" Frontend.Menhir_parser.parse_expression
+    [ preserves_semantics "Angstrom" Bkml_frontend.Parser.parse_expression
+    ; preserves_semantics "Menhir" Bkml_frontend.Menhir_parser.parse_expression
     ; shrink_contract
     ; shrinking_finds_counterexample
     ; live_combinations

@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 
 let print_result = function
   | Ok name -> Printf.printf "Ok %S\n" (Name.to_string name)

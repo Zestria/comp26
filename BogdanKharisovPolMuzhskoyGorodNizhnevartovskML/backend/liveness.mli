@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 
 (** Exact liveness and interference for one code body (or the program body).
     [Lifted.validate] guarantees every binder is unique, so identities name

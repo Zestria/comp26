@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 open Anf
 
 type graph = Id.Set.t Id.Map.t

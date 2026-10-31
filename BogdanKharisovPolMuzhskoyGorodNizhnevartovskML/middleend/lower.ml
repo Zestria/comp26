@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 
 type error =
   | Unbound_name of Name.t

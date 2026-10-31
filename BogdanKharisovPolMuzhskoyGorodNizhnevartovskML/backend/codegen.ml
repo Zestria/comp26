@@ -4,7 +4,7 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-open Middleend
+open Bkml_middleend
 
 (** RISC-V 64 code for a lifted program, linked with [runtime/runtime.c].
     The value representation, calling convention and runtime symbols are
@@ -36,7 +36,7 @@ let literal_minimum = -4_611_686_018_427_387_904L
 let literal_maximum = 4_611_686_018_427_387_903L
 
 let integer_literal literal =
-  let text = Frontend.Integer_literal.to_string literal in
+  let text = Bkml_frontend.Integer_literal.to_string literal in
   let digits = String.concat "" (String.split_on_char '_' text) in
   match Int64.of_string_opt digits with
   | None -> raise (Codegen_failure (Literal_out_of_range text))
@@ -47,9 +47,10 @@ let integer_literal literal =
 ;;
 
 let tagged_constant = function
-  | Frontend.Constant.Int literal -> Int64.add (Int64.mul (integer_literal literal) 2L) 1L
-  | Frontend.Constant.Bool boolean -> Abi.bool_value boolean
-  | Frontend.Constant.Unit -> Abi.unit_value
+  | Bkml_frontend.Constant.Int literal ->
+    Int64.add (Int64.mul (integer_literal literal) 2L) 1L
+  | Bkml_frontend.Constant.Bool boolean -> Abi.bool_value boolean
+  | Bkml_frontend.Constant.Unit -> Abi.unit_value
 ;;
 
 let sanitize name =
@@ -637,13 +638,14 @@ let emit_primitive
     let register = working_reg destination in
     let immediate =
       match primitive, arguments with
-      | Primitive.Add, [ Anf.Constant (Frontend.Constant.Int literal); other ]
-      | Primitive.Add, [ other; Anf.Constant (Frontend.Constant.Int literal) ] ->
+      | Primitive.Add, [ Anf.Constant (Bkml_frontend.Constant.Int literal); other ]
+      | Primitive.Add, [ other; Anf.Constant (Bkml_frontend.Constant.Int literal) ] ->
         let value = integer_literal literal in
         if value >= -1024L && value <= 1023L
         then Some (other, 2 * Int64.to_int value)
         else None
-      | Primitive.Subtract, [ first; Anf.Constant (Frontend.Constant.Int literal) ] ->
+      | Primitive.Subtract, [ first; Anf.Constant (Bkml_frontend.Constant.Int literal) ]
+        ->
         let value = integer_literal literal in
         if value >= -1023L && value <= 1024L
         then Some (first, -2 * Int64.to_int value)

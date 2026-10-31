@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 
 type location =
   | Reg of Riscv.reg

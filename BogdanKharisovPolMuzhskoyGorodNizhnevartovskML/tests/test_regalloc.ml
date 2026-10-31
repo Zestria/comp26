@@ -6,10 +6,10 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
-open Middleend
+open Bkml_frontend
+open Bkml_middleend
 open Anf
-open Backend
+open Bkml_backend
 
 let check what condition = if not condition then failwith ("test_regalloc: " ^ what)
 

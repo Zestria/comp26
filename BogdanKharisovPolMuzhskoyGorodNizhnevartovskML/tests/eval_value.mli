@@ -25,15 +25,15 @@ type invariant_error =
   | Unexpected_value of kind * kind
   | Field_out_of_bounds of int * int
   | Incompatible_comparison of kind * kind
-  | Unbound_variable of Middleend.Id.t
-  | Unknown_code of Middleend.Id.t
+  | Unbound_variable of Bkml_middleend.Id.t
+  | Unknown_code of Bkml_middleend.Id.t
   | Capture_arity of int * int
   | Call_arity of int * int
 
 type error =
   | Runtime of runtime_error
   | Invalid_ir of invariant_error
-  | Unsupported_integer of Frontend.Integer_literal.t
+  | Unsupported_integer of Bkml_frontend.Integer_literal.t
   | Heap_exhausted
 
 val runtime_error_to_string : runtime_error -> string
@@ -50,7 +50,7 @@ type node =
 
 val return : 'a -> 'a evaluation
 val fail : error -> 'a evaluation
-val variable : t Middleend.Id.Map.t -> Middleend.Id.t -> t evaluation
+val variable : t Bkml_middleend.Id.Map.t -> Bkml_middleend.Id.t -> t evaluation
 val ( let* ) : 'a evaluation -> ('a -> 'b evaluation) -> 'b evaluation
 val make : node -> t evaluation
 
@@ -60,13 +60,13 @@ val recursive : (t -> t evaluation) -> t evaluation
 
 val boolean : t -> bool evaluation
 val field : t -> int -> t evaluation
-val constant : Frontend.Constant.t -> t evaluation
-val primitive : Middleend.Primitive.t -> t evaluation
+val constant : Bkml_frontend.Constant.t -> t evaluation
+val primitive : Bkml_middleend.Primitive.t -> t evaluation
 
 val function_
-  :  t Middleend.Id.Map.t
-  -> Middleend.Id.t list
-  -> (t Middleend.Id.Map.t -> t evaluation)
+  :  t Bkml_middleend.Id.Map.t
+  -> Bkml_middleend.Id.t list
+  -> (t Bkml_middleend.Id.Map.t -> t evaluation)
   -> t evaluation
 
 val map : ('a -> 'b evaluation) -> 'a list -> 'b list evaluation

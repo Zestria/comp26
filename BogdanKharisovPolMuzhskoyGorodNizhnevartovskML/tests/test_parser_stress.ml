@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 open Ast
 
 let preview input =
@@ -187,13 +187,13 @@ struct
 end
 
 module Angstrom = Make (struct
-    include Frontend.Parser
+    include Bkml_frontend.Parser
 
     let name = "Angstrom"
   end)
 
 module Menhir = Make (struct
-    include Frontend.Menhir_parser
+    include Bkml_frontend.Menhir_parser
 
     let name = "Menhir"
   end)

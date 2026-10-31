@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 
 (** Every variable of a code body lives in exactly one location for its whole
     lifetime (no splitting), so branch joins need no reconciling moves.

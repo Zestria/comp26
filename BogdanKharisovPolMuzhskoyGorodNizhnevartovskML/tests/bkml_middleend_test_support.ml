@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
-open Middleend
+open Bkml_frontend
+open Bkml_middleend
 module Lambda_eval = Lambda_eval
 module Anf_eval = Anf_eval
 module Eval_value = Eval_value

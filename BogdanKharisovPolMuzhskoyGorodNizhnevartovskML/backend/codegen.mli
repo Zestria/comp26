@@ -6,15 +6,14 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 
 (** RISC-V 64 code for a lifted program, linked with [runtime/runtime.c].
     The value representation, calling convention and runtime symbols are
     specified in [runtime/runtime.c] and in [Abi]. *)
 
 type error =
-  | Literal_out_of_range of string
-      (** integer literal outside [[-2^62, 2^62 - 1]] *)
+  | Literal_out_of_range of string (** integer literal outside [[-2^62, 2^62 - 1]] *)
   | Internal of string (** broken compiler invariant; never for valid input *)
 
 val error_to_string : error -> string

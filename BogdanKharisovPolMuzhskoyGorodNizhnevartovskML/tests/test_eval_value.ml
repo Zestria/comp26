@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
-open Middleend_test_support
+open Bkml_middleend
+open Bkml_middleend_test_support
 
 let error_case name source evaluate expected accepts =
   QCheck.Test.make ~name ~count:1 QCheck.unit (fun () ->
@@ -129,7 +129,7 @@ let unsupported_integer =
     "an unsupported-integer error"
     (function
     | Eval_value.Unsupported_integer literal ->
-      Frontend.Integer_literal.to_string literal = source
+      Bkml_frontend.Integer_literal.to_string literal = source
     | _ -> false)
 ;;
 

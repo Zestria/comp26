@@ -19,7 +19,7 @@ let comparison primitive order =
 ;;
 
 let apply primitive arguments =
-  let open Frontend.Constant in
+  let open Bkml_frontend.Constant in
   let result =
     match primitive, arguments with
     | Primitive.Not, [ Bool value ] -> Some (not value)

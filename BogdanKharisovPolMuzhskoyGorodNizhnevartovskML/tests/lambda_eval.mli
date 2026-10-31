@@ -7,4 +7,4 @@
 [@@@ocaml.text "/*"]
 
 (** Interpret the unconverted functional language independently of its passes. *)
-val observe : Middleend.Lambda.expression -> (string, Eval_value.error) result
+val observe : Bkml_middleend.Lambda.expression -> (string, Eval_value.error) result

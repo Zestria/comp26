@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 open Ast
 
 let variable text = Var (Test_support.identifier text)

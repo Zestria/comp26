@@ -1,5 +1,5 @@
 (library
- (name frontend)
+ (name bkml_frontend)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (modules keyword name integer_literal constant ast ast_helper ast_print parser grammar lexer menhir_parser)
  (libraries angstrom))
@@ -15,4 +15,4 @@
  (public_name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (modules compiler)
- (libraries frontend middleend backend))
+ (libraries bkml_frontend bkml_middleend bkml_backend))

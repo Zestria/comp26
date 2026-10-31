@@ -6,16 +6,16 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
-open Frontend.Constant
-open Middleend_test_support
+open Bkml_middleend
+open Bkml_frontend.Constant
+open Bkml_middleend_test_support
 
 let case name primitive arguments expected =
   QCheck.Test.make ~name ~count:1 QCheck.unit (fun () ->
     let show = function
       | Bool value -> string_of_bool value
       | Unit -> "()"
-      | Int value -> Frontend.Integer_literal.to_string value
+      | Int value -> Bkml_frontend.Integer_literal.to_string value
     in
     let result = Primitive_simplify.apply primitive arguments in
     let render = function
@@ -91,7 +91,7 @@ let () =
              "let inverse = not in let b = inverse false in if b then 42 else 1 / 0"
              (function
                | Anf.Return (Atom (Constant (Int value))) ->
-                 Frontend.Integer_literal.to_string value = "42"
+                 Bkml_frontend.Integer_literal.to_string value = "42"
                | _ -> false)
              "Expected the selected constant without the unreachable call"
          ; shape
@@ -99,7 +99,7 @@ let () =
              "let unused = true <= false in 42"
              (function
                | Anf.Return (Atom (Constant (Int value))) ->
-                 Frontend.Integer_literal.to_string value = "42"
+                 Bkml_frontend.Integer_literal.to_string value = "42"
                | _ -> false)
              "Expected no computation of the unused comparison"
          ; shape

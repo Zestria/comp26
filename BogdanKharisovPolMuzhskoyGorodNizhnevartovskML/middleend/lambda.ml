@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 type expression =
-  | Constant of Frontend.Constant.t
+  | Constant of Bkml_frontend.Constant.t
   | Var of Id.t
   | Primitive of Primitive.t
   | Tuple of expression * expression * expression list

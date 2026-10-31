@@ -2,4 +2,4 @@
  (name benchmark)
  (public_name BogdanKharisovPolMuzhskoyGorodNizhnevartovskML.benchmark)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend))
+ (libraries bkml_frontend))

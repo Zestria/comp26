@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 open Test_support
 
 let print_error (Integer_literal.Invalid_integer_literal text) =

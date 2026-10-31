@@ -6,9 +6,9 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
-open Middleend
-open Middleend_test_support
+open Bkml_frontend
+open Bkml_middleend
+open Bkml_middleend_test_support
 
 let compile source =
   match Pipeline.compile_expression (parsed Parser.parse_expression source) with

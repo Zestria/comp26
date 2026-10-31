@@ -7,10 +7,10 @@
 [@@@ocaml.text "/*"]
 
 (** Interpret closure code using only its explicit environment and arguments. *)
-val closed : Middleend.Closure.expression -> (string, Eval_value.error) result
+val closed : Bkml_middleend.Closure.expression -> (string, Eval_value.error) result
 
-val lifted : Middleend.Lifted.program -> (string, Eval_value.error) result
+val lifted : Bkml_middleend.Lifted.program -> (string, Eval_value.error) result
 
 val lifted_with_output
-  :  Middleend.Lifted.program
+  :  Bkml_middleend.Lifted.program
   -> (string * string, Eval_value.error) result

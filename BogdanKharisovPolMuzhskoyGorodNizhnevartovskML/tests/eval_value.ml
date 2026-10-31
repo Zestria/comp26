@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 module Address_map = Map.Make (Int)
 module Address_set = Set.Make (Int)
 
@@ -36,7 +36,7 @@ type invariant_error =
 type error =
   | Runtime of runtime_error
   | Invalid_ir of invariant_error
-  | Unsupported_integer of Frontend.Integer_literal.t
+  | Unsupported_integer of Bkml_frontend.Integer_literal.t
   | Heap_exhausted
 
 type heap =
@@ -92,7 +92,7 @@ let error_to_string = function
   | Invalid_ir error -> "Invalid interpreted IR: " ^ invariant_error_to_string error
   | Unsupported_integer literal ->
     "Test interpreter cannot represent integer "
-    ^ Frontend.Integer_literal.to_string literal
+    ^ Bkml_frontend.Integer_literal.to_string literal
   | Heap_exhausted -> "Test interpreter address space exhausted"
 ;;
 
@@ -185,8 +185,8 @@ let unary f = make (Function f)
 let binary f = unary (fun a -> unary (fun b -> f a b))
 
 let constant = function
-  | Frontend.Constant.Int n ->
-    (match int_of_string_opt (Frontend.Integer_literal.to_string n) with
+  | Bkml_frontend.Constant.Int n ->
+    (match int_of_string_opt (Bkml_frontend.Integer_literal.to_string n) with
      | Some value -> make (Int value)
      | None -> fail (Unsupported_integer n))
   | Bool b -> make (Bool b)

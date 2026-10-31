@@ -34,8 +34,8 @@ module Names = struct
       let hint =
         if
           String.length hint > 0
-          && Frontend.Name.Syntax.is_identifier_start hint.[0]
-          && String.for_all Frontend.Name.Syntax.is_identifier_char hint
+          && Bkml_frontend.Name.Syntax.is_identifier_start hint.[0]
+          && String.for_all Bkml_frontend.Name.Syntax.is_identifier_char hint
         then hint
         else "v"
       in
@@ -61,7 +61,7 @@ let make names ~callee:print_callee print_function =
   let identifier formatter id = pp_print_string formatter (Names.find names id) in
   let atom formatter = function
     | Anf.Constant (Int literal) ->
-      let text = Frontend.Integer_literal.to_string literal in
+      let text = Bkml_frontend.Integer_literal.to_string literal in
       if String.starts_with ~prefix:"-" text
       then fprintf formatter "(%s)" text
       else pp_print_string formatter text

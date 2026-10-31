@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Backend
+open Bkml_backend
 
 let check what condition = if not condition then failwith ("test_riscv: " ^ what)
 

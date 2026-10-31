@@ -18,13 +18,18 @@ let require_valid create print_error input =
       (print_error error)
 ;;
 
-let identifier = require_valid Frontend.Name.of_identifier Frontend.Name.error_to_string
-let operator = require_valid Frontend.Name.of_operator Frontend.Name.error_to_string
+let identifier =
+  require_valid Bkml_frontend.Name.of_identifier Bkml_frontend.Name.error_to_string
+;;
+
+let operator =
+  require_valid Bkml_frontend.Name.of_operator Bkml_frontend.Name.error_to_string
+;;
 
 let integer_literal =
   require_valid
-    Frontend.Integer_literal.of_string
-    Frontend.Integer_literal.error_to_string
+    Bkml_frontend.Integer_literal.of_string
+    Bkml_frontend.Integer_literal.error_to_string
 ;;
 
 let equal ~print ~expected actual =

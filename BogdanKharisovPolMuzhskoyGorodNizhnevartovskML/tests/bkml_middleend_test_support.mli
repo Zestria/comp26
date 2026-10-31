@@ -11,19 +11,32 @@ module Anf_eval = Anf_eval
 module Eval_value = Eval_value
 
 val fail : string -> string -> 'a
-val allocated : string -> ('a, Middleend.Id.error) result -> 'a
-val fresh : Middleend.Id.supply -> string -> Middleend.Id.t * Middleend.Id.supply
-val rename : Middleend.Id.supply -> Middleend.Id.t -> Middleend.Id.t * Middleend.Id.supply
+val allocated : string -> ('a, Bkml_middleend.Id.error) result -> 'a
+
+val fresh
+  :  Bkml_middleend.Id.supply
+  -> string
+  -> Bkml_middleend.Id.t * Bkml_middleend.Id.supply
+
+val rename
+  :  Bkml_middleend.Id.supply
+  -> Bkml_middleend.Id.t
+  -> Bkml_middleend.Id.t * Bkml_middleend.Id.supply
+
 val parsed : (string -> ('a, string) result) -> string -> 'a
-val invariant_error : Middleend.Lambda.invariant_error -> string
-val checked : string -> Middleend.Lambda.expression -> Middleend.Lambda.expression
+val invariant_error : Bkml_middleend.Lambda.invariant_error -> string
+
+val checked
+  :  string
+  -> Bkml_middleend.Lambda.expression
+  -> Bkml_middleend.Lambda.expression
 
 val lower_with_supply
-  :  Middleend.Id.supply
+  :  Bkml_middleend.Id.supply
   -> string
-  -> Middleend.Lambda.expression * Middleend.Id.supply
+  -> Bkml_middleend.Lambda.expression * Bkml_middleend.Id.supply
 
-val lower : string -> Middleend.Lambda.expression
+val lower : string -> Bkml_middleend.Lambda.expression
 val equal : string -> string -> string -> bool
 
 (** Render program outcomes; invalid IR and interpreter limitations fail the test.

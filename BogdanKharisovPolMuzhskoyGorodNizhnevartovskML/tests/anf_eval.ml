@@ -8,7 +8,7 @@
 
 (* All calls to converted code start with an environment made solely from the
    explicitly listed captures and arguments. No caller-scope fallback exists. *)
-open Middleend
+open Bkml_middleend
 open Eval_value
 
 let atom environment = function

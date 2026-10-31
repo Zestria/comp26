@@ -106,9 +106,9 @@ let run parser stage input output =
   in
   let parse =
     match parser with
-    | Angstrom Standard -> Frontend.Parser.parse_program
-    | Menhir -> Frontend.Menhir_parser.parse_program
-    | Angstrom Extended -> Frontend.Parser.parse_program_with_operators
+    | Angstrom Standard -> Bkml_frontend.Parser.parse_program
+    | Menhir -> Bkml_frontend.Menhir_parser.parse_program
+    | Angstrom Extended -> Bkml_frontend.Parser.parse_program_with_operators
   in
   let* program =
     Result.map_error (fun message -> "Parse error: " ^ message) (parse source)
@@ -116,7 +116,7 @@ let run parser stage input output =
   let middleend printer result =
     let* program =
       Result.map_error
-        (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
+        (fun error -> "Middleend error: " ^ Bkml_middleend.Pipeline.error_to_string error)
         result
     in
     Ok (Format.asprintf "%t@." (fun formatter -> printer formatter program))
@@ -126,19 +126,25 @@ let run parser stage input output =
     | Parsing ->
       Ok
         (Format.asprintf "%t@." (fun formatter ->
-           Frontend.Ast_print.program formatter program))
-    | Anf -> middleend Middleend.Anf_print.program (Middleend.Pipeline.anf program)
-    | Cc -> middleend Middleend.Closure_print.program (Middleend.Pipeline.cc program)
-    | Ll -> middleend Middleend.Lifted_print.program (Middleend.Pipeline.compile program)
+           Bkml_frontend.Ast_print.program formatter program))
+    | Anf ->
+      middleend Bkml_middleend.Anf_print.program (Bkml_middleend.Pipeline.anf program)
+    | Cc ->
+      middleend Bkml_middleend.Closure_print.program (Bkml_middleend.Pipeline.cc program)
+    | Ll ->
+      middleend
+        Bkml_middleend.Lifted_print.program
+        (Bkml_middleend.Pipeline.compile program)
     | Riscv ->
       let* lifted =
         Result.map_error
-          (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
-          (Middleend.Pipeline.compile program)
+          (fun error ->
+             "Middleend error: " ^ Bkml_middleend.Pipeline.error_to_string error)
+          (Bkml_middleend.Pipeline.compile program)
       in
       Result.map_error
-        (fun error -> "Codegen error: " ^ Backend.Codegen.error_to_string error)
-        (Backend.Codegen.compile lifted)
+        (fun error -> "Codegen error: " ^ Bkml_backend.Codegen.error_to_string error)
+        (Bkml_backend.Codegen.compile lifted)
   in
   let print channel = output_string channel text in
   io (fun () ->

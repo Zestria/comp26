@@ -10,43 +10,43 @@
  (name test_lower)
  (modules test_lower)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_eval_value)
  (modules test_eval_value)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (library
- (name middleend_test_support)
- (modules middleend_test_support lambda_eval eval_value anf_eval)
+ (name bkml_middleend_test_support)
+ (modules bkml_middleend_test_support lambda_eval eval_value anf_eval)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend qcheck))
+ (libraries bkml_frontend bkml_middleend qcheck))
 
 (test
  (name test_anf)
  (modules test_anf)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_recursive_values)
  (modules test_recursive_values)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_middleend)
  (modules test_middleend)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (library
- (name frontend_expect_tests)
+ (name bkml_frontend_expect_tests)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
  (modules test_name test_integer_literal test_parser test_operator_extension)
- (libraries frontend)
+ (libraries bkml_frontend)
  (inline_tests)
  (preprocess
   (pps ppx_expect)))
@@ -55,40 +55,40 @@
  (names test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress test_operator_extension_properties)
  (modules test_name_properties test_integer_literal_properties test_parser_properties test_parser_stress test_operator_extension_properties test_support)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend qcheck))
+ (libraries bkml_frontend qcheck))
 
 (test
  (name test_typed_middleend)
  (modules test_typed_middleend typed_terms)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_known_functions)
  (modules test_known_functions)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_primitive_simplify)
  (modules test_primitive_simplify)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_riscv)
  (modules test_riscv)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries backend))
+ (libraries bkml_backend))
 
 (test
  (name test_print_int)
  (modules test_print_int)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend middleend_test_support qcheck))
+ (libraries bkml_frontend bkml_middleend bkml_middleend_test_support qcheck))
 
 (test
  (name test_regalloc)
  (modules test_regalloc)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend middleend backend))
+ (libraries bkml_frontend bkml_middleend bkml_backend))

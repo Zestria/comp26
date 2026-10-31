@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 open Ast
 
 module Make (Parser : sig
@@ -337,20 +337,20 @@ struct
 end
 
 module Angstrom = Make (struct
-    include Frontend.Parser
+    include Bkml_frontend.Parser
 
     let name = "Angstrom"
   end)
 
 module Menhir = Make (struct
-    include Frontend.Menhir_parser
+    include Bkml_frontend.Menhir_parser
 
     let name = "Menhir"
   end)
 
 module Extended = Make (struct
-    let parse_expression = Frontend.Parser.parse_expression
-    let parse_program = Frontend.Parser.parse_program_with_operators
+    let parse_expression = Bkml_frontend.Parser.parse_expression
+    let parse_program = Bkml_frontend.Parser.parse_program_with_operators
     let name = "Angstrom with operator extension"
   end)
 
