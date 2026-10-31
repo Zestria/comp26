@@ -56,10 +56,9 @@ let tagged_constant = function
 let sanitize name =
   let clean =
     String.map
-      (fun character ->
-         match character with
-         | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> character
-         | _ -> '_')
+      (function
+        | ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_') as character -> character
+        | _ -> '_')
       name
   in
   if clean = "" then "code" else clean
@@ -107,6 +106,47 @@ let primitive_arity = function
 let is_immediate = function
   | Anf.Constant _ -> true
   | Anf.Var _ | Anf.Primitive _ -> false
+;;
+
+(* The comparisons [fast_bit] can inline on immediates. *)
+let is_comparison = function
+  | Primitive.Equal
+  | Primitive.Not_equal
+  | Primitive.Less
+  | Primitive.Less_equal
+  | Primitive.Greater
+  | Primitive.Greater_equal -> true
+  | _ -> false
+;;
+
+(* Whether [id] is read anywhere in [term]: as an operand, an indirect callee
+   or a capture. Binders and direct code labels are not reads. *)
+let rec occurs id (term : Lifted.expression) =
+  match term with
+  | Return computation -> occurs_computation id computation
+  | Anf.Let (_, computation, body) -> occurs_computation id computation || occurs id body
+  | Anf.Let_rec (_, initializer_, body) -> occurs id initializer_ || occurs id body
+  | Anf.Sequence (computation, body) ->
+    occurs_computation id computation || occurs id body
+
+and occurs_computation id (computation : computation) =
+  match computation with
+  | Anf.Atom atom | Anf.Field (atom, _) -> occurs_atom id atom
+  | Anf.Tuple (first, second, rest) ->
+    List.exists (occurs_atom id) (first :: second :: rest)
+  | Anf.Function closure -> List.exists (occurs_atom id) closure.Lifted.captures
+  | Anf.Apply (callee, first, rest) ->
+    occurs_callee id callee || List.exists (occurs_atom id) (first :: rest)
+  | Anf.If (condition, yes, no) ->
+    occurs_atom id condition || occurs id yes || occurs id no
+
+and occurs_callee id = function
+  | Lifted.Direct _ -> false
+  | Lifted.Indirect atom -> occurs_atom id atom
+
+and occurs_atom id = function
+  | Anf.Var other -> Id.equal other id
+  | Anf.Constant _ | Anf.Primitive _ -> false
 ;;
 
 (* Functional codegen state: the file-wide label counter, the primitives used
@@ -184,8 +224,7 @@ let shape (term : Lifted.expression) = shape_term [] term
 (* Calls of a body: the outgoing area size and whether any [call] is emitted.
    This pre-pass mirrors the emission below exactly, so the frame covers every
    call, and no needless return address is saved. *)
-let rec scan_term (term : Lifted.expression) : int * bool =
-  match term with
+let rec scan_term : Lifted.expression -> int * bool = function
   | Return computation -> scan_computation computation
   | Anf.Let (_, computation, body) | Anf.Sequence (computation, body) ->
     merge_scan (scan_computation computation) (scan_term body)
@@ -197,8 +236,7 @@ let rec scan_term (term : Lifted.expression) : int * bool =
     in
     merge_scan (merge_scan own (scan_term initializer_)) (scan_term body)
 
-and scan_computation (computation : computation) : int * bool =
-  match computation with
+and scan_computation : computation -> int * bool = function
   | Anf.Atom _ | Anf.Field _ -> 0, false
   | Anf.Tuple _ -> 0, true
   | Anf.Function { captures = []; _ } -> 0, false
@@ -295,9 +333,21 @@ let slot_store context register index =
 ;;
 
 let move_to_location context source = function
-  | Regalloc.Reg register ->
-    if register = source then [] else [ Riscv.Mv (register, source) ]
+  | Regalloc.Reg register when register = source -> []
+  | Regalloc.Reg register -> [ Riscv.Mv (register, source) ]
   | Regalloc.Slot index -> slot_store context source index
+;;
+
+(* An entry value read from memory: an environment slot of the closure in
+   [a0], or an incoming stack argument at [sp]. A register destination is
+   loaded directly: destinations are [S] registers, so never the base and
+   never the legalization scratch [t6], and the base survives until every
+   entry load is done. A slot destination still goes through [t0];
+   memory-to-memory moves do not exist. *)
+let entry_move context base offset id =
+  match location_of context id with
+  | Regalloc.Reg register -> Riscv.load register offset base
+  | Regalloc.Slot index -> Riscv.load t0 offset base @ slot_store context t0 index
 ;;
 
 (* Where a computation writes its result, and how the result reaches its
@@ -421,8 +471,7 @@ let fast_bit primitive a b =
 ;;
 
 (* The comparison bit from the raw [-1, 0, 1] result of [rt_compare]. *)
-let derived_bit primitive =
-  match primitive with
+let derived_bit = function
   | Primitive.Less -> [ Riscv.Imm (Riscv.Slti, t2, a0, 0) ]
   | Primitive.Less_equal -> [ Riscv.Imm (Riscv.Slti, t2, a0, 1) ]
   | Primitive.Greater -> [ Riscv.Binop (Riscv.Slt, t2, Riscv.Zero, a0) ]
@@ -501,11 +550,14 @@ let print_int_core ~keep_ra a =
     then Riscv.load Riscv.Ra 0 Riscv.Sp @ Riscv.add_imm Riscv.Sp Riscv.Sp 16
     else []
   in
-  saved @ [ Riscv.Mv (a0, a); Riscv.Call Abi.print_int ] @ restored
+  let move = if a = a0 then [] else [ Riscv.Mv (a0, a) ] in
+  saved @ move @ [ Riscv.Call Abi.print_int ] @ restored
 ;;
 
-(* Call arguments: [a1] .. [a7] directly, the rest through [t0] in the
-   outgoing stack area. *)
+(* Call arguments: [a1] .. [a7] directly, the rest stored into the outgoing
+   stack area. A register-resident argument is stored directly: the area lies
+   below every spill slot, and sources are never [a] registers, so no
+   later-written argument reads a clobbered value. *)
 let setup_arguments context state (arguments : Anf.atom list) : Riscv.instr list * state =
   let rec loop index state code = function
     | [] -> code, state
@@ -515,24 +567,25 @@ let setup_arguments context state (arguments : Anf.atom list) : Riscv.instr list
         if number <= 7
         then atom_to_reg context state (Riscv.A number) atom
         else (
-          let code', state' = atom_to_reg context state t0 atom in
-          code' @ Riscv.store t0 (8 * (number - 8)) Riscv.Sp, state')
+          let register, code', state' = atom_operand context state t0 atom in
+          code' @ Riscv.store register (8 * (number - 8)) Riscv.Sp, state')
       in
       loop (index + 1) state' (code @ argument_code) rest
   in
   loop 0 state [] arguments
 ;;
 
-(* The argument vector of [rt_apply], re-read from the locations. *)
+(* The argument vector of [rt_apply], re-read from the locations: a
+   register-resident argument is stored directly, as in [setup_arguments]. *)
 let restow_arguments context state (arguments : Anf.atom list) : Riscv.instr list * state =
   let rec loop index state code = function
     | [] -> code, state
     | atom :: rest ->
-      let atom_code, state' = atom_to_reg context state t0 atom in
+      let register, atom_code, state' = atom_operand context state t0 atom in
       loop
         (index + 1)
         state'
-        (code @ atom_code @ Riscv.store t0 (8 * index) Riscv.Sp)
+        (code @ atom_code @ Riscv.store register (8 * index) Riscv.Sp)
         rest
   in
   loop 0 state [] arguments
@@ -610,7 +663,10 @@ let emit_primitive
       let check, state'' = compare_check state' ~a ~b in
       code @ check, state'')
   | Drop, Primitive.Print_int ->
-    let a, code, state' = atom_operand context state t0 (only ()) in
+    (* [a0] is the fixed target of this single-argument call: constants and
+       spilled values are materialized directly there, register values are
+       still moved by [print_int_core]. *)
+    let a, code, state' = atom_operand context state a0 (only ()) in
     code @ print_int_core ~keep_ra:false a, state'
   | ( _
     , ( Primitive.Equal
@@ -632,7 +688,7 @@ let emit_primitive
     in
     code @ core @ commit context destination register, state''
   | _, Primitive.Print_int ->
-    let a, code, state' = atom_operand context state t0 (only ()) in
+    let a, code, state' = atom_operand context state a0 (only ()) in
     code @ print_int_core ~keep_ra:false a @ move_result context destination a0, state'
   | _, (Primitive.Add | Primitive.Subtract) ->
     let register = working_reg destination in
@@ -720,11 +776,48 @@ let rec emit_term context state (target : target) (term : Lifted.expression)
        code @ epilogue context @ [ Riscv.Ret ], state'
      | Nested destination -> emit_computation context state destination computation)
   | Anf.Let (bound, computation, body) ->
-    let code, state' =
-      emit_computation context state (Into (location_of context bound)) computation
-    in
-    let rest, state'' = emit_term context state' target body in
-    code @ rest, state''
+    (match computation, body with
+     | ( Anf.Apply (Lifted.Indirect (Anf.Primitive primitive), first, [ second ])
+       , Return (Anf.If (Anf.Var tested, yes, no)) )
+       when Id.equal bound tested
+            && is_comparison primitive
+            && (is_immediate first || is_immediate second)
+            && (not (occurs tested yes))
+            && not (occurs tested no) ->
+       (* The boolean is read only by the [if] right below, so branch on the
+         raw comparison bit in [t2], exactly as the inlined immediate-only
+         fast comparison does, instead of materializing the tagged boolean.
+         The branches keep the emission of an ordinary [if]: no join label
+         on a tail, one join label otherwise. *)
+       let else_label, state' = fresh_local state in
+       let a, code_a, state_a = atom_operand context state' t0 first in
+       let b, code_b, state_b = atom_operand context state_a t1 second in
+       let test =
+         code_a @ code_b @ fast_bit primitive a b @ [ Riscv.Beqz (t2, else_label) ]
+       in
+       (match target with
+        | Tail ->
+          let yes_code, state_yes = emit_term context state_b Tail yes in
+          let no_code, state_no = emit_term context state_yes Tail no in
+          test @ yes_code @ [ Riscv.Label else_label ] @ no_code, state_no
+        | Nested destination ->
+          let join, state_join = fresh_local state_b in
+          let yes_code, state_yes =
+            emit_term context state_join (Nested destination) yes
+          in
+          let no_code, state_no = emit_term context state_yes (Nested destination) no in
+          ( test
+            @ yes_code
+            @ [ Riscv.J join; Riscv.Label else_label ]
+            @ no_code
+            @ [ Riscv.Label join ]
+          , state_no ))
+     | _ ->
+       let code, state' =
+         emit_computation context state (Into (location_of context bound)) computation
+       in
+       let rest, state'' = emit_term context state' target body in
+       code @ rest, state'')
   | Anf.Sequence (computation, body) ->
     let code, state' = emit_computation context state Drop computation in
     let rest, state'' = emit_term context state' target body in
@@ -913,9 +1006,7 @@ let prologue context environment arguments =
   let environment_moves =
     List.concat
       (List.mapi
-         (fun index id ->
-            Riscv.load t0 (Abi.closure_env index) a0
-            @ move_to_location context t0 (location_of context id))
+         (fun index id -> entry_move context a0 (Abi.closure_env index) id)
          environment)
   in
   let argument_moves =
@@ -925,9 +1016,7 @@ let prologue context environment arguments =
             let number = index + 1 in
             if number <= 7
             then move_to_location context (Riscv.A number) (location_of context id)
-            else
-              Riscv.load t0 (frame.size + (8 * (number - 8))) Riscv.Sp
-              @ move_to_location context t0 (location_of context id))
+            else entry_move context Riscv.Sp (frame.size + (8 * (number - 8))) id)
          arguments)
   in
   adjust @ save_ra @ saves @ environment_moves @ argument_moves
@@ -937,7 +1026,8 @@ let make_context ~entry ~labels ~arities body =
   let allocation = Regalloc.allocate ~entry body in
   let outgoing, calls = scan_term body in
   let frame = make_frame allocation outgoing calls in
-  { frame; locations = allocation.locations; labels; arities }
+  let locations = allocation.locations in
+  { frame; locations; labels; arities }
 ;;
 
 let emit_body context state ~label ~environment ~arguments (body : Lifted.expression)

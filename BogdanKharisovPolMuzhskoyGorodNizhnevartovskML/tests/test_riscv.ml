@@ -67,8 +67,10 @@ let () =
 ;;
 
 let () =
-  (* load: one ld in range; out of range the base is read before t6 is
-     written, so rd = base is legal. *)
+  (* load: one ld in range; out of range the offset is materialized in t6
+     first: li t6, off; add t6, base, t6; ld rd, 0(t6).  rd and base are
+     never t6 (rejected below), so writing t6 destroys no input and
+     rd = base stays legal. *)
   expect_instrs "load 0" [ Riscv.Ld (t0, 0, a0) ] (Riscv.load t0 0 a0);
   expect_instrs "load 2047" [ Riscv.Ld (t0, 2047, a0) ] (Riscv.load t0 2047 a0);
   expect_instrs "load -2048" [ Riscv.Ld (t0, -2048, a0) ] (Riscv.load t0 (-2048) a0);

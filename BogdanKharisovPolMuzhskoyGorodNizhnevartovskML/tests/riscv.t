@@ -21,10 +21,8 @@ lifted function and no runtime helpers for arithmetic.
   	sd	s1, 8(sp)
   	sd	s2, 16(sp)
   	sd	s3, 24(sp)
-  	ld	t0, 24(a0)
-  	mv	s1, t0
-  	ld	t0, 32(a0)
-  	mv	s2, t0
+  	ld	s1, 24(a0)
+  	ld	s2, 32(a0)
   	mv	s3, a1
   	srai	t2, s1, 1
   	addi	t3, s3, -1
@@ -39,8 +37,7 @@ lifted function and no runtime helpers for arithmetic.
   	jalr	ra, 0(t0)
   	j	.L4
   .L3:
-  	mv	t0, s1
-  	sd	t0, 0(sp)
+  	sd	s1, 0(sp)
   	mv	a0, s2
   	li	a1, 1
   	mv	a2, sp
@@ -63,10 +60,7 @@ lifted function and no runtime helpers for arithmetic.
   	li	t1, 1
   	xor	t2, s1, t1
   	seqz	t2, t2
-  	slli	t2, t2, 1
-  	addi	s3, t2, 1
-  	li	t0, 1
-  	beq	s3, t0, .L5
+  	beqz	t2, .L5
   	li	a1, 3
   	mv	a0, s2
   	ld	t0, 16(a0)

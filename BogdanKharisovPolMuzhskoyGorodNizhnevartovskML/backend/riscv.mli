@@ -6,11 +6,12 @@
 
 [@@@ocaml.text "/*"]
 
-(** RV64IM assembly syntax used by the backend. Constructors denote exactly one
-    machine instruction (or a label/directive), except [Li] and [La], which are
-    standard assembler pseudo-instructions. Register [T 6] is reserved for the
-    legalizing helpers below and is never allocated nor used as an operand by
-    instruction selection. *)
+(** RV64IM assembly syntax used by the backend. Most constructors are one
+    machine instruction; [Li], [La], [Mv], [Seqz], [Snez], [Beqz], [Bnez], [J],
+    [Call] and [Ret] are standard assembler pseudo-instructions, and [Label],
+    [Directive] and [Comment] emit no instruction. Register [T 6] is reserved
+    for the legalizing helpers below and is never allocated nor used as an
+    operand by instruction selection. *)
 
 type reg =
   | Zero
@@ -82,14 +83,14 @@ val fits_imm12 : int -> bool
 val add_imm : reg -> reg -> int -> instr list
 
 (** [load rd off base]: [ld rd, off(base)]. Out-of-range offsets use
-    [li t6, off; add t6, base, t6; ld rd, 0(t6)], so [base] is read before [t6]
-    is written and [rd = base] is allowed. Raises [Invalid_argument] if [rd] or
-    [base] is [scratch]. *)
+    [li t6, off; add t6, base, t6; ld rd, 0(t6)]. Neither [rd] nor [base] may be
+    [scratch] (raises [Invalid_argument]), so writing [t6] destroys no input;
+    [rd] is written last, so [rd = base] is allowed. *)
 val load : reg -> int -> reg -> instr list
 
 (** [store src off base]: [sd src, off(base)], legalized like [load]. Neither
-    [src] nor [base] may be [scratch] (raises [Invalid_argument]); both are
-    read only after [t6] has been computed from [base]. *)
+    [src] nor [base] may be [scratch] (raises [Invalid_argument]), so both still
+    hold their values when the store executes. *)
 val store : reg -> int -> reg -> instr list
 
 val reg_to_string : reg -> string
