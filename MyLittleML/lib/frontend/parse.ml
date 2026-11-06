@@ -10,7 +10,7 @@
 
     Dispatches to one of the two syntax analyzers:
 
-    - {!Parser_topdown}: the top-down (recursive-descent, Angstrom-based)
+    - {!Parser_topdown}: the top-down (recursive-descent, State_error-based)
       parser, the default;
     - {!Parser} (with {!Lexer}): the bottom-up (menhir + ocamllex) parser.
 
@@ -19,7 +19,9 @@
     keywords ([--sticky]) are only supported by the top-down parser, which
     is why {!opts} carries the flag here. *)
 
-type parser_kind = Topdown | Bottomup
+type parser_kind =
+  | Topdown
+  | Bottomup
 
 type opts = { sticky : bool }
 
@@ -34,10 +36,11 @@ let parse_bottomup source =
   let lexbuf = Lexing.from_string source in
   match Parser.prog Lexer.read lexbuf with
   | prog -> Ok prog
-  | exception Lexer.SyntaxError msg ->
-    Error (Format.sprintf "%s: %s" (error_position lexbuf) msg)
   | exception Parser.Error ->
-    Error (Format.sprintf "%s: syntax error" (error_position lexbuf))
+    let message =
+      Option.value (Lexer.error_message (Lexing.lexeme lexbuf)) ~default:"syntax error"
+    in
+    Error (Format.sprintf "%s: %s" (error_position lexbuf) message)
 ;;
 
 let parse kind opts source =

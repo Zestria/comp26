@@ -15,7 +15,6 @@
     reuse the same type with richer right-hand sides. *)
 
 module A = Ast
-open Names
 module StringSet = Names.StringSet
 
 type rec_flag =
@@ -83,113 +82,76 @@ let collect_names (prog : A.prog) : Names.StringSet.t =
   List.fold_left expr Names.StringSet.empty prog
 ;;
 
-(** Fresh-name state local to one {!anf_prog} call: [anf_t0], [anf_t1], …
-    skipping anything already taken by {!collect_names}.  State is now
-    shared with closure conversion and lambda lifting through {!Names}. *)
-type fresh = Names.t
+open State
 
-let rec_flag_of_bool (rec_ : bool) : rec_flag = if rec_ then Rec else Nonrec
+let rec_flag_of_bool rec_ = if rec_ then Rec else Nonrec
 
-(** Smart constructor for [ALet]: [let x = v in x] is just [v].  Only non-recursive
-    bindings fuse: under [Rec] the name may occur in its own right-hand
-    side, so the binding must stay.  Applied to every [ALet] the ANF
-    generator builds. *)
-let mk_alet (flag : rec_flag) (name : string) (rhs : aexp) (rest : aexp) : aexp =
-  match rhs, rest with
-  | ACexp (CAtom (AVar v)), _ when v = name && flag = Nonrec -> rest
-  | _ -> ALet (flag, name, rhs, rest)
+let bind_temp c k =
+  let* name = Names.fresh "anf_t" in
+  let* rest = k (AVar name) in
+  return
+    (match rest with
+     | ACexp (CAtom (AVar result)) when result = name -> ACexp c
+     | _ -> ALet (Nonrec, name, ACexp c, rest))
 ;;
 
-(** Bind a compound [cexp] to a fresh temporary and pass the atom to [k]. *)
-let bind_temp (st : fresh) (c : cexp) (k : atom -> aexp) : aexp =
-  let t = Names.fresh st "anf_t" in
-  ALet (Nonrec, t, ACexp c, k (AVar t))
-;;
-
-let rec norm_named (st : fresh) (name : string) (rhs : A.expr) (cont : aexp) : aexp =
-  let rhs' = norm_tail st rhs in
-  mk_alet (rec_flag_of_bool false) name rhs' cont
-
-and norm (st : fresh) (e : A.expr) (k : atom -> aexp) : aexp =
+let rec norm e k =
   match e with
   | A.Int n -> k (AInt n)
   | A.Bool b -> k (ABool b)
   | A.Var v -> k (AVar v)
-  | A.Neg e -> norm st e (fun a -> bind_temp st (CNeg a) k)
-  | A.Binop (op, l, r) ->
-    norm st l (fun al -> norm st r (fun ar -> bind_temp st (CBinop (op, al, ar)) k))
-  | A.App (f, x) ->
-    norm st f (fun af -> norm st x (fun ax -> bind_temp st (CApp (af, ax)) k))
-  | A.If (c, t, f) ->
-    norm st c (fun ac -> bind_temp st (CIf (ac, norm_tail st t, norm_tail st f)) k)
-  | A.Fun (params, body) -> bind_temp st (CFun (params, norm_tail st body)) k
-  | A.Let (b, Some (A.Var v)) when (not b.A.rec_) && b.A.params = [] && v = b.A.name ->
-    norm_tail st b.A.body
-  | A.Let (b, cont) ->
-    let flag = rec_flag_of_bool b.A.rec_ in
-    (match b.A.params, cont with
-     | [], Some body -> norm_named st b.A.name b.A.body (norm_tail st body)
-     | [], None -> norm_named st b.A.name b.A.body (ACexp (CAtom (AVar b.A.name)))
-     | _ :: _, Some body ->
-       mk_alet
-         flag
-         b.A.name
-         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
-         (norm_tail st body)
-     | _ :: _, None ->
-       mk_alet
-         flag
-         b.A.name
-         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
-         (ACexp (CAtom (AVar b.A.name))))
+  | A.Let (b, cont) -> norm_let b cont k
+  | _ -> norm_compound e (fun c -> bind_temp c k)
 
-and norm_tail (st : fresh) (e : A.expr) : aexp =
+and norm_compound e k =
   match e with
-  | A.Int n -> ACexp (CAtom (AInt n))
-  | A.Bool b -> ACexp (CAtom (ABool b))
-  | A.Var v -> ACexp (CAtom (AVar v))
-  | A.Neg e -> norm st e (fun a -> ACexp (CNeg a))
-  | A.Binop (op, l, r) ->
-    norm st l (fun al -> norm st r (fun ar -> ACexp (CBinop (op, al, ar))))
-  | A.App (f, x) -> norm st f (fun af -> norm st x (fun ax -> ACexp (CApp (af, ax))))
+  | A.Neg e -> norm e (fun a -> k (CNeg a))
+  | A.Binop (op, l, r) -> norm l (fun al -> norm r (fun ar -> k (CBinop (op, al, ar))))
+  | A.App (f, x) -> norm f (fun af -> norm x (fun ax -> k (CApp (af, ax))))
   | A.If (c, t, f) ->
-    norm st c (fun ac -> ACexp (CIf (ac, norm_tail st t, norm_tail st f)))
-  | A.Fun ([], body) -> norm_tail st body
-  | A.Fun (params, body) -> ACexp (CFun (params, norm_tail st body))
-  | A.Let (b, Some (A.Var v)) when (not b.A.rec_) && b.A.params = [] && v = b.A.name ->
-    norm_tail st b.A.body
-  | A.Let (b, cont) ->
-    let flag = rec_flag_of_bool b.A.rec_ in
-    (match b.A.params, cont with
-     | [], Some body -> norm_named st b.A.name b.A.body (norm_tail st body)
-     | [], None -> norm_named st b.A.name b.A.body (ACexp (CAtom (AVar b.A.name)))
-     | _ :: _, Some body ->
-       mk_alet
-         flag
-         b.A.name
-         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
-         (norm_tail st body)
-     | _ :: _, None ->
-       mk_alet
-         flag
-         b.A.name
-         (ACexp (CFun (b.A.params, norm_tail st b.A.body)))
-         (ACexp (CAtom (AVar b.A.name))))
+    norm c (fun ac ->
+      let* t = norm_tail t in
+      let* f = norm_tail f in
+      k (CIf (ac, t, f)))
+  | A.Fun (params, body) ->
+    let* body = norm_tail body in
+    k (CFun (params, body))
+  | A.Int n -> k (CAtom (AInt n))
+  | A.Bool b -> k (CAtom (ABool b))
+  | A.Var v -> k (CAtom (AVar v))
+  | A.Let (b, cont) -> norm_let b cont (fun a -> k (CAtom a))
+
+and norm_let b cont k =
+  let* rhs = norm_binding b in
+  let* rest =
+    match cont with
+    | None -> k (AVar b.A.name)
+    | Some body -> norm body k
+  in
+  return (ALet (rec_flag_of_bool b.A.rec_, b.A.name, rhs, rest))
+
+and norm_binding b =
+  let* body = norm_tail b.A.body in
+  return
+    (match b.A.params with
+     | [] -> body
+     | params -> ACexp (CFun (params, body)))
+
+and norm_tail = function
+  | A.Let (b, cont) -> norm_let b cont (fun a -> return (ACexp (CAtom a)))
+  | e -> norm_compound e (fun c -> return (ACexp c))
 ;;
 
-(** Convert a whole source program: declaration phrases become [ADecl] items,
-    every other phrase becomes a bare [AExp]. *)
-let anf_prog (prog : A.prog) : aprogram =
-  let st = Names.make (collect_names prog) in
-  let anf_item = function
+let anf_prog prog =
+  let item = function
     | A.Let (b, None) ->
-      let flag = rec_flag_of_bool b.A.rec_ in
-      (match b.A.params with
-       | [] -> ADecl (flag, b.A.name, norm_tail st b.A.body)
-       | params -> ADecl (flag, b.A.name, ACexp (CFun (params, norm_tail st b.A.body))))
-    | e -> AExp (norm_tail st e)
+      let* rhs = norm_binding b in
+      return (ADecl (rec_flag_of_bool b.A.rec_, b.A.name, rhs))
+    | e ->
+      let* e = norm_tail e in
+      return (AExp e)
   in
-  List.map anf_item prog
+  State.eval (State.map_list item prog) (Names.make (collect_names prog))
 ;;
 
 (* ---------------------------------------------------------------------- *)

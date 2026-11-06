@@ -9,12 +9,11 @@
 (** Middle-end driver for MyLittleML (Task 2).
 
     Reads a program written in an OCaml subset, parses it with one of the
-    two parsers (top-down Angstrom parser or bottom-up menhir parser) and
+    two parsers (pure top-down parser or bottom-up menhir parser) and
     runs it through the middle-end pipeline: ANF → closure conversion →
     lambda lifting.
 
-    The backend (code generation) is not implemented yet and comes in
-    later tasks. *)
+    The default output is RV64 assembly. *)
 
 type stop_after =
   | Frontend
@@ -103,7 +102,7 @@ let parse_args argv =
     | "--help" :: _ ->
       print_string usage;
       exit 0
-    | a :: rest when String.length a > 0 && a.[0] = '-' ->
+    | a :: _ when String.length a > 0 && a.[0] = '-' ->
       fail_usage ("unrecognized option: " ^ a)
     | f :: rest ->
       (match file with
@@ -113,7 +112,7 @@ let parse_args argv =
   loop
     ~parser_kind:Mylittleml.Frontend.Parse.Topdown
     ~sticky:false
-    ~stop_after:Lambda
+    ~stop_after:Riscv
     ~output:None
     ~file:None
     argv
@@ -154,17 +153,13 @@ let run opts source =
         (Mylittleml.Middleend.Lambda_lift.lift_prog
            (Mylittleml.Middleend.Closure.convert_prog anf_prog))
     | Riscv ->
-      let ll_prog =
-        Mylittleml.Middleend.Lambda_lift.lift_prog
-          (Mylittleml.Middleend.Closure.convert_prog anf_prog)
+      let assembly =
+        Result.bind (Riscv.Codegen.from_aprogram anf_prog) Riscv.Codegen.compile_program
       in
-      (match
-         Riscv.Asm.emit
-           (Riscv.Codegen.compile_program (Riscv.Codegen.from_aprogram ll_prog))
-       with
-       | asm -> asm
-       | exception Riscv.Codegen.Unsupported msg ->
-         prerr_endline ("compiler: backend: " ^ msg);
+      (match assembly with
+       | Ok asm -> Riscv.Asm.emit asm
+       | Error message ->
+         prerr_endline ("compiler: backend: " ^ message);
          exit 1)
   in
   match opts.output with
@@ -181,7 +176,11 @@ let run opts source =
 ;;
 
 let () =
-  let argv = List.tl (Array.to_list Sys.argv) in
+  let argv =
+    match Array.to_list Sys.argv with
+    | [] -> []
+    | _ :: args -> args
+  in
   let file, opts = parse_args argv in
   let source = read_input file in
   run opts source

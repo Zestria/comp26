@@ -28,32 +28,19 @@ let default_iterations = 10
 
 (** (a) Deep chain: [let x0 = 1 in let x1 = x0 + x0 in ... in xN]. *)
 let deep_chain n =
-  let b = Buffer.create (n * 32) in
-  Buffer.add_string b "let x0 = 1 in ";
-  for i = 1 to n - 1 do
-    Printf.bprintf b "let x%d = x%d + x%d in " i (i - 1) (i - 1)
-  done;
-  Printf.bprintf b "x%d" (n - 1);
-  Buffer.contents b
+  "let x0 = 1 in "
+  ^ String.concat
+      ""
+      (List.init
+         (max 0 (n - 1))
+         (fun i -> Printf.sprintf "let x%d = x%d + x%d in " (i + 1) i i))
+  ^ Printf.sprintf "x%d" (n - 1)
 ;;
 
-(** (b) Flat sum: [1+1+...+1]. *)
-let flat_sum n =
-  let b = Buffer.create (n * 2) in
-  for i = 0 to n - 1 do
-    if i > 0 then Buffer.add_char b '+';
-    Buffer.add_string b "1"
-  done;
-  Buffer.contents b
-;;
+let flat_sum n = String.concat "+" (List.init n (fun _ -> "1"))
 
-(** (c) Many top-level declarations. *)
 let many_decls n =
-  let b = Buffer.create (n * 16) in
-  for i = 0 to n - 1 do
-    Printf.bprintf b "let d%d = %d;;\n" i i
-  done;
-  Buffer.contents b
+  String.concat "" (List.init n (fun i -> Printf.sprintf "let d%d = %d;;\n" i i))
 ;;
 
 let rows =
@@ -65,27 +52,24 @@ let rows =
 
 (* Measurement ----------------------------------------------------------- *)
 
-(** CPU time of [iterations] parses of [text] with [kind].  Raises if the
-    generated input is rejected, so a wrong generator fails loudly. *)
+(** CPU time of repeated parses, or an explicit parser diagnostic. *)
 let time_parse ~iterations kind text =
   let opts = { Parse.sticky = false } in
-  let t0 = Sys.time () in
-  for _ = 1 to iterations do
-    match Parse.parse kind opts text with
-    | Ok _ -> ()
-    | Error msg ->
-      (* Reaching this line means a benchmark input generator is broken,
-         not that user input is invalid. *)
-      raise
-        (Invalid_argument
-           (Format.sprintf
-              "%s parser rejected benchmark input: %s"
-              (match kind with
-               | Parse.Topdown -> "topdown"
-               | Parse.Bottomup -> "bottomup")
-              msg))
-  done;
-  Sys.time () -. t0
+  let start = Sys.time () in
+  let rec loop remaining =
+    if remaining = 0
+    then Ok (Sys.time () -. start)
+    else Result.bind (Parse.parse kind opts text) (fun _ -> loop (remaining - 1))
+  in
+  loop iterations
+;;
+
+let measure kind text =
+  match time_parse ~iterations:default_iterations kind text with
+  | Ok time -> time
+  | Error message ->
+    prerr_endline ("benchmark: " ^ message);
+    exit 1
 ;;
 
 (* Table ----------------------------------------------------------------- *)
@@ -97,8 +81,8 @@ let () =
        List.iter
          (fun size ->
             let text = gen size in
-            let td = time_parse ~iterations:default_iterations Parse.Topdown text in
-            let bu = time_parse ~iterations:default_iterations Parse.Bottomup text in
+            let td = measure Parse.Topdown text in
+            let bu = measure Parse.Bottomup text in
             Printf.printf
               "%-12s %8d %8d %12.6f %12.6f %9.2f\n"
               label

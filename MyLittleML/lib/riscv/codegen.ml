@@ -6,88 +6,22 @@
 
 [@@@ocaml.text "/*"]
 
-(** RISC-V 64 code generator (Task 3).
-
-    Two stages, both in this module:
-
-    - {!from_aprogram} lowers a lambda-lifted ANF program (the Task 2
-      output) into the small {!Program} IL.  It resolves curried
-      application chains ([t1 = f a; t2 = t1 b; … t2]) into multi-argument
-      calls, unfolds the self-application fixpoints that closure
-      conversion introduces for recursive functions
-      ([let rec f = (fun f x -> …) f]), hoists the nested recursive
-      lambdas, inlines constant globals and maps [print_int] applications
-      onto {!Program.PrintInt}.  Application chains that stop before the
-      callee's full arity become {!Program.Closure} records.
-
-    - {!compile_program} emits {!Asm} for a {!Program.program}.  Functions
-      take their parameters in [a0]... and return in [a0]; arithmetic
-      never leaves the registers — there are no runtime helpers for
-      [+ - * / mod < <= …].  First-class function values are closure
-      records [code; v1 … vk]: an indirect call sets [s0] to the record,
-      loads the remaining arguments into [a0]... and jumps through
-      [t0]; a per-[(code, k)] trampoline reloads the [k] captured
-      arguments.  Zero-capture references ([Var f] for a known function
-      [f]) use static [.rodata] records, so the common cases allocate
-      nothing.
-
-    The only library function ever called is [malloc] (for closure
-    records); the only emitted helper is [print_int], a dozen instructions
-    that format the argument in decimal and issue the [write] syscall. *)
+(** RISC-V 64 backend. Lexical ANF is lowered to explicit heap closures,
+    then to integer instructions. See README-riscv.md for the ABI. *)
 
 open Mylittleml.Middleend.Anf
 module Reg = Program.Reg
 module A = Asm
+module M = Mylittleml.State_error
+open M
 
-exception Unsupported of string
-
-let unsupported fmt = Printf.ksprintf (fun s -> raise (Unsupported s)) fmt
+let unsupported fmt = Printf.ksprintf M.fail fmt
 
 (* ---------------------------------------------------------------------- *)
 (* Stage 1: lambda-lifted ANF -> Program.program                           *)
 (* ---------------------------------------------------------------------- *)
 
-(** How a known-arity callee is reached: a static code label, or a variable
-    holding a closure value (e.g. the self-parameter of an unfolded
-    recursive function, or a [let rec] binding inside [main]). *)
-type callee_desc =
-  | DLabel of string
-  | DValue of string
-
-(** Lowering environment threaded through the conversion.  It merges
-    application-chain state ([BPartial]: a temporary holding a partially
-    applied known function) and alias bindings ([BAlias]: [let cc = f in …]
-    produced by closure conversion). *)
-type binding =
-  | BPartial of callee_desc * Program.body list
-  | BAlias of callee_desc
-
-type lctx =
-  { arity : (string, int) Hashtbl.t
-    (** callable name -> total arity (labels, [let rec] values, hoisted
-            nested lambdas) *)
-  ; labels : (string, unit) Hashtbl.t
-    (** names that are static code labels (zero captured arguments) *)
-  ; params : (string, string list) Hashtbl.t
-    (** label -> parameter list (used to unfold [let rec] fixpoints) *)
-  ; value_of : (string, string) Hashtbl.t
-    (** closure-valued name -> underlying code label *)
-  ; eta : (string, string) Hashtbl.t
-    (** [let rec] name -> the code label of its fixpoint unfolding *)
-  ; consts : (string, int) Hashtbl.t
-    (** compile-time int/bool globals, inlined at every use *)
-  ; mutable funcs_out : Program.function_ list
-  ; mutable fresh : int
-  }
-
-let is_callable lctx name = Hashtbl.mem lctx.arity name
-let is_label lctx name = Hashtbl.mem lctx.labels name
-let desc_of lctx name = if is_label lctx name then DLabel name else DValue name
-
-let fresh_label_name lctx base =
-  lctx.fresh <- lctx.fresh + 1;
-  base ^ string_of_int lctx.fresh
-;;
+module S = Set.Make (String)
 
 let conv_bop = function
   | Mylittleml.Ast.Add -> Program.Add
@@ -103,591 +37,502 @@ let conv_bop = function
   | Mylittleml.Ast.Neq -> Program.Ne
 ;;
 
-let atom_name = function
-  | AVar v -> v
-  | _ -> "<constant>"
+let free_atom = function
+  | AVar x -> S.singleton x
+  | AInt _ | ABool _ -> S.empty
 ;;
 
-(** Complete or reify an application of a known-arity callee.  A full
-    application becomes a call; a partial one becomes a closure record
-    value (the argument list is already applied). *)
-let rec finish_call lctx (desc : callee_desc) (args : Program.body list) : Program.body =
-  let arity =
-    match desc with
-    | DLabel f | DValue f -> Hashtbl.find lctx.arity f
+let rec free_exp = function
+  | ACexp c -> free_cexp c
+  | ALet (flag, x, rhs, rest) ->
+    let fv = free_exp rhs in
+    let fv = if flag = Rec then S.remove x fv else fv in
+    S.union fv (S.remove x (free_exp rest))
+
+and free_cexp = function
+  | CAtom a | CNeg a -> free_atom a
+  | CBinop (_, a, b) | CApp (a, b) -> S.union (free_atom a) (free_atom b)
+  | CIf (a, t, f) -> S.union (free_atom a) (S.union (free_exp t) (free_exp f))
+  | CFun (params, body) -> List.fold_right S.remove params (free_exp body)
+;;
+
+(** Lexical closure conversion and lifting are performed together for the
+    native backend. Every application consumes exactly one argument. Thus
+    partial application, returned functions and unknown callees use the same
+    ABI, without guessing arities or delaying effectful ANF bindings. *)
+type lower_state =
+  { next : int
+  ; functions : Program.function_ list
+  }
+
+let fresh_function =
+  let* state = get in
+  let* () = put { state with next = state.next + 1 } in
+  return (".Lml_fn" ^ string_of_int state.next)
+;;
+
+let add_function fn =
+  modify (fun state -> { state with functions = fn :: state.functions })
+;;
+
+let from_aprogram prog =
+  let lookup env x =
+    match List.assoc_opt x env with
+    | Some v -> return v
+    | None when x = "print_int" -> return (Program.Var ".Lml_print")
+    | None -> unsupported "unbound variable '%s'" x
   in
-  if List.length args = arity
-  then (
-    match desc with
-    | DLabel f -> Program.App (Program.Direct f, args)
-    | DValue v -> Program.App (Program.Value (Program.Var v), args))
-  else (
-    match desc with
-    | DLabel f -> Program.Closure (f, arity, args)
-    | DValue v ->
-      (match Hashtbl.find_opt lctx.value_of v with
-       | Some lab -> Program.Closure (lab, arity, args)
-       | None ->
-         unsupported
-           "partial application of the unknown function value '%s' is not supported"
-           v))
-;;
-
-(** Register a nested lambda as a plain zero-capture top-level function. *)
-let rec register_function lctx name (params : string list) (body : aexp) : unit =
-  Hashtbl.replace lctx.arity name (List.length params);
-  Hashtbl.replace lctx.labels name ();
-  Hashtbl.replace lctx.params name params;
-  let body' = conv_aexp lctx [] body in
-  lctx.funcs_out <- { Program.name; params; body = body' } :: lctx.funcs_out
-
-and conv_atom lctx env (a : atom) : Program.body =
-  match a with
-  | AInt n -> Program.Const n
-  | ABool b -> Program.Const (if b then 1 else 0)
-  | AVar v ->
-    (match Hashtbl.find_opt lctx.consts v with
-     | Some n -> Program.Const n
-     | None ->
-       (match List.assoc_opt v env with
-        | Some (BPartial (desc, args)) -> finish_call lctx desc args
-        | Some (BAlias desc) ->
-          (match desc with
-           | DLabel f | DValue f -> Program.Var f)
-        | None -> Program.Var v))
-
-and conv_cexp lctx env (c : cexp) : Program.body =
-  match c with
-  | CAtom a -> conv_atom lctx env a
-  | CBinop (op, a, b) ->
-    Program.BinOp (conv_bop op, conv_atom lctx env a, conv_atom lctx env b)
-  | CNeg a -> Program.BinOp (Program.Sub, Program.Const 0, conv_atom lctx env a)
-  | CApp (AVar "print_int", x) when not (is_callable lctx "print_int") ->
-    Program.PrintInt (conv_atom lctx env x)
-  | CApp (AVar f, x) when is_callable lctx f ->
-    finish_call lctx (desc_of lctx f) [ conv_atom lctx env x ]
-  | CApp (AVar g, x) ->
-    (match List.assoc_opt g env with
-     | Some (BPartial (desc, args)) ->
-       finish_call lctx desc (args @ [ conv_atom lctx env x ])
-     | Some (BAlias desc) -> finish_call lctx desc [ conv_atom lctx env x ]
-     | None ->
-       (* unknown arity (e.g. a continuation parameter): assume a full call *)
-       Program.App (Program.Value (Program.Var g), [ conv_atom lctx env x ]))
-  | CApp (f, _) -> unsupported "call of a non-function value '%s'" (atom_name f)
-  | CIf (c, t, f) ->
-    Program.If (conv_atom lctx env c, conv_aexp lctx env t, conv_aexp lctx env f)
-  | CFun _ -> unsupported "internal error: lambda survived lambda lifting"
-
-and conv_aexp lctx env (e : aexp) : Program.body =
-  match e with
-  | ACexp c -> conv_cexp lctx env c
-  | ALet (_, name, ACexp (CFun (params, body)), rest) ->
-    (* Lambda lifting keeps nested recursive lambdas in place; hoist them
-       as plain functions (closure conversion guarantees they are closed). *)
-    register_function lctx name params body;
-    conv_aexp lctx env rest
-  | ALet (Rec, name, rhs, rest) ->
-    (match resolve_eta lctx name rhs with
-     | Some target ->
-       let params = Hashtbl.find lctx.params target in
-       Hashtbl.replace lctx.eta name target;
-       Hashtbl.replace lctx.arity name (List.length params - 1);
-       Hashtbl.replace lctx.value_of name target;
-       Program.Let
-         (name, Program.ClosRec (target, List.length params), conv_aexp lctx env rest)
-     | None ->
-       unsupported
-         "recursive binding of a non-function value is not supported by the backend")
-  | ALet (_, name, ACexp (CApp (AVar "print_int", x)), rest)
-    when not (is_callable lctx "print_int") ->
-    Program.Let (name, Program.PrintInt (conv_atom lctx env x), conv_aexp lctx env rest)
-  | ALet (_, name, ACexp (CApp (AVar f, arg)), rest) ->
-    let arg' = conv_atom lctx env arg in
-    (match List.assoc_opt f env with
-     | Some (BPartial (desc, args)) ->
-       conv_aexp lctx ((name, BPartial (desc, args @ [ arg' ])) :: env) rest
-     | Some (BAlias desc) ->
-       conv_aexp lctx ((name, BPartial (desc, [ arg' ])) :: env) rest
-     | None ->
-       if is_callable lctx f
-       then conv_aexp lctx ((name, BPartial (desc_of lctx f, [ arg' ])) :: env) rest
-       else
-         (* unknown arity (e.g. a continuation parameter): full call *)
-         Program.Let
-           ( name
-           , Program.App (Program.Value (Program.Var f), [ arg' ])
-           , conv_aexp lctx env rest ))
-  | ALet (_, name, ACexp (CAtom (AVar v)), rest) when is_callable lctx v ->
-    (* local alias of a known function: substitute instead of copying *)
-    conv_aexp lctx ((name, BAlias (desc_of lctx v)) :: env) rest
-  | ALet (_, name, rhs, rest) ->
-    let rhs' = conv_aexp lctx env rhs in
-    (match rhs' with
-     | Program.Closure (lab, _, _) | Program.ClosRec (lab, _) ->
-       Hashtbl.replace lctx.value_of name lab
-     | _ -> ());
-    Program.Let (name, rhs', conv_aexp lctx env rest)
-
-(** Recognize the [let rec] fixpoint shape produced by closure conversion:
-
-    {[let rec f = let cc = (fun f x y -> body) in cc f]}
-
-    (with any number of alias bindings in between; the alias may also hold
-    the lambda itself).  Returns the code label of the unfolded function
-    whose first parameter is [f]. *)
-and resolve_eta lctx (name : string) (rhs : aexp) : string option =
-  let rec go e subst =
-    match e with
-    | ALet (Nonrec, alias, ACexp (CAtom (AVar target)), rest) ->
-      go rest ((alias, target) :: subst)
-    | ALet (Nonrec, alias, ACexp (CFun (params, body)), rest) ->
-      let lab = fresh_label_name lctx "eta_f" in
-      register_function lctx lab params body;
-      go rest ((alias, lab) :: subst)
-    | ACexp (CApp (AVar f, AVar self)) when self = name ->
-      let lab =
-        match List.assoc_opt f subst with
-        | Some l -> l
-        | None -> f
+  let atom env = function
+    | AInt n -> return (Program.Const n)
+    | ABool b -> return (Program.Const (if b then 1 else 0))
+    | AVar x -> lookup env x
+  in
+  let bound_value name = function
+    | Program.Var label when String.starts_with ~prefix:".Lml_" label -> Program.Var label
+    | Program.Const n -> Program.Const n
+    | _ -> Program.Var name
+  in
+  let rec exp env = function
+    | ACexp c -> cexp env c
+    | ALet (flag, x, rhs, rest) ->
+      let* value = binding env flag x rhs in
+      let* rest = exp ((x, bound_value x value) :: env) rest in
+      return (Program.Let (x, value, rest))
+  and binding env flag x rhs =
+    match flag, rhs with
+    | Rec, ACexp (CFun (params, body)) -> lambda env (Some x) params body
+    | Rec, _ -> unsupported "let rec requires a function on its right-hand side"
+    | Nonrec, _ -> exp env rhs
+  and cexp env = function
+    | CAtom a -> atom env a
+    | CNeg a ->
+      let* a = atom env a in
+      return (Program.BinOp (Program.Sub, Program.Const 0, a))
+    | CBinop (op, a, b) ->
+      let* a = atom env a in
+      let* b = atom env b in
+      return (Program.BinOp (conv_bop op, a, b))
+    | CIf (a, t, f) ->
+      let* a = atom env a in
+      let* t = exp env t in
+      let* f = exp env f in
+      return (Program.If (a, t, f))
+    | CApp (AVar "print_int", a) when not (List.mem_assoc "print_int" env) ->
+      let* a = atom env a in
+      return (Program.PrintInt a)
+    | CApp (f, a) ->
+      let* f = atom env f in
+      let* a = atom env a in
+      return (Program.App (Program.Value f, [ a ]))
+    | CFun (params, body) -> lambda env None params body
+  and lambda env self params body =
+    match params with
+    | [] -> unsupported "function without parameters"
+    | x :: xs ->
+      let body =
+        match xs with
+        | [] -> body
+        | _ -> ACexp (CFun (xs, body))
       in
-      (match Hashtbl.find_opt lctx.params lab with
-       | Some params when params <> [] && List.hd params = name -> Some lab
-       | _ -> None)
-    | _ -> None
+      let free = S.remove x (free_exp body) in
+      let free =
+        match self with
+        | None -> free
+        | Some name -> S.remove name free
+      in
+      let captures = S.elements free in
+      let* values = M.map_list (lookup env) captures in
+      let inner = List.mapi (fun i name -> name, Program.Env i) captures in
+      let inner =
+        match self with
+        | None -> inner
+        | Some name -> (name, Program.Self) :: inner
+      in
+      let* name = fresh_function in
+      let* body = exp ((x, Program.Var x) :: inner) body in
+      let* () = add_function { Program.name; params = [ x ]; body } in
+      return
+        (match captures with
+         | [] -> Program.Var name
+         | _ -> Program.MakeClosure (name, values))
   in
-  go rhs []
-;;
-
-let from_aprogram (prog : aprogram) : Program.program =
-  let lctx =
-    { arity = Hashtbl.create 16
-    ; labels = Hashtbl.create 16
-    ; params = Hashtbl.create 16
-    ; value_of = Hashtbl.create 16
-    ; eta = Hashtbl.create 16
-    ; consts = Hashtbl.create 16
-    ; funcs_out = []
-    ; fresh = 0
-    }
+  let rec items env = function
+    | [] -> return (Program.Const 0)
+    | ADecl (flag, name, rhs) :: rest ->
+      let* value = binding env flag name rhs in
+      let* rest = items ((name, bound_value name value) :: env) rest in
+      return (Program.Let (name, value, rest))
+    | AExp e :: rest ->
+      let* value = exp env e in
+      let* rest = items env rest in
+      return (Program.Let ("$discard", value, rest))
   in
-  (* Pass 1: register every top-level function so that definitions can be
-     unfolded and converted in any order. *)
-  List.iter
-    (function
-      | ADecl (_, name, ACexp (CFun (params, _))) ->
-        Hashtbl.replace lctx.arity name (List.length params);
-        Hashtbl.replace lctx.labels name ();
-        Hashtbl.replace lctx.params name params
-      | _ -> ())
-    prog;
-  (* Pass 2: resolve the fixpoint shape of top-level [let rec] bindings. *)
-  List.iter
-    (function
-      | ADecl (Rec, name, rhs) ->
-        (match rhs with
-         | ACexp (CFun _) -> () (* plain recursive lambda: a normal label *)
-         | _ ->
-           (match resolve_eta lctx name rhs with
-            | Some target ->
-              let params = Hashtbl.find lctx.params target in
-              Hashtbl.replace lctx.eta name target;
-              Hashtbl.replace lctx.arity name (List.length params - 1);
-              Hashtbl.replace lctx.value_of name target
-            | None -> ()))
-      | _ -> ())
-    prog;
-  (* Pass 3: inline every int/bool global so that uses never depend on the
-     order in which declarations are converted. *)
-  List.iter
-    (function
-      | ADecl (_, name, ACexp (CAtom (AInt n))) -> Hashtbl.replace lctx.consts name n
-      | ADecl (_, name, ACexp (CAtom (ABool b))) ->
-        Hashtbl.replace lctx.consts name (if b then 1 else 0)
-      | _ -> ())
-    prog;
-  (* Pass 4: functions become definitions; everything else builds the body
-     of [main] in program order.  The fold runs over the reversed item
-     list so that each new binding wraps the continuation converted so
-     far — uses always sit inside the scope of their definitions. *)
-  let conv_item (main : Program.body option) (item : item) : Program.body option =
-    match item with
-    | ADecl (_, name, ACexp (CFun (params, body))) ->
-      let body' = conv_aexp lctx [] body in
-      lctx.funcs_out <- { Program.name; params; body = body' } :: lctx.funcs_out;
-      main
-    | ADecl (Rec, name, _) when Hashtbl.mem lctx.eta name ->
-      let target = Hashtbl.find lctx.eta name in
-      let knot = Program.ClosRec (target, Hashtbl.find lctx.arity name + 1) in
-      Some (Program.Let (name, knot, Option.value main ~default:(Program.Const 0)))
-    | ADecl (_, _, ACexp (CAtom (AInt _))) | ADecl (_, _, ACexp (CAtom (ABool _))) -> main
-    | ADecl (_, name, rhs) ->
-      (* A non-constant, non-function global: compute it at the start of
-         main and keep it in a stack slot for the rest of main. *)
-      Some
-        (Program.Let
-           (name, conv_aexp lctx [] rhs, Option.value main ~default:(Program.Const 0)))
-    | AExp e ->
-      Some
-        (match main with
-         | None -> conv_aexp lctx [] e
-         | Some m -> Program.Let ("main_expr", conv_aexp lctx [] e, m))
+  let computation =
+    let* body = items [] prog in
+    let* state = get in
+    return
+      (({ Program.name = "main"; params = []; body } :: List.rev state.functions)
+       @ [ { Program.name = ".Lml_print"
+           ; params = [ "x" ]
+           ; body = Program.PrintInt (Program.Var "x")
+           }
+         ])
   in
-  let main_body =
-    match List.fold_left conv_item None (List.rev prog) with
-    | Some b -> b
-    | None -> Program.Const 0
-  in
-  { Program.name = "main"; params = []; body = main_body } :: lctx.funcs_out
+  M.eval computation { next = 0; functions = [] }
 ;;
 
 (* ---------------------------------------------------------------------- *)
 (* Stage 2: Program.program -> Asm.t                                       *)
 (* ---------------------------------------------------------------------- *)
 
-(** Per-program emission state. *)
-type cstate =
-  { mutable next_slot : int
-    (** next free local slot (scope-aware: released when a [Let] scope
-          ends) *)
-  ; mutable nlocals : int (** peak number of live local slots *)
-  ; mutable nspill : int (** peak number of spill slots *)
-  ; mutable label : int (** fresh branch-label counter *)
+type frame =
+  { nlocals : int
   ; fnames : string list
-    (** all function labels of the program: a [Var] outside [penv]/[lenv]
-        that names one of these is a first-class function reference *)
-  ; mutable tramps : (string * int * int) list
-    (** trampolines (label, arity, captured), in first-use order *)
-  ; mutable static_clos : string list
-    (** functions referenced as values, needing a [.rodata] record *)
-  ; uses_print_int : bool ref
   }
 
-let make_cstate fnames =
-  { next_slot = 0
-  ; nlocals = 0
-  ; nspill = 0
-  ; label = 0
-  ; fnames
-  ; tramps = []
-  ; static_clos = []
-  ; uses_print_int = ref false
-  }
-;;
-
-let fresh_label st kind =
-  let n = st.label in
-  st.label <- n + 1;
-  Format.sprintf ".L%s%d" kind n
-;;
-
-let need_trampoline st f arity k =
-  if not (List.exists (fun (g, a, c) -> g = f && a = arity && c = k) st.tramps)
-  then st.tramps <- (f, arity, k) :: st.tramps
-;;
-
-let need_static_closure st f =
-  if not (List.mem f st.static_clos) then st.static_clos <- f :: st.static_clos
-;;
-
-(** Conservative static analysis used for the frame layout: peak number of
-    live local slots and peak spill depth.  Must mirror [compile_body]. *)
-let rec analyze_body st ~depth (e : Program.body) : unit =
-  let bump_spill d = if d > st.nspill then st.nspill <- d in
-  match e with
-  | Const _ | Var _ | ClosRec _ -> ()
-  | BinOp (_, l, r) ->
-    analyze_body st ~depth l;
-    analyze_body st ~depth r;
-    bump_spill (depth + 1)
-  | If (_, t, f) ->
-    analyze_body st ~depth t;
-    analyze_body st ~depth f
-  | Let (_, v, rest) ->
-    let i = st.next_slot in
-    st.next_slot <- i + 1;
-    if st.next_slot > st.nlocals then st.nlocals <- st.next_slot;
-    analyze_body st ~depth v;
-    analyze_body st ~depth rest;
-    st.next_slot <- i
+let rec uses_var x = function
+  | Program.Var y -> x = y
+  | Const _ | Env _ | Self -> false
+  | BinOp (_, a, b) -> uses_var x a || uses_var x b
+  | If (c, t, f) -> uses_var x c || uses_var x t || uses_var x f
+  | Let (y, v, rest) -> uses_var x v || (x <> y && uses_var x rest)
   | App (callee, args) ->
-    (* argument i is compiled at depth + i so that spills of nested calls
-       never clobber the slots of the already-stashed arguments *)
-    List.iteri (fun i a -> analyze_body st ~depth:(depth + i) a) args;
-    bump_spill (depth + List.length args);
     (match callee with
-     | Program.Value c ->
-       analyze_body st ~depth:(depth + List.length args) c;
-       bump_spill (depth + List.length args + 1)
-     | Program.Direct _ -> ())
-  | Closure (_, _, cargs) ->
-    List.iteri (fun i a -> analyze_body st ~depth:(depth + i) a) cargs;
-    bump_spill (depth + List.length cargs + 1)
-  | PrintInt e -> analyze_body st ~depth e
+     | Direct _ -> false
+     | Value c -> uses_var x c)
+    || List.exists (uses_var x) args
+  | MakeClosure (_, args) -> List.exists (uses_var x) args
+  | PrintInt e -> uses_var x e
 ;;
 
-(** Compile one body so that the result ends up in [a0].  [penv] maps
-    parameters to their argument registers, [lenv] maps in-scope [let]-
-    bound names to stack slots.  [depth] is the current spill depth. *)
-let rec compile_body st ~depth lenv (e : Program.body) : A.instr list =
-  let spill d = Callconv.spill_offset ~nlocals:st.nlocals d in
-  let slot i = Callconv.local_offset i in
-  match e with
-  | Const n -> [ A.Li (Reg.A0, n) ]
+(** Peak frame usage. The traversal is pure; mutually exclusive branches
+    share slots and nested operands cannot overwrite earlier spills. *)
+let rec frame_usage ~locals ~depth = function
+  | Program.Const _ | Var _ | Env _ | Self -> locals, depth
+  | BinOp (_, l, r) ->
+    merge_usage (frame_usage ~locals ~depth l) (frame_usage ~locals ~depth:(depth + 1) r)
+  | If (c, t, f) ->
+    merge_usage
+      (frame_usage ~locals ~depth c)
+      (merge_usage (frame_usage ~locals ~depth t) (frame_usage ~locals ~depth f))
+  | Let (x, v, rest) ->
+    let extra = if uses_var x rest then 1 else 0 in
+    merge_usage
+      (frame_usage ~locals:(locals + extra) ~depth v)
+      (frame_usage ~locals:(locals + extra) ~depth rest)
+  | App (callee, args) ->
+    let base =
+      match callee with
+      | Direct _ -> locals, depth + List.length args
+      | Value c -> frame_usage ~locals ~depth:(depth + List.length args + 1) c
+    in
+    List.fold_left
+      merge_usage
+      base
+      (List.mapi (fun i a -> frame_usage ~locals ~depth:(depth + i) a) args)
+  | MakeClosure (_, args) ->
+    List.fold_left
+      merge_usage
+      (locals, depth + List.length args)
+      (List.mapi (fun i a -> frame_usage ~locals ~depth:(depth + i) a) args)
+  | PrintInt e -> frame_usage ~locals ~depth e
+
+and merge_usage (a, b) (c, d) = max a c, max b d
+
+(** Fold over all subexpressions to collect static records and helpers. *)
+let rec exists_body pred body =
+  pred body
+  ||
+  match body with
+  | Program.Const _ | Var _ | Env _ | Self -> false
+  | BinOp (_, a, b) | Let (_, a, b) -> exists_body pred a || exists_body pred b
+  | If (c, t, f) -> exists_body pred c || exists_body pred t || exists_body pred f
+  | App (callee, args) ->
+    (match callee with
+     | Direct _ -> false
+     | Value c -> exists_body pred c)
+    || List.exists (exists_body pred) args
+  | MakeClosure (_, args) -> List.exists (exists_body pred) args
+  | PrintInt e -> exists_body pred e
+;;
+
+let atomic = function
+  | Program.Const _ | Var _ | Env _ | Self -> true
+  | _ -> false
+;;
+
+let binop_instructions = function
+  | Program.Add -> [ A.Add (Reg.A0, Reg.T0, Reg.A0) ]
+  | Sub -> [ A.Sub (Reg.A0, Reg.T0, Reg.A0) ]
+  | Mul -> [ A.Mul (Reg.A0, Reg.T0, Reg.A0) ]
+  | Div -> [ A.Beq (Reg.A0, Reg.Zero, ".Lml_div_zero"); A.Div (Reg.A0, Reg.T0, Reg.A0) ]
+  | Mod -> [ A.Beq (Reg.A0, Reg.Zero, ".Lml_div_zero"); A.Rem (Reg.A0, Reg.T0, Reg.A0) ]
+  | Lt -> [ A.Slt (Reg.A0, Reg.T0, Reg.A0) ]
+  | Gt -> [ A.Slt (Reg.A0, Reg.A0, Reg.T0) ]
+  | Le -> [ A.Slt (Reg.A0, Reg.A0, Reg.T0); A.Xori (Reg.A0, Reg.A0, 1) ]
+  | Ge -> [ A.Slt (Reg.A0, Reg.T0, Reg.A0); A.Xori (Reg.A0, Reg.A0, 1) ]
+  | Eq -> [ A.Sub (Reg.T1, Reg.T0, Reg.A0); A.Seqz (Reg.A0, Reg.T1) ]
+  | Ne ->
+    [ A.Sub (Reg.T1, Reg.T0, Reg.A0)
+    ; A.Seqz (Reg.A0, Reg.T1)
+    ; A.Xori (Reg.A0, Reg.A0, 1)
+    ]
+;;
+
+(** Emission is a State_error computation (unit state). Invalid IL propagates
+    Error through the same bind operator as lowering, without exceptions. *)
+let rec compile_body frame ~path ~depth lenv body =
+  let spill d = Callconv.spill_offset ~nlocals:frame.nlocals d in
+  let slot = Callconv.local_offset in
+  let sub suffix = compile_body frame ~path:(path ^ suffix) ~depth lenv in
+  match body with
+  | Program.Const n -> return [ A.Li (Reg.A0, n) ]
+  | Self -> return [ A.Ld (Reg.A0, 8, Reg.Sp) ]
+  | Env i when i < 0 -> unsupported "negative closure capture index"
+  | Env i -> return [ A.Ld (Reg.T0, 8, Reg.Sp); A.Ld (Reg.A0, 8 * (i + 1), Reg.T0) ]
   | Var v ->
     (match List.assoc_opt v lenv with
-     | Some i -> [ A.Ld (Reg.A0, slot i, Reg.Sp) ]
-     | None ->
-       if List.mem v st.fnames
-       then (
-         need_static_closure st v;
-         [ A.La (Reg.A0, Callconv.static_closure_label v) ])
-       else
-         unsupported
-           "unbound variable '%s' at code generation (locals: [%s])"
-           v
-           (String.concat ", " (List.map fst lenv)))
-  | BinOp (op, l, r) ->
-    (* special cases first: no spill, no extra instruction *)
-    let const_of = function
-      | Program.Const n -> Some n
-      | _ -> None
+     | Some i -> return [ A.Ld (Reg.A0, slot i, Reg.Sp) ]
+     | None when List.mem v frame.fnames ->
+       return [ A.La (Reg.A0, Callconv.static_closure_label v) ]
+     | None -> unsupported "unbound variable '%s' at code generation" v)
+  | MakeClosure (f, args) ->
+    let* compiled = compile_arguments frame ~path ~depth lenv args in
+    let stores =
+      List.concat
+        (List.mapi
+           (fun i _ ->
+              [ A.Ld (Reg.T1, spill (depth + i), Reg.Sp)
+              ; A.Sd (Reg.T1, 8 * (i + 1), Reg.A0)
+              ])
+           args)
     in
-    (match l, op, const_of r, const_of l with
-     | Program.Const 0, Program.Sub, _, _ ->
-       compile_body st ~depth lenv r @ [ A.Neg (Reg.A0, Reg.A0) ]
-     | Program.Const 0, Program.Add, _, _ -> compile_body st ~depth lenv r
-     | _, Program.Add, _, Some c ->
-       compile_body st ~depth lenv r @ [ A.Addi (Reg.A0, Reg.A0, c) ]
-     | _, (Program.Add | Program.Sub), Some c, _ ->
-       compile_body st ~depth lenv l
-       @ [ A.Ld (Reg.T0, spill depth, Reg.Sp)
-         ; A.Addi (Reg.A0, Reg.T0, if op = Program.Sub then -c else c)
+    return
+      (compiled
+       @ [ A.Li (Reg.A0, Callconv.closure_size (List.length args))
+         ; A.Call "malloc"
+         ; A.La (Reg.T0, f)
+         ; A.Sd (Reg.T0, 0, Reg.A0)
          ]
-     | _ ->
-       compile_body st ~depth lenv l
-       @ [ A.Sd (Reg.A0, spill depth, Reg.Sp) ]
-       @ compile_body st ~depth lenv r
-       @ [ A.Ld (Reg.T0, spill depth, Reg.Sp) ]
-       @
-         (match op with
-         | Program.Add -> [ A.Add (Reg.A0, Reg.T0, Reg.A0) ]
-         | Program.Sub -> [ A.Sub (Reg.A0, Reg.T0, Reg.A0) ]
-         | Program.Mul -> [ A.Mul (Reg.A0, Reg.T0, Reg.A0) ]
-         | Program.Div -> [ A.Div (Reg.A0, Reg.T0, Reg.A0) ]
-         | Program.Mod -> [ A.Rem (Reg.A0, Reg.T0, Reg.A0) ]
-         | Program.Lt -> [ A.Slt (Reg.A0, Reg.T0, Reg.A0) ]
-         | Program.Gt -> [ A.Slt (Reg.A0, Reg.A0, Reg.T0) ]
-         | Program.Le -> [ A.Slt (Reg.A0, Reg.A0, Reg.T0); A.Xori (Reg.A0, Reg.A0, 1) ]
-         | Program.Ge -> [ A.Slt (Reg.A0, Reg.T0, Reg.A0); A.Xori (Reg.A0, Reg.A0, 1) ]
-         | Program.Eq -> [ A.Sub (Reg.T1, Reg.T0, Reg.A0); A.Seqz (Reg.A0, Reg.T1) ]
-         | Program.Ne ->
-           [ A.Sub (Reg.T1, Reg.T0, Reg.A0)
-           ; A.Seqz (Reg.A0, Reg.T1)
-           ; A.Xori (Reg.A0, Reg.A0, 1)
-           ]))
-  | If (c, t, f) ->
-    let l_else = fresh_label st "else" in
-    let l_end = fresh_label st "endif" in
-    compile_body st ~depth lenv c
-    @ [ A.Beq (Reg.A0, Reg.Zero, l_else) ]
-    @ compile_body st ~depth lenv t
-    @ [ A.J l_end; A.Label l_else ]
-    @ compile_body st ~depth lenv f
-    @ [ A.Label l_end ]
-  | Let (x, v, rest) ->
-    let i = st.next_slot in
-    st.next_slot <- i + 1;
-    if st.next_slot > st.nlocals then st.nlocals <- st.next_slot;
-    let code_v = compile_body st ~depth lenv v in
-    let code_rest = compile_body st ~depth ((x, i) :: lenv) rest in
-    st.next_slot <- i;
-    code_v @ [ A.Sd (Reg.A0, slot i, Reg.Sp) ] @ code_rest
-  | App (callee, args) ->
-    if List.length args > Callconv.max_args
-    then
-      unsupported
-        "call of '%s' has %d arguments, the backend supports at most %d"
-        (match callee with
-         | Program.Direct f -> f
-         | Program.Value _ -> "<indirect>")
-        (List.length args)
-        Callconv.max_args;
-    let nargs = List.length args in
-    let compiled =
-      List.mapi
-        (fun i arg ->
-           compile_body st ~depth lenv arg @ [ A.Sd (Reg.A0, spill (depth + i), Reg.Sp) ])
-        args
+       @ stores)
+  | BinOp (Sub, Const 0, r) ->
+    let* code = sub ".neg" r in
+    return (code @ [ A.Neg (Reg.A0, Reg.A0) ])
+  | BinOp (Add, Const 0, r) -> sub ".zero" r
+  | BinOp (Add, Const n, r) when n >= -2048 && n <= 2047 ->
+    let* code = sub ".add" r in
+    return (code @ [ A.Addi (Reg.A0, Reg.A0, n) ])
+  | BinOp (((Add | Sub) as op), l, Const n)
+    when (if op = Sub then -n else n) >= -2048 && (if op = Sub then -n else n) <= 2047 ->
+    let* code = sub ".imm" l in
+    return (code @ [ A.Addi (Reg.A0, Reg.A0, if op = Sub then -n else n) ])
+  | BinOp (op, l, r) ->
+    let* left = sub ".left" l in
+    let* right = compile_body frame ~path:(path ^ ".right") ~depth:(depth + 1) lenv r in
+    let operands =
+      if atomic r
+      then left @ [ A.Mov (Reg.T1, Reg.A0) ] @ right @ [ A.Mov (Reg.T0, Reg.T1) ]
+      else
+        left
+        @ [ A.Sd (Reg.A0, spill depth, Reg.Sp) ]
+        @ right
+        @ [ A.Ld (Reg.T0, spill depth, Reg.Sp) ]
     in
-    let loads =
-      List.mapi (fun i _ -> A.Ld (Callconv.arg_reg i, spill (depth + i), Reg.Sp)) args
+    return (operands @ binop_instructions op)
+  | If (c, t, f) ->
+    let* cond = sub ".cond" c in
+    let* yes = sub ".yes" t in
+    let* no = sub ".no" f in
+    return
+      (cond
+       @ [ A.Beq (Reg.A0, Reg.Zero, path ^ ".else") ]
+       @ yes
+       @ [ A.J (path ^ ".end"); A.Label (path ^ ".else") ]
+       @ no
+       @ [ A.Label (path ^ ".end") ])
+  | Let (x, v, Var y) when x = y -> sub ".identity" v
+  | Let (x, v, rest) when not (uses_var x rest) ->
+    let* code = if atomic v then return [] else sub ".discard" v in
+    let* rest = sub ".next" rest in
+    return (code @ rest)
+  | Let (x, v, rest) ->
+    let i = List.length lenv in
+    let* code = sub ".value" v in
+    let* rest = compile_body frame ~path:(path ^ ".body") ~depth ((x, i) :: lenv) rest in
+    return (code @ [ A.Sd (Reg.A0, slot i, Reg.Sp) ] @ rest)
+  | App (Value (Var f), [ arg ])
+    when List.mem f frame.fnames && not (List.mem_assoc f lenv) ->
+    let* arg = sub ".argument" arg in
+    return (arg @ [ A.La (Reg.S0, Callconv.static_closure_label f); A.Call f ])
+  | App (Value c, [ arg ]) when atomic c && atomic arg ->
+    let* callee = sub ".callee" c in
+    let* arg = sub ".argument" arg in
+    return
+      (callee
+       @ [ A.Mov (Reg.S0, Reg.A0) ]
+       @ arg
+       @ [ A.Ld (Reg.T0, 0, Reg.S0); A.Jalr Reg.T0 ])
+  | App (_, args) when List.length args > Callconv.max_args ->
+    unsupported "too many IL call arguments"
+  | App (callee, args) ->
+    let* compiled = compile_arguments frame ~path ~depth lenv args in
+    let* loads =
+      M.map_list
+        (fun (i, _) ->
+           let* reg = M.of_result (Callconv.arg_reg i) in
+           return (A.Ld (reg, spill (depth + i), Reg.Sp)))
+        (List.mapi (fun i arg -> i, arg) args)
     in
     (match callee with
-     | Program.Direct f -> List.concat compiled @ loads @ [ A.Jal f ]
-     | Program.Value c ->
-       (* indirect call: stash the closure pointer beyond the arguments,
-          then jump through [t0] with the record in [s0] *)
-       compile_body st ~depth lenv c
-       @ [ A.Sd (Reg.A0, spill (depth + nargs), Reg.Sp) ]
-       @ List.concat compiled
-       @ loads
-       @ [ A.Ld (Reg.S0, spill (depth + nargs), Reg.Sp)
-         ; A.Ld (Reg.T0, 0, Reg.S0)
-         ; A.Jalr Reg.T0
-         ])
-  | Closure (f, arity, cargs) ->
-    let k = List.length cargs in
-    need_trampoline st f arity k;
-    let compiled =
-      List.mapi
-        (fun i arg ->
-           compile_body st ~depth lenv arg @ [ A.Sd (Reg.A0, spill (depth + i), Reg.Sp) ])
-        cargs
-    in
-    let stores =
-      List.mapi
-        (fun i _ ->
-           [ A.Ld (Reg.T1, spill (depth + i), Reg.Sp)
-           ; A.Sd (Reg.T1, 8 + (8 * i), Reg.A0)
-           ])
-        cargs
-    in
-    List.concat compiled
-    @ [ A.Li (Reg.A0, Callconv.closure_size k)
-      ; A.Call "malloc"
-      ; A.Sd (Reg.A0, spill (depth + k), Reg.Sp)
-      ; A.La (Reg.T0, Callconv.trampoline_label f k)
-      ; A.Sd (Reg.T0, 0, Reg.A0)
-      ]
-    @ List.concat stores
-    @ [ A.Ld (Reg.A0, spill (depth + k), Reg.Sp) ]
-  | ClosRec (f, arity) ->
-    (* closure record whose single captured argument is itself *)
-    need_trampoline st f arity 1;
-    [ A.Li (Reg.A0, Callconv.closure_size 1)
-    ; A.Call "malloc"
-    ; A.La (Reg.T0, Callconv.trampoline_label f 1)
-    ; A.Sd (Reg.T0, 0, Reg.A0)
-    ; A.Sd (Reg.A0, 8, Reg.A0)
-    ]
+     | Direct f -> return (compiled @ loads @ [ A.Call f ])
+     | Value c ->
+       let n = depth + List.length args in
+       let* callee = compile_body frame ~path:(path ^ ".callee") ~depth:n lenv c in
+       return
+         (compiled
+          @ callee
+          @ [ A.Sd (Reg.A0, spill n, Reg.Sp) ]
+          @ loads
+          @ [ A.Ld (Reg.S0, spill n, Reg.Sp); A.Ld (Reg.T0, 0, Reg.S0); A.Jalr Reg.T0 ]))
   | PrintInt e ->
-    st.uses_print_int := true;
-    compile_body st ~depth lenv e @ [ A.Jal "print_int"; A.Li (Reg.A0, 0) ]
+    let* code = sub ".print" e in
+    return (code @ [ A.Call "print_int" ])
+
+and compile_arguments frame ~path ~depth lenv args =
+  let* parts =
+    M.map_list
+      (fun (i, arg) ->
+         let* code =
+           compile_body
+             frame
+             ~path:(path ^ ".arg" ^ string_of_int i)
+             ~depth:(depth + i)
+             lenv
+             arg
+         in
+         return
+           (code
+            @ [ A.Sd
+                  ( Reg.A0
+                  , Callconv.spill_offset ~nlocals:frame.nlocals (depth + i)
+                  , Reg.Sp )
+              ]))
+      (List.mapi (fun i arg -> i, arg) args)
+  in
+  return (List.concat parts)
 ;;
 
-(* Trampoline for [(f, arity, k)]: entered with the closure record in [s0]
-   and the remaining [arity - k] arguments in [a0]...; reloads the [k]
-   captured arguments from the record, shifts everything into [a0]... and
-   tail-jumps to [f]. *)
-let trampoline (f, arity, k) : A.instr list =
-  let m = arity - k in
-  let t i = List.nth [ Reg.T0; Reg.T1; Reg.T2; Reg.T3; Reg.T4; Reg.T5 ] i in
-  let a i = Callconv.arg_reg i in
-  [ A.Label (Callconv.trampoline_label f k) ]
-  @ List.init m (fun i -> A.Mov (t i, a i))
-  @ List.init k (fun j -> A.Ld (a j, 8 + (8 * j), Reg.S0))
-  @ List.init m (fun i -> A.Mov (a (k + i), t i))
-  @ [ A.J f ]
-;;
-
-(* [print_int] helper: formats [a0] as decimal (with a minus sign when
-   needed) into a buffer on its own stack frame and writes it to stdout via
-   the [write] syscall.  Frame layout: [0..23(sp)] digit buffer, [32(sp)]
-   saved [ra]. *)
 let print_int_helper : A.instr list =
-  let loop = ".Lprint_int_loop" in
+  (* Keep the working value nonpositive: this also handles INT64_MIN. *)
   [ A.Label "print_int"
-  ; A.Addi (Reg.Sp, Reg.Sp, -40)
-  ; A.Sd (Reg.Ra, 32, Reg.Sp)
+  ; A.Addi (Reg.Sp, Reg.Sp, -32)
   ; A.Mov (Reg.T0, Reg.A0)
-  ; A.Addi (Reg.T2, Reg.Sp, 24)
-    (* negative numbers: emit '-', work with the absolute value *)
-  ; A.Bge (Reg.T0, Reg.Zero, loop)
-  ; A.Li (Reg.T3, 45) (* '-' *)
-  ; A.Addi (Reg.T2, Reg.T2, -1)
-  ; A.Sb (Reg.T3, 0, Reg.T2)
+  ; A.Slt (Reg.T5, Reg.T0, Reg.Zero)
+  ; A.Addi (Reg.T2, Reg.Sp, 32)
+  ; A.Blt (Reg.T0, Reg.Zero, ".Lprint_digits")
   ; A.Neg (Reg.T0, Reg.T0)
-  ; A.Label loop
+  ; A.Label ".Lprint_digits"
   ; A.Li (Reg.T3, 10)
   ; A.Rem (Reg.T4, Reg.T0, Reg.T3)
   ; A.Div (Reg.T0, Reg.T0, Reg.T3)
+  ; A.Neg (Reg.T4, Reg.T4)
+  ; A.Addi (Reg.T4, Reg.T4, 48)
   ; A.Addi (Reg.T2, Reg.T2, -1)
-  ; A.Addi (Reg.T4, Reg.T4, 48) (* '0' *)
   ; A.Sb (Reg.T4, 0, Reg.T2)
-  ; A.Bne (Reg.T0, Reg.Zero, loop) (* write(1, buf, sp+24 - buf) *)
+  ; A.Bne (Reg.T0, Reg.Zero, ".Lprint_digits")
+  ; A.Beq (Reg.T5, Reg.Zero, ".Lprint_write")
+  ; A.Li (Reg.T4, 45)
+  ; A.Addi (Reg.T2, Reg.T2, -1)
+  ; A.Sb (Reg.T4, 0, Reg.T2)
+  ; A.Label ".Lprint_write"
   ; A.Li (Reg.A0, 1)
   ; A.Mov (Reg.A1, Reg.T2)
-  ; A.Addi (Reg.A2, Reg.Sp, 24)
+  ; A.Addi (Reg.A2, Reg.Sp, 32)
   ; A.Sub (Reg.A2, Reg.A2, Reg.T2)
-  ; A.Li (Reg.A7, 64) (* SYS_write *)
+  ; A.Li (Reg.A7, 64)
   ; A.Ecall
-  ; A.Ld (Reg.Ra, 32, Reg.Sp)
-  ; A.Addi (Reg.Sp, Reg.Sp, 40)
+  ; A.Li (Reg.A0, 0)
+  ; A.Addi (Reg.Sp, Reg.Sp, 32)
   ; A.Ret
   ]
 ;;
 
-let compile_function (st : cstate) (f : Program.function_) : A.instr list =
+let compile_function fnames (f : Program.function_) =
   if List.length f.params > Callconv.max_args
-  then
-    unsupported
-      "function '%s' has %d parameters, the backend supports at most %d"
-      f.name
-      (List.length f.params)
-      Callconv.max_args;
-  (* Frame layout must be known before emission (offsets are baked into
-     [ld]/[sd]), hence the analysis pass first.  The per-function counters
-     are reset in place: [tramps]/[static_clos]/[uses_print_int] must keep
-     accumulating across the whole program. *)
-  st.nspill <- 0;
-  st.label <- 0;
-  (* parameters occupy the first slots and are spilled in the prologue *)
-  st.next_slot <- List.length f.params;
-  st.nlocals <- List.length f.params;
-  analyze_body st ~depth:0 f.body;
-  let frame = Callconv.frame_size ~nlocals:st.nlocals ~max_spill:st.nspill in
-  let lenv = List.mapi (fun i p -> p, i) f.params in
-  let code = compile_body st ~depth:0 lenv f.body in
-  let prologue =
-    [ A.Label f.name
-    ; A.Addi (Reg.Sp, Reg.Sp, -frame)
-    ; A.Sd (Reg.Ra, 0, Reg.Sp)
-    ; A.Sd (Reg.S0, 8, Reg.Sp)
-    ]
-    @ List.mapi
-        (fun i _ -> A.Sd (Callconv.arg_reg i, Callconv.local_offset i, Reg.Sp))
-        f.params
-  in
-  let epilogue =
-    [ A.Ld (Reg.Ra, 0, Reg.Sp)
-    ; A.Ld (Reg.S0, 8, Reg.Sp)
-    ; A.Addi (Reg.Sp, Reg.Sp, frame)
-    ; A.Ret
-    ]
-  in
-  let body =
-    if f.name = "main"
-    then (
-      (* force exit code 0 unless the body already ends with exactly that *)
-      match List.rev code with
-      | A.Li (Reg.A0, 0) :: _ -> code
-      | _ -> code @ [ A.Li (Reg.A0, 0) ])
-    else code
-  in
-  prologue @ body @ epilogue
+  then unsupported "function '%s' has too many IL parameters" f.name
+  else (
+    let nlocals, nspill = frame_usage ~locals:(List.length f.params) ~depth:0 f.body in
+    let frame = { nlocals; fnames } in
+    let size = Callconv.frame_size ~nlocals ~max_spill:nspill in
+    let lenv = List.mapi (fun i p -> p, i) f.params in
+    let* code = compile_body frame ~path:(".Lbody" ^ f.name) ~depth:0 lenv f.body in
+    let* parameters =
+      M.map_list
+        (fun (i, _) ->
+           let* reg = M.of_result (Callconv.arg_reg i) in
+           return (A.Sd (reg, Callconv.local_offset i, Reg.Sp)))
+        (List.mapi (fun i p -> i, p) f.params)
+    in
+    return
+      ([ A.Label f.name
+       ; A.Addi (Reg.Sp, Reg.Sp, -size)
+       ; A.Sd (Reg.Ra, 0, Reg.Sp)
+       ; A.Sd (Reg.S0, 8, Reg.Sp)
+       ]
+       @ parameters
+       @ code
+       @ (if f.name = "main" then [ A.Li (Reg.A0, 0) ] else [])
+       @ [ A.Ld (Reg.Ra, 0, Reg.Sp)
+         ; A.Ld (Reg.S0, 8, Reg.Sp)
+         ; A.Addi (Reg.Sp, Reg.Sp, size)
+         ; A.Ret
+         ]))
 ;;
 
-let compile_program (prog : Program.program) : Asm.t =
+let compile_program (prog : Program.program) =
+  let referenced name =
+    List.exists
+      (fun f ->
+         exists_body
+           (function
+             | Program.Var v -> v = name
+             | _ -> false)
+           f.Program.body)
+      prog
+  in
+  let prog =
+    List.filter (fun f -> f.Program.name <> ".Lml_print" || referenced ".Lml_print") prog
+  in
   let fnames = List.map (fun f -> f.Program.name) prog in
-  let st = make_cstate fnames in
-  (* NB: the three parts are computed as separate bindings: the functions
-     must be compiled *before* the trampoline/helper lists are read, since
-     compiling them is what fills [st.tramps]/[st.uses_print_int]. *)
-  let part1 = List.concat_map (compile_function st) prog in
-  let part2 = List.concat_map trampoline (List.rev st.tramps) in
-  let part3 = if !(st.uses_print_int) then print_int_helper else [] in
-  let text = part1 @ part2 @ part3 in
-  let data = List.rev_map (fun f -> Callconv.static_closure_label f, f) st.static_clos in
-  { A.text; data }
+  let needs pred = List.exists (fun f -> exists_body pred f.Program.body) prog in
+  let computation =
+    let* parts = M.map_list (compile_function fnames) prog in
+    let functions = List.concat parts in
+    let printing =
+      if
+        needs (function
+          | Program.PrintInt _ -> true
+          | _ -> false)
+      then print_int_helper
+      else []
+    in
+    let errors =
+      if
+        needs (function
+          | Program.BinOp ((Div | Mod), _, _) -> true
+          | _ -> false)
+      then [ A.Label ".Lml_div_zero"; A.Li (Reg.A0, 2); A.Li (Reg.A7, 93); A.Ecall ]
+      else []
+    in
+    let data =
+      List.filter_map
+        (fun name ->
+           if referenced name
+           then Some (Callconv.static_closure_label name, name)
+           else None)
+        fnames
+    in
+    return { A.text = functions @ printing @ errors; data }
+  in
+  M.eval computation ()
 ;;

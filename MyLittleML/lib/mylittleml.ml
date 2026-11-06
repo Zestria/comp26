@@ -1,3 +1,13 @@
+[@@@ocaml.text "/*"]
+
+(** Copyright 2026, Dmitrii Kuznetsov and other contributors *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
+[@@@ocaml.text "/*"]
+
 module Frontend = Frontend
 module Middleend = Middleend
 module Ast = Ast
+module State = State
+module State_error = State_error

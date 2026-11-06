@@ -6,19 +6,19 @@
 
 [@@@ocaml.text "/*"]
 
-module StringSet = Set.Make(String)
+module StringSet = Set.Make (String)
 
-type t = {
-  taken : StringSet.t;
-  mutable next : int;
-}
+type t =
+  { taken : StringSet.t
+  ; next : int
+  }
 
-let make (taken : StringSet.t) : t = { taken; next = 0 }
+let make taken = { taken; next = 0 }
 
-let fresh (st : t) (prefix : string) : string =
-  let rec loop () =
-    let name = prefix ^ string_of_int st.next in
-    st.next <- st.next + 1;
-    if StringSet.mem name st.taken then loop () else name
-  in
-  loop ()
+let rec fresh prefix state =
+  let name = prefix ^ string_of_int state.next in
+  let next = { state with next = state.next + 1 } in
+  if StringSet.mem name state.taken
+  then fresh prefix next
+  else name, { next with taken = StringSet.add name next.taken }
+;;

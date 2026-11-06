@@ -24,7 +24,7 @@
 
     One exception: a [CFun] that is the right-hand side of a *nested*
     [ALet (Rec, …)] is left in place.  Hoisting it would detach the body
-    from the recursive cell the evaluator allocates for the binding; such
+    from the recursive address the evaluator allocates for the binding; such
     lambdas are already closed by construction, so keeping them nested is
     harmless and preserves the recursion.
 
@@ -37,7 +37,7 @@ open Anf
     [lifted] accumulates hoisted declarations in reverse order. *)
 type state =
   { names : Names.t
-  ; mutable lifted : item list
+  ; lifted : item list
   }
 
 let make_state (prog : aprogram) : state =
@@ -66,79 +66,77 @@ let make_state (prog : aprogram) : state =
   { names = Names.make taken; lifted = [] }
 ;;
 
-(** Generate a fresh [ll_f<i>] name for a hoisted lambda. *)
-let fresh_ll (st : state) : string = Names.fresh st.names "ll_f"
+open State
 
-(** Hoist one lambda: remember it as a top-level declaration, return the
-    atom that replaces the original occurrence. *)
-let hoist (st : state) (params : string list) (body : aexp) : atom =
-  let name = fresh_ll st in
-  st.lifted <- ADecl (Nonrec, name, ACexp (CFun (params, body))) :: st.lifted;
-  AVar name
+let hoist params body =
+  let* state = get in
+  let name, names = Names.fresh "ll_f" state.names in
+  let* () =
+    put
+      { names
+      ; lifted = ADecl (Nonrec, name, ACexp (CFun (params, body))) :: state.lifted
+      }
+  in
+  return (ACexp (CAtom (AVar name)))
 ;;
 
-let rec lift_aexp (st : state) : aexp -> aexp = function
+let rec lift_aexp = function
   | ACexp (CFun (params, body)) ->
-    let body' = lift_aexp st body in
-    ACexp (CAtom (hoist st params body'))
-  | ACexp c -> ACexp (lift_cexp st c)
-  | ALet (Rec, name, rhs, rest) ->
-    (* A nested recursive lambda keeps its place (see the module doc);
-       lambdas inside its right-hand side and the continuation still lift. *)
-    ALet (Rec, name, lift_rec_rhs st rhs, lift_aexp st rest)
-  | ALet (Nonrec, name, rhs, rest) ->
-    ALet (Nonrec, name, lift_aexp st rhs, lift_aexp st rest)
-
-and lift_rec_rhs (st : state) : aexp -> aexp = function
-  | ACexp (CFun (params, body)) -> ACexp (CFun (params, lift_aexp st body))
-  | ACexp c -> ACexp (lift_cexp st c)
+    let* body = lift_aexp body in
+    hoist params body
+  | ACexp (CIf (c, t, f)) ->
+    let* t = lift_aexp t in
+    let* f = lift_aexp f in
+    return (ACexp (CIf (c, t, f)))
+  | ACexp c -> return (ACexp c)
   | ALet (flag, name, rhs, rest) ->
-    ALet (flag, name, lift_rec_rhs st rhs, lift_aexp st rest)
-
-and lift_cexp (st : state) : cexp -> cexp = function
-  | CIf (c, t, f) -> CIf (c, lift_aexp st t, lift_aexp st f)
-  | (CAtom _ | CBinop _ | CNeg _ | CApp _) as c -> c
-  | CFun _ ->
-    (* Unreachable: both [lift_aexp] and the declaration handler intercept
-       every [CFun] in [ACexp] position, so only fun-free cexps flow
-       through here. *)
-    raise (Invalid_argument "Lambda_lift.lift_cexp: unreachable CFun")
-;;
-
-let lift_item (st : state) : item -> item list = function
-  | ADecl (flag, name, rhs) ->
-    (* A top-level lambda stays top-level under its own name; lambdas
-       nested in its body still lift.  Other declaration shapes only get
-       their nested lambdas hoisted. *)
-    let rhs' =
-      match rhs with
-      | ACexp (CFun (params, body)) -> ACexp (CFun (params, lift_aexp st body))
-      | _ -> lift_aexp st rhs
+    let* rhs =
+      match flag with
+      | Rec -> lift_rec_rhs rhs
+      | Nonrec -> lift_aexp rhs
     in
-    let hoisted = List.rev st.lifted in
-    st.lifted <- [];
-    hoisted @ [ ADecl (flag, name, rhs') ]
-  | AExp e ->
-    (* Hoisted declarations must land right before the expression item too,
-       otherwise lambdas lifted out of it vanish from the program. *)
-    let e' = lift_aexp st e in
-    let hoisted = List.rev st.lifted in
-    st.lifted <- [];
-    hoisted @ [ AExp e' ]
+    let* rest = lift_aexp rest in
+    return (ALet (flag, name, rhs, rest))
+
+and lift_rec_rhs = function
+  | ACexp (CFun (params, body)) ->
+    let* body = lift_aexp body in
+    return (ACexp (CFun (params, body)))
+  | ALet (flag, name, rhs, rest) ->
+    let* rhs = lift_rec_rhs rhs in
+    let* rest = lift_aexp rest in
+    return (ALet (flag, name, rhs, rest))
+  | e -> lift_aexp e
 ;;
 
-(** Lift a whole program.  Hoisted declarations are deterministic: fresh
-    names come from a single counter seeded by all program names.  Note the
-    declarations hoisted out of one item land right before it, so every use
-    stays after its definition. *)
-let lift_prog (prog : aprogram) : aprogram =
-  let st = make_state prog in
-  List.concat_map (lift_item st) prog
+let lift_item item =
+  let* item =
+    match item with
+    | ADecl (flag, name, rhs) ->
+      let* rhs =
+        match rhs with
+        | ACexp (CFun (params, body)) ->
+          let* body = lift_aexp body in
+          return (ACexp (CFun (params, body)))
+        | _ -> lift_aexp rhs
+      in
+      return (ADecl (flag, name, rhs))
+    | AExp e ->
+      let* e = lift_aexp e in
+      return (AExp e)
+  in
+  let* state = get in
+  let* () = put { state with lifted = [] } in
+  return (List.rev state.lifted @ [ item ])
+;;
+
+let lift_prog prog =
+  State.eval (State.map_list lift_item prog) (make_state prog) |> List.concat
 ;;
 
 (** After lambda lifting every [CFun] is either a top-level [ADecl]
     right-hand side, or the right-hand side of a nested [ALet (Rec, …)]
-    (kept in place to preserve the recursive cell).  [test_mid] uses this
+    (kept in place to preserve the recursive address).  [test_mid] uses this
     as the LL invariant. *)
 let is_lifted (prog : aprogram) : bool =
   let rec ok_aexp ~in_rec_rhs = function

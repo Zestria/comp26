@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-(** Middle-end tests for MyLittleML (Task 2).
+(** Middle-end tests for MyLittleML.
 
     CPS factorial and fibonacci (the same sources as [Test_qc]'s targeted
     assertions) are parsed with both parsers, run through every pipeline stage
@@ -45,7 +45,7 @@ let fib_prog10 = driver fib_src "fib" 10
 let parse_exn kind src =
   match Parse.parse kind { Parse.sticky = false } src with
   | Ok prog -> prog
-  | Error msg -> failwith ("parse error: " ^ msg)
+  | Error msg -> QCheck.Test.fail_report ("parse error: " ^ msg)
 ;;
 
 (** Run one program through all four stages, returning the ANF programs. *)
@@ -63,17 +63,19 @@ let check_invariants name (anf, cc, ll) =
       | Anf.AExp e -> Anf.is_cexp_rhs e)
   in
   if not (rhs_ok anf)
-  then failwith (name ^ ": ANF flatness invariant violated (is_cexp_rhs)");
+  then QCheck.Test.fail_report (name ^ ": ANF flatness invariant violated (is_cexp_rhs)");
   if not (Closure.is_closed cc)
-  then failwith (name ^ ": closure invariant violated (is_closed)");
+  then QCheck.Test.fail_report (name ^ ": closure invariant violated (is_closed)");
   if not (Lambda_lift.is_lifted ll)
-  then failwith (name ^ ": lifting invariant violated (is_lifted)")
+  then QCheck.Test.fail_report (name ^ ": lifting invariant violated (is_lifted)")
 ;;
 
 let as_int = function
-  | Eval.VInt n -> n
-  | Eval.VBool _ -> failwith "expected int, got bool"
-  | Eval.VClos _ -> failwith "expected int, got closure"
+  | Error message -> QCheck.Test.fail_report message
+  | Ok (Eval.VAddr _) -> QCheck.Test.fail_report "unresolved address"
+  | Ok (Eval.VInt n) -> n
+  | Ok (Eval.VBool _) -> QCheck.Test.fail_report "expected int, got bool"
+  | Ok (Eval.VClos _) -> QCheck.Test.fail_report "expected int, got closure"
 ;;
 
 let check_semantics name src expected =
@@ -97,7 +99,7 @@ let check_semantics name src expected =
          || got_cc <> expected
          || got_ll <> expected
        then
-         failwith
+         QCheck.Test.fail_report
            (Format.sprintf
               "%s (%s): expected %d, got src=%d anf=%d cc=%d ll=%d"
               name

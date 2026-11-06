@@ -11,7 +11,14 @@
 
 open Parser
 
-exception SyntaxError of string
+let error_message token =
+  if String.length token > 0 && String.for_all (function '0' .. '9' -> true | _ -> false) token
+     && Option.is_none (int_of_string_opt token)
+  then Some "integer literal is out of range"
+  else if String.length token = 1
+          && not (String.contains "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-*/=<>(); \t\r\n" token.[0])
+  then Some ("Unexpected character: " ^ token)
+  else None
 }
 
 let newline = '\r' | '\n' | "\r\n"
@@ -30,7 +37,7 @@ rule read = parse
   | newline      { Lexing.new_line lexbuf; read lexbuf }
   | comment      { read lexbuf }
   | ";;"         { SEMI }          (* top-level phrase separator *)
-  | int          { INT (int_of_string (Lexing.lexeme lexbuf)) }
+  | int          { match int_of_string_opt (Lexing.lexeme lexbuf) with Some n -> INT n | None -> INVALID }
   | "true"       { TRUE }
   | "false"      { FALSE }
   | "let"        { LET }
@@ -56,4 +63,4 @@ rule read = parse
   | ")"          { RPAREN }
   | id           { ID (Lexing.lexeme lexbuf) }
   | eof          { EOF }
-  | _            { raise (SyntaxError ("Unexpected character: " ^ Lexing.lexeme lexbuf)) }
+  | _            { INVALID }

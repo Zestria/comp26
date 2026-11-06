@@ -6,35 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-(** Reference evaluator for the MyLittleML middle-end (Task 2).
-
-    {!eval_mid} interprets {!Anf.aprogram} values at every middle-end stage.
-    After ANF, closure conversion and lambda lifting the program is still an
-    [aprogram]: closure conversion only widens [CFun] shapes and applies them
-    to their free variables via intermediate [ALet]s, and lambda lifting only
-    hoists closed lambdas.  So a single interpreter serves all three stages;
-    {!eval_anf}, {!eval_cc} and {!eval_ll} are thin aliases kept so call
-    sites read as the stage they are at.
-
-    {!eval_src} handles source {!Frontend.Ast} programs.
-
-    Semantics: call-by-value; applications are single-argument
-    ({!Frontend.Ast.App} is curried), multi-parameter functions build
-    partial-application closures.  Top-level phrases thread one environment:
-    declaration phrases extend it, expression phrases only read it.
-
-    Recursion ties the knot through a mutable cell: a recursive binding is
-    allocated first as a "seed" closure carrying [self_name]/[self_cell],
-    its right-hand side is evaluated with the seed already in scope, and the
-    resulting value is backpatched into the cell afterwards.  {!lookup}
-    resolves seeds through the cell, so every use — including the wrapper
-    closures closure conversion creates in the scope of the cell — sees the
-    final value. *)
-module A = Frontend.Ast
-
+module A = Ast
 open Anf
-
-exception Eval_error of string
 
 type body =
   | Src of A.expr
@@ -47,285 +20,243 @@ type value =
       { params : string list
       ; body : body
       ; env : env
-      ; self_name : string option
-      ; self_cell : value option ref
       }
+  | VAddr of int
 
 and env = (string * value) list
 
-(** Follow a seed's cell to the backpatched value; plain values pass
-    through.  Only seeds ever have a filled cell. *)
-let resolve (v : value) : value =
-  match v with
-  | VClos { self_cell; _ } ->
-    (match !self_cell with
-     | Some w -> w
-     | None -> v)
-  | VInt _ | VBool _ -> v
+(** Recursive bindings are addresses in a persistent map. Updating a binding
+    produces a new store passed by State_error, never a shared heap cell.
+    Closures capture addresses, so recursive and lifted forward references
+    observe definitions in the current store while retaining lexical scope. *)
+module Store = Map.Make (Int)
+
+module Addresses = Set.Make (Int)
+
+type state =
+  { next : int
+  ; store : value Store.t
+  }
+
+open State_error
+
+let initial = { next = 0; store = Store.empty }
+
+let allocate =
+  let* state = get in
+  let* () = put { state with next = state.next + 1 } in
+  return (VAddr state.next)
 ;;
 
-let lookup (env : env) (v : string) : value =
-  match List.assoc_opt v env with
-  | Some value -> resolve value
-  | None -> raise (Eval_error ("unbound variable: " ^ v))
+let define address value =
+  match address with
+  | VAddr id ->
+    modify (fun state -> { state with store = Store.add id value state.store })
+  | _ -> fail "internal error: binding without an address"
 ;;
 
-let string_of_value = function
-  | VInt n -> string_of_int n
-  | VBool b -> string_of_bool b
-  | VClos _ -> "<fun>"
-;;
-
-(** Structural equality on base values; closures are opaque and compare
-    equal (stage results of [test_mid] are integers). *)
-let equal (a : value) (b : value) : bool =
-  match a, b with
-  | VInt m, VInt n -> m = n
-  | VBool x, VBool y -> x = y
-  | VClos _, VClos _ -> true
-  | _ -> false
-;;
-
-let make_clos (params : string list) (body : body) (env : env) : value =
-  VClos { params; body; env; self_name = None; self_cell = ref None }
-;;
-
-(** Seed for a [let rec]: [params = []] so an application before
-    backpatching fails loudly instead of running the dummy body. *)
-let make_seed (name : string) (cell : value option ref) (env : env) : value =
-  VClos
-    { params = []
-    ; body = Anf (ACexp (CAtom (AInt 0)))
-    ; env
-    ; self_name = Some name
-    ; self_cell = cell
-    }
-;;
-
-(* Primitive operations -------------------------------------------------- *)
-
-let eval_bop (op : A.bop) (l : value) (r : value) : value =
-  let ints = function
-    | VInt m, VInt n -> m, n
-    | _ -> raise (Eval_error "arithmetic on non-integers")
+let resolve value =
+  let* state = get in
+  let rec follow visited = function
+    | VAddr id when Addresses.mem id visited -> fail "cyclic non-function value"
+    | VAddr id ->
+      (match Store.find_opt id state.store with
+       | None -> fail "recursive value used before definition"
+       | Some value -> follow (Addresses.add id visited) value)
+    | value -> return value
   in
-  match op with
-  | A.Add ->
-    let m, n = ints (l, r) in
-    VInt (m + n)
-  | A.Sub ->
-    let m, n = ints (l, r) in
-    VInt (m - n)
-  | A.Mul ->
-    let m, n = ints (l, r) in
-    VInt (m * n)
-  | A.Div ->
-    let m, n = ints (l, r) in
-    if n = 0 then raise (Eval_error "division by zero") else VInt (m / n)
-  | A.Mod ->
-    let m, n = ints (l, r) in
-    if n = 0 then raise (Eval_error "division by zero") else VInt (m mod n)
-  | A.Lt ->
-    let m, n = ints (l, r) in
-    VBool (m < n)
-  | A.Le ->
-    let m, n = ints (l, r) in
-    VBool (m <= n)
-  | A.Gt ->
-    let m, n = ints (l, r) in
-    VBool (m > n)
-  | A.Ge ->
-    let m, n = ints (l, r) in
-    VBool (m >= n)
-  | A.Eq ->
-    (match l, r with
-     | VInt m, VInt n -> VBool (m = n)
-     | VBool a, VBool b -> VBool (a = b)
-     | _ -> raise (Eval_error "equality on non-integers"))
-  | A.Neq ->
-    (match l, r with
-     | VInt m, VInt n -> VBool (m <> n)
-     | VBool a, VBool b -> VBool (a <> b)
-     | _ -> raise (Eval_error "equality on non-integers"))
+  follow Addresses.empty value
 ;;
 
-(* Mutual recursion: application runs bodies, bodies evaluate expressions,
-   source expressions build closures. *)
+let lookup env name =
+  match List.assoc_opt name env with
+  | None -> fail ("unbound variable: " ^ name)
+  | Some value -> return value
+;;
 
-(** Apply a closure to one argument.  A multi-parameter function applied to
-    fewer arguments yields a partial-application closure carrying fresh
-    (empty) self fields — deliberately not the seed's cell, so resolving
-    does not loop back to the full closure. *)
-let rec apply (fn : value) (arg : value) : value =
-  match resolve fn with
-  | VClos { params = p :: ps; body; env; _ } ->
+let closure params body env = VClos { params; body; env }
+
+let eval_bop op left right =
+  let* left = resolve left in
+  let* right = resolve right in
+  match op, left, right with
+  | (A.Eq | A.Neq), VBool a, VBool b ->
+    return (VBool (if op = A.Eq then a = b else a <> b))
+  | _, VInt a, VInt b ->
+    (match op with
+     | A.Add -> return (VInt (a + b))
+     | A.Sub -> return (VInt (a - b))
+     | A.Mul -> return (VInt (a * b))
+     | (A.Div | A.Mod) when b = 0 -> fail "division by zero"
+     | A.Div -> return (VInt (a / b))
+     | A.Mod -> return (VInt (a mod b))
+     | A.Lt -> return (VBool (a < b))
+     | A.Le -> return (VBool (a <= b))
+     | A.Gt -> return (VBool (a > b))
+     | A.Ge -> return (VBool (a >= b))
+     | A.Eq -> return (VBool (a = b))
+     | A.Neq -> return (VBool (a <> b)))
+  | _ -> fail "operator applied to incompatible values"
+;;
+
+let negate value =
+  let* value = resolve value in
+  match value with
+  | VInt n -> return (VInt (-n))
+  | _ -> fail "negation of a non-integer"
+;;
+
+let branch value yes no =
+  let* value = resolve value in
+  match value with
+  | VBool true -> yes
+  | VBool false -> no
+  | _ -> fail "condition is not a boolean"
+;;
+
+let rec apply fn arg =
+  let* fn = resolve fn in
+  match fn with
+  | VClos { params = p :: ps; body; env } ->
     let env = (p, arg) :: env in
     (match ps with
-     | [] -> eval_body body env
-     | _ :: _ -> make_clos ps body env)
-  | VClos { params = []; self_name; self_cell; _ } ->
-    (match self_name, !self_cell with
-     | Some name, None ->
-       raise (Eval_error ("recursive value used before definition: " ^ name))
-     | _ -> raise (Eval_error "too many arguments"))
-  | VInt _ | VBool _ -> raise (Eval_error "application of a non-function")
+     | [] -> eval_body env body
+     | _ -> return (closure ps body env))
+  | VClos { params = []; _ } -> fail "function without parameters"
+  | _ -> fail "application of a non-function"
 
-and eval_body (b : body) (env : env) : value =
-  match b with
+and eval_body env = function
   | Src e -> eval_src_expr env e
   | Anf e -> eval_aexp env e
 
-(* Source AST ------------------------------------------------------------- *)
-
-and eval_src_expr (env : env) (e : A.expr) : value =
-  match e with
-  | A.Int n -> VInt n
-  | A.Bool b -> VBool b
-  | A.Var v -> lookup env v
-  | A.App (f, x) -> apply (eval_src_expr env f) (eval_src_expr env x)
+and eval_src_expr env = function
+  | A.Int n -> return (VInt n)
+  | A.Bool b -> return (VBool b)
+  | A.Var name -> lookup env name
+  | A.App (f, x) ->
+    let* f = eval_src_expr env f in
+    let* x = eval_src_expr env x in
+    apply f x
   | A.Fun ([], body) -> eval_src_expr env body
-  | A.Fun (params, body) -> make_clos params (Src body) env
+  | A.Fun (params, body) -> return (closure params (Src body) env)
   | A.Neg e ->
-    (match eval_src_expr env e with
-     | VInt n -> VInt (-n)
-     | _ -> raise (Eval_error "negation of a non-integer"))
-  | A.Binop (op, l, r) -> eval_bop op (eval_src_expr env l) (eval_src_expr env r)
+    let* value = eval_src_expr env e in
+    negate value
+  | A.Binop (op, l, r) ->
+    let* l = eval_src_expr env l in
+    let* r = eval_src_expr env r in
+    eval_bop op l r
   | A.If (c, t, f) ->
-    (match eval_src_expr env c with
-     | VBool true -> eval_src_expr env t
-     | VBool false -> eval_src_expr env f
-     | _ -> raise (Eval_error "condition is not a boolean"))
+    let* c = eval_src_expr env c in
+    branch c (eval_src_expr env t) (eval_src_expr env f)
   | A.Let (b, cont) ->
-    let env = bind_src env b in
+    let* env = bind_src env b in
     (match cont with
-     | Some e -> eval_src_expr env e
-     | None -> lookup env b.A.name)
+     | None -> lookup env b.A.name
+     | Some e -> eval_src_expr env e)
 
-(** Bind one source [let]; returns the extended environment.  A recursive
-    binding goes through the seed/backpatch dance (see the module doc). *)
-and bind_src (env : env) (b : A.bind) : env =
-  let name = b.A.name in
-  if not b.A.rec_
-  then (
-    let v =
-      match b.A.params with
-      | [] -> eval_src_expr env b.A.body
-      | params -> make_clos params (Src b.A.body) env
-    in
-    (name, v) :: env)
-  else (
-    let cell = ref None in
-    let seed = make_seed name cell env in
-    let env = (name, seed) :: env in
-    let v =
-      match b.A.params with
-      | [] -> eval_src_expr env b.A.body
-      | params -> make_clos params (Src b.A.body) env
-    in
-    cell := Some v;
-    env)
+and bind_src env b =
+  let eval env =
+    match b.A.params with
+    | [] -> eval_src_expr env b.A.body
+    | params -> return (closure params (Src b.A.body) env)
+  in
+  if b.A.rec_
+  then
+    let* address = allocate in
+    let env = (b.A.name, address) :: env in
+    let* value = eval env in
+    let* () = define address value in
+    return env
+  else
+    let* value = eval env in
+    return ((b.A.name, value) :: env)
 
-(* ANF ------------------------------------------------------------------- *)
+and eval_atom env = function
+  | AInt n -> return (VInt n)
+  | ABool b -> return (VBool b)
+  | AVar name -> lookup env name
 
-and eval_atom (env : env) (a : atom) : value =
-  match a with
-  | AInt n -> VInt n
-  | ABool b -> VBool b
-  | AVar v -> lookup env v
-
-and eval_aexp (env : env) (e : aexp) : value =
-  match e with
+and eval_aexp env = function
   | ACexp c -> eval_cexp env c
   | ALet (Nonrec, name, rhs, rest) ->
-    let v = eval_aexp env rhs in
-    eval_aexp ((name, v) :: env) rest
+    let* value = eval_aexp env rhs in
+    eval_aexp ((name, value) :: env) rest
   | ALet (Rec, name, rhs, rest) ->
-    let cell = ref None in
-    let seed = make_seed name cell env in
-    let env = (name, seed) :: env in
-    let v = eval_aexp env rhs in
-    cell := Some v;
+    let* address = allocate in
+    let env = (name, address) :: env in
+    let* value = eval_aexp env rhs in
+    let* () = define address value in
     eval_aexp env rest
 
-and eval_cexp (env : env) (c : cexp) : value =
-  match c with
+and eval_cexp env = function
   | CAtom a -> eval_atom env a
-  | CBinop (op, l, r) -> eval_bop op (eval_atom env l) (eval_atom env r)
   | CNeg a ->
-    (match eval_atom env a with
-     | VInt n -> VInt (-n)
-     | _ -> raise (Eval_error "negation of a non-integer"))
-  | CApp (f, x) -> apply (eval_atom env f) (eval_atom env x)
-  | CIf (cond, t, f) ->
-    (match eval_atom env cond with
-     | VBool true -> eval_aexp env t
-     | VBool false -> eval_aexp env f
-     | _ -> raise (Eval_error "condition is not a boolean"))
-  | CFun (params, body) -> make_clos params (Anf body) env
+    let* value = eval_atom env a in
+    negate value
+  | CBinop (op, l, r) ->
+    let* l = eval_atom env l in
+    let* r = eval_atom env r in
+    eval_bop op l r
+  | CApp (f, x) ->
+    let* f = eval_atom env f in
+    let* x = eval_atom env x in
+    apply f x
+  | CIf (c, t, f) ->
+    let* c = eval_atom env c in
+    branch c (eval_aexp env t) (eval_aexp env f)
+  | CFun (params, body) -> return (closure params (Anf body) env)
 ;;
 
-(* Whole programs --------------------------------------------------------- *)
-
-let eval_src (prog : A.prog) : value =
-  let eval_phrase (env, _) (phrase : A.expr) : env * value =
-    match phrase with
-    | A.Let (b, None) ->
-      (* Declaration phrase: extend the environment, result is the bound value. *)
-      let env = bind_src env b in
-      env, lookup env b.A.name
-    | e -> env, eval_src_expr env e
+let eval_src prog =
+  let rec loop env last = function
+    | [] -> resolve last
+    | A.Let (b, None) :: rest ->
+      let* env = bind_src env b in
+      let* value = lookup env b.A.name in
+      loop env value rest
+    | e :: rest ->
+      let* value = eval_src_expr env e in
+      loop env value rest
   in
   match prog with
-  | [] -> raise (Eval_error "empty program")
-  | first :: rest -> snd (List.fold_left eval_phrase ([], VInt 0) (first :: rest))
+  | [] -> Error "empty program"
+  | _ -> eval (loop [] (VInt 0) prog) initial
 ;;
 
-(** [eval_mid] evaluates a middle-end [aprogram].  Top-level names behave as
-    globals: closure conversion treats them as free-of-capture
-    ([Closure.make_state] [top]) and lambda lifting may hoist a lambda
-    before the declaration it mentions.  So every [ADecl] name gets its seed
-    cell up front, and the declaration backpatches it.
-
-    Assumption: top-level names are unique (declaration shadowing would make
-    the earlier value unreachable from closures; source programs of
-    [test_mid] declare each name once). *)
-let eval_mid (prog : aprogram) : value =
-  let top_seeds =
-    List.filter_map
-      (function
-        | ADecl (_, name, _) -> Some (name, ref None)
-        | AExp _ -> None)
-      prog
+let eval_mid prog =
+  let reserve = function
+    | ADecl (_, name, _) as item ->
+      let* address = allocate in
+      return (item, Some (name, address))
+    | item -> return (item, None)
   in
-  let env0 : env =
-    List.map (fun (name, cell) -> name, make_seed name cell []) top_seeds
-  in
-  let backpatch (name : string) (v : value) : unit =
-    match List.assoc_opt name top_seeds with
-    | Some cell -> cell := Some v
-    | None -> ()
-  in
-  let eval_item (env, _) (item : item) : env * value =
-    match item with
-    | ADecl (flag, name, rhs) ->
-      (* A declaration is a [let] whose continuation is just [name]. *)
-      let v = eval_aexp env (ALet (flag, name, rhs, ACexp (CAtom (AVar name)))) in
-      backpatch name v;
-      env, v
-    | AExp e -> env, eval_aexp env e
+  let computation =
+    let* items = map_list reserve prog in
+    let env = List.filter_map snd items in
+    let rec loop env last = function
+      | [] -> resolve last
+      | (ADecl (flag, name, rhs), Some (_, address)) :: rest ->
+        let rhs_env =
+          match flag with
+          | Rec -> (name, address) :: env
+          | Nonrec -> env
+        in
+        let* value = eval_aexp rhs_env rhs in
+        let* () = define address value in
+        loop ((name, address) :: env) value rest
+      | (AExp e, _) :: rest ->
+        let* value = eval_aexp env e in
+        loop env value rest
+      | _ -> fail "internal error: unreserved top-level binding"
+    in
+    loop env (VInt 0) items
   in
   match prog with
-  | [] -> raise (Eval_error "empty program")
-  | first :: rest -> snd (List.fold_left eval_item (env0, VInt 0) (first :: rest))
+  | [] -> Error "empty program"
+  | _ -> eval computation initial
 ;;
 
-(** Stage aliases: all three middle-end passes preserve the
-    {!Anf.aprogram} representation, so the same interpreter serves every
-    stage.  The names document which stage the caller is at; if a pass ever
-    changes the representation (e.g. explicit closure environments), only
-    the corresponding alias needs to be replaced with a dedicated
-    evaluator. *)
 let eval_anf = eval_mid
-
 let eval_cc = eval_mid
 let eval_ll = eval_mid

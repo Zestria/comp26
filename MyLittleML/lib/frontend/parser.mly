@@ -51,9 +51,9 @@
 
 [@@@ocaml.text "/*"]
 
-open Ast
 %}
 
+%token INVALID
 %token <int> INT
 %token TRUE FALSE
 %token <string> ID

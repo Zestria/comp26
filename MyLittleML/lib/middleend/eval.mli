@@ -9,8 +9,6 @@
 module A = Ast
 open Anf
 
-exception Eval_error of string
-
 type body =
   | Src of A.expr
   | Anf of aexp
@@ -22,13 +20,12 @@ type value =
       { params : string list
       ; body : body
       ; env : env
-      ; self_name : string option
-      ; self_cell : value option ref
       }
+  | VAddr of int
 
 and env = (string * value) list
 
-val eval_src : Frontend.Ast.prog -> value
-val eval_anf : aprogram -> value
-val eval_cc : aprogram -> value
-val eval_ll : aprogram -> value
+val eval_src : A.prog -> (value, string) result
+val eval_anf : aprogram -> (value, string) result
+val eval_cc : aprogram -> (value, string) result
+val eval_ll : aprogram -> (value, string) result

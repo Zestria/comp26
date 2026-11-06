@@ -3,9 +3,8 @@
 (library
  (name mylittleml)
  (public_name MyLittleML)
- (modules mylittleml frontend middleend ast pp parser lexer parser_topdown parse anf names closure lambda_lift eval)
- (libraries angstrom)
+ (modules state state_error parser_state mylittleml frontend middleend ast pp parser lexer parser_topdown parse anf names closure lambda_lift eval)
  (preprocess
-  (pps ppx_deriving.show))
- (instrumentation
-  (backend bisect_ppx_ng)))
+  (per_module
+   ((pps ppx_deriving.show) Ast Anf)))
+)

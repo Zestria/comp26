@@ -14,17 +14,17 @@
     {!Fun} nodes is deliberately left to later passes (Task 2, ANF). *)
 
 type bop =
-  | Add  (** [a + b] *)
-  | Sub  (** [a - b] *)
-  | Mul  (** [a * b] *)
-  | Div  (** [a / b] *)
-  | Mod  (** [a mod b] *)
-  | Lt   (** [a < b] *)
-  | Le   (** [a <= b] *)
-  | Gt   (** [a > b] *)
-  | Ge   (** [a >= b] *)
-  | Eq   (** [a = b] *)
-  | Neq  (** [a <> b] *)
+  | Add (** [a + b] *)
+  | Sub (** [a - b] *)
+  | Mul (** [a * b] *)
+  | Div (** [a / b] *)
+  | Mod (** [a mod b] *)
+  | Lt (** [a < b] *)
+  | Le (** [a <= b] *)
+  | Gt (** [a > b] *)
+  | Ge (** [a >= b] *)
+  | Eq (** [a = b] *)
+  | Neq (** [a <> b] *)
 [@@deriving show]
 
 type expr =
@@ -39,7 +39,12 @@ type expr =
   | Neg of expr
 [@@deriving show]
 
-and bind = { rec_ : bool; name : string; params : string list; body : expr }
+and bind =
+  { rec_ : bool
+  ; name : string
+  ; params : string list
+  ; body : expr
+  }
 [@@deriving show]
 
 type prog = expr list [@@deriving show]

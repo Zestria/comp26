@@ -42,24 +42,22 @@ and pp_expr ppf = function
   | Ast.Fun (params, body) ->
     Format.fprintf ppf "fun %s -> %a" (String.concat " " params) pp_atom body
   | Ast.Let (bind, None) -> Format.fprintf ppf "(%a)" pp_bind bind
-  | Ast.Let (bind, Some body) ->
-    Format.fprintf ppf "(%a in %a)" pp_bind bind pp_atom body
+  | Ast.Let (bind, Some body) -> Format.fprintf ppf "(%a in %a)" pp_bind bind pp_atom body
   | Ast.If (cond, thn, els) ->
-    Format.fprintf ppf
-      "if %a then %a else %a"
-      pp_atom cond
-      pp_atom thn
-      pp_atom els
+    Format.fprintf ppf "if %a then %a else %a" pp_atom cond pp_atom thn pp_atom els
   | Ast.Binop (op, l, r) ->
     Format.fprintf ppf "(%a %s %a)" pp_atom l (bop_to_string op) pp_atom r
   | Ast.Neg e -> Format.fprintf ppf "(-%a)" pp_atom e
 
 and pp_bind ppf { Ast.rec_; name; params; body } =
-  Format.fprintf ppf "let %s%s %s = %a"
+  Format.fprintf
+    ppf
+    "let %s%s %s = %a"
     (if rec_ then "rec " else "")
     name
     (String.concat " " params)
-    pp_atom body
+    pp_atom
+    body
 ;;
 
 let pp_prog ppf prog =

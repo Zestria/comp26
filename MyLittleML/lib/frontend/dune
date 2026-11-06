@@ -1,2 +1,6 @@
 (ocamllex lexer)
-(menhir(modules parser))
+
+; INVALID represents a lexical failure and must never be accepted by the grammar.
+(menhir
+ (modules parser)
+ (flags --unused-token INVALID))

@@ -6,39 +6,23 @@
 
 [@@@ocaml.text "/*"]
 
-(** Calling convention of the MyLittleML RISC-V backend (Task 3).
-
-    A deliberately minimal, self-contained ABI:
-
-    - arguments 1..{!max_args} travel in [a0]..[a5]; the return value is
-      in [a0];
-    - calls are [jal label] / [jalr]; [ra] and [s0] are saved by the callee
-      in its own frame;
-    - every function opens a frame with one [addi sp, sp, -frame]: [ra]
-      lives at [0(sp)], [s0] at [8(sp)], [let]-bound locals start at
-      [16(sp)] and expression spill slots live above them;
-    - first-class function values are closure records [code; v1 … vk]; an
-      indirect call puts the record pointer in [s0], the remaining
-      arguments in [a0]... and jumps through [t0] (see {!Codegen});
-    - [print_int] is not a C function: the backend emits a small assembly
-      helper that formats the number on the stack and issues the [write]
-      syscall directly, so linking needs no extra runtime object. *)
+(** Native closure ABI: one argument in a0, result in a0, environment
+    pointer in s0. A function saves ra and the entry s0 in a 16-byte-aligned
+    stack frame. The saved pointer is stable across nested indirect calls.
+    The lower-level IL also supports direct calls with up to six registers.
+    See README-riscv.md for the full contract. *)
 
 let max_args = 6
 
-(** Register holding argument [i] (0-based).  @raise Invalid_arg beyond
-    {!max_args}. *)
-let arg_reg i =
-  if i < 0 || i >= max_args
-  then invalid_arg (Format.sprintf "Callconv.arg_reg: %d beyond max_args %d" i max_args);
-  match i with
-  | 0 -> Program.Reg.A0
-  | 1 -> Program.Reg.A1
-  | 2 -> Program.Reg.A2
-  | 3 -> Program.Reg.A3
-  | 4 -> Program.Reg.A4
-  | 5 -> Program.Reg.A5
-  | _ -> assert false
+(** Register holding argument [i] (0-based), or a descriptive error. *)
+let arg_reg = function
+  | 0 -> Ok Program.Reg.A0
+  | 1 -> Ok Program.Reg.A1
+  | 2 -> Ok Program.Reg.A2
+  | 3 -> Ok Program.Reg.A3
+  | 4 -> Ok Program.Reg.A4
+  | 5 -> Ok Program.Reg.A5
+  | i -> Error (Printf.sprintf "argument register index %d is out of range" i)
 ;;
 
 let return_reg () = Program.Reg.A0
@@ -57,9 +41,6 @@ let frame_size ~nlocals ~max_spill =
   let raw = 16 + (8 * (nlocals + max_spill)) in
   (raw + 15) / 16 * 16
 ;;
-
-(** Label of the [k]-capture trampoline for the static function [f]. *)
-let trampoline_label f k = f ^ "_clo" ^ string_of_int k
 
 (** Label of the static (zero-capture) closure record for [f]. *)
 let static_closure_label f = f ^ "_clo0"

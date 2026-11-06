@@ -6,37 +6,10 @@
 
 [@@@ocaml.text "/*"]
 
-(** Top-down parser for the MyLittleML OCaml subset, built with Angstrom.
-
-    Produces the same {!Ast.prog} as the menhir-based bottom-up parser
-    ([parser.mly]): integers, booleans, variables, application, anonymous
-    functions, [let] bindings with an optional [in] continuation,
-    [if-then-else], a precedence ladder of binary operators and unary
-    minus, parentheses and comments.  Whitespace handling (including
-    comments) is done here with Angstrom combinators and shares no code
-    with [lexer.mll].
-
-    Angstrom backtracking is the default: a failed alternative rewinds the
-    input, which lets the keyword parsers below require a word boundary
-    ([letx] is an identifier, not [let] followed by [x]) while still
-    falling back to the identifier rule.
-
-    Sticky mode ([\~sticky:true], enabled by the CLI flag [--sticky])
-    makes keywords win at the character level: the word-boundary check in
-    {!kw} is dropped, so [letx = 1] parses as [let x = 1], [letrec f n = e]
-    as [let rec f n = e] and [funx->x+1] as [fun x -> x + 1].  Known,
-    documented limitation: a bare identifier that happens to start with a
-    keyword is misread, e.g. [letter = 1] becomes [let ter = 1].
-
-    Precedence (low -> high): comparisons -> [+ -] -> [* / mod] ->
-    unary minus -> application.
-
-    Errors are reported as ["line:col: message"].  Angstrom errors carry
-    no source position, so the parser tracks the furthest offset it ever
-    consumes and the most recent explicit failure (see the position
-    tracking helpers below) and formats them against the source string. *)
-
-open Angstrom
+(** Recursive-descent grammar over pure State_error parser combinators.
+    Sticky keyword mode and the precedence ladder are unchanged. Each parse
+    has its own cursor and diagnostics; no global error accumulator exists. *)
+open Parser_state
 
 (* Character classes -------------------------------------------------- *)
 
@@ -53,59 +26,6 @@ let is_id_char = function
 let is_digit = function
   | '0' .. '9' -> true
   | _ -> false
-;;
-
-(* Error positions ---------------------------------------------------- *)
-
-(** Angstrom errors are plain strings with no source position attached, so
-    the parser tracks the furthest byte offset it ever consumes ([tracked])
-    and, for explicit failures, the failure message together with the
-    offset at which it was raised ([fail_at], keeping the furthest one).
-    When the whole parse fails, the recorded explicit failure is reported
-    if it happened at the furthest offset reached; otherwise a generic
-    "syntax error" is reported at that offset.  Offsets are converted to
-    [line:col] against the source string in {!parse_prog}. *)
-
-let max_pos = ref 0
-let best_fail = ref None
-
-let tracked p =
-  p
-  >>= fun x ->
-  pos
-  >>= fun n ->
-  max_pos := max !max_pos n;
-  return x
-;;
-
-let fail_at msg =
-  pos
-  >>= fun n ->
-  let () =
-    match !best_fail with
-    | Some (m, _) when m > n -> ()
-    | _ -> best_fail := Some (n, msg)
-  in
-  fail msg
-;;
-
-let line_col_of_offset source off =
-  let line = ref 1
-  and col = ref 0 in
-  (try
-     String.iteri
-       (fun i c ->
-          if i >= off
-          then raise Exit
-          else if c = '\n'
-          then (
-            incr line;
-            col := 0)
-          else incr col)
-       source
-   with
-   | Exit -> ());
-  !line, !col + 1
 ;;
 
 (* Whitespace and comments -------------------------------------------- *)
@@ -129,7 +49,7 @@ let comment =
       peek_char
       >>= (function
        | Some ')' -> tracked (advance 1) *> return ()
-       | _ -> tracked (advance 1) *> loop)
+       | _ -> loop)
     | Some _ -> tracked (advance 1) *> loop)
 ;;
 
@@ -208,21 +128,20 @@ let ge_op = sym ">="
 (** Left-associative chain over a table of operator levels; the first
     level has the lowest precedence. *)
 let prio base table =
-  let len = Array.length table in
-  let rec helper level =
-    if level >= len
-    then base
-    else (
-      let xs = table.(level) in
-      return (List.fold_left (fun acc (op, r) -> op acc r))
-      <*> helper (level + 1)
+  let rec level = function
+    | [] -> base
+    | operators :: rest ->
+      let operand = level rest in
+      return (List.fold_left (fun acc (op, right) -> op acc right))
+      <*> operand
       <*> many
             (choice
                (List.map
-                  (fun (op, f) -> op *> helper (level + 1) >>= fun r -> return (f, r))
-                  xs)))
+                  (fun (op, combine) ->
+                     op *> operand >>= fun right -> return (combine, right))
+                  operators))
   in
-  helper 0
+  level table
 ;;
 
 (* Program ------------------------------------------------------------- *)
@@ -255,21 +174,21 @@ let program ~sticky =
           let binop =
             prio
               unary
-              [| [ (eq_op, fun l r -> Ast.Binop (Ast.Eq, l, r))
-                 ; (neq_op, fun l r -> Ast.Binop (Ast.Neq, l, r))
-                 ; (lt_op, fun l r -> Ast.Binop (Ast.Lt, l, r))
-                 ; (le_op, fun l r -> Ast.Binop (Ast.Le, l, r))
-                 ; (gt_op, fun l r -> Ast.Binop (Ast.Gt, l, r))
-                 ; (ge_op, fun l r -> Ast.Binop (Ast.Ge, l, r))
-                 ]
-               ; [ (plus_op, fun l r -> Ast.Binop (Ast.Add, l, r))
-                 ; (minus_op, fun l r -> Ast.Binop (Ast.Sub, l, r))
-                 ]
-               ; [ (star_op, fun l r -> Ast.Binop (Ast.Mul, l, r))
-                 ; (slash_op, fun l r -> Ast.Binop (Ast.Div, l, r))
-                 ; (mod_op ~sticky, fun l r -> Ast.Binop (Ast.Mod, l, r))
-                 ]
-              |]
+              [ [ (eq_op, fun l r -> Ast.Binop (Ast.Eq, l, r))
+                ; (neq_op, fun l r -> Ast.Binop (Ast.Neq, l, r))
+                ; (lt_op, fun l r -> Ast.Binop (Ast.Lt, l, r))
+                ; (le_op, fun l r -> Ast.Binop (Ast.Le, l, r))
+                ; (gt_op, fun l r -> Ast.Binop (Ast.Gt, l, r))
+                ; (ge_op, fun l r -> Ast.Binop (Ast.Ge, l, r))
+                ]
+              ; [ (plus_op, fun l r -> Ast.Binop (Ast.Add, l, r))
+                ; (minus_op, fun l r -> Ast.Binop (Ast.Sub, l, r))
+                ]
+              ; [ (star_op, fun l r -> Ast.Binop (Ast.Mul, l, r))
+                ; (slash_op, fun l r -> Ast.Binop (Ast.Div, l, r))
+                ; (mod_op ~sticky, fun l r -> Ast.Binop (Ast.Mod, l, r))
+                ]
+              ]
           in
           let let_parser =
             keyword ~sticky "let" *> option false (keyword ~sticky "rec" *> return true)
@@ -299,17 +218,4 @@ let program ~sticky =
   <* skip_ws
 ;;
 
-let parse_prog ~sticky source =
-  max_pos := 0;
-  best_fail := None;
-  match parse_string ~consume:Consume.All (program ~sticky) source with
-  | Ok prog -> Ok prog
-  | Error _ ->
-    let off, msg =
-      match !best_fail with
-      | Some (n, m) when n >= !max_pos -> n, m
-      | _ -> !max_pos, "syntax error"
-    in
-    let line, col = line_col_of_offset source off in
-    Error (Format.sprintf "%d:%d: %s" line col msg)
-;;
+let parse_prog ~sticky source = Parser_state.run (program ~sticky) source

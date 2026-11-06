@@ -28,6 +28,7 @@ module Reg : sig
     | T3
     | T4
     | T5
+    | T6
 
   val name : t -> string
 end
@@ -46,14 +47,15 @@ type binop =
   | Ge
 
 type body =
+  | Env of int
+  | Self
+  | MakeClosure of string * body list
   | Const of int
   | Var of string
   | BinOp of binop * body * body
   | If of body * body * body
   | App of callee * body list
   | Let of string * body * body
-  | Closure of string * int * body list
-  | ClosRec of string * int
   | PrintInt of body
 
 and callee =

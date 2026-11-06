@@ -172,20 +172,17 @@
 
 (package
  (name MyLittleML)
- (synopsis "A small compiler")
+ (synopsis "An OCaml-subset compiler targeting RISC-V 64")
  (authors "Dmitrii Kuznetsov <dmitrvlkuznetsov@gmail.com>")
  (maintainers "Dmitrii Kuznetsov <dmitrvlkuznetsov@gmail.com>")
  (license LGPL-3.0-or-later)
  (depends
-  ocaml
+  (ocaml (>= 4.14))
   dune
   menhir
-  (angstrom
-   (= "0.16.0"))
-  qcheck
-  bisect_ppx_ng
-  (llvm
-   (= "18-shared"))
-  ppx_deriving_qcheck))
+  ppx_deriving
+  (qcheck :with-test)
+  (ppx_deriving_qcheck :with-test)))
+
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

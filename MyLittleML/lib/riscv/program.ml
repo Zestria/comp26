@@ -6,27 +6,9 @@
 
 [@@@ocaml.text "/*"]
 
-(** Input language of the RISC-V backend (Task 3).
-
-    This module owns the register type ([Reg.t]) used by the whole backend:
-    it appears in [Asm.instr] and inside the code generator, so it is the
-    single source of truth for "which register does this value live in".
-
-    Public contract:
-
-    - [program] is the input of {!Codegen.compile_program};
-    - [function_] and [body] are the function/definition shapes;
-    - [binop] is the set of primitive operations the generator lowers
-      directly to instruction sequences — there are no runtime helpers for
-      [+ - * / mod <=], per the Task 3 "no cringe" rule.
-
-    First-class function values are closure records [code; v1 … vk]
-    allocated with [malloc]; calling one goes through a per-[(code, k)]
-    trampoline that reloads the captured arguments (see {!Codegen}). *)
-
-(** Machine registers used by the backend.  The set is deliberately small:
-    argument registers [a0]..[a5] (plus [a7] for syscall numbers), the
-    standard [zero]/[ra]/[sp]/[s0] and temporaries [t0]..[t5]. *)
+(** Explicit-closure IL and RV64 register names. Values are untagged 64-bit
+    integers or closure pointers. Arithmetic is emitted inline. Register t6
+    is reserved for expansion of stack offsets and immediates beyond 12 bits. *)
 module Reg = struct
   type t =
     | Zero
@@ -46,6 +28,7 @@ module Reg = struct
     | T3
     | T4
     | T5
+    | T6
 
   let name = function
     | Zero -> "zero"
@@ -65,6 +48,7 @@ module Reg = struct
     | T3 -> "t3"
     | T4 -> "t4"
     | T5 -> "t5"
+    | T6 -> "t6"
   ;;
 end
 
@@ -84,23 +68,20 @@ type binop =
   | Gt
   | Ge
 
-(** A function body: a tiny expression language over 64-bit integers.
-    [App] passes all arguments at once; booleans are encoded as [1]/[0].
-    [PrintInt] is the only side effect.
-
-    [Closure (f, arity, vs)] builds a closure record for the static label
-    [f] of total arity [arity] with the captured (already applied) leading
-    arguments [vs]; [ClosRec (f, arity)] builds the self-referential record
-    that ties the recursive knot of a [let rec] binding. *)
+(** [MakeClosure (label, values)] allocates [code; captures...]. [Env i]
+    loads capture i from the entry environment, and [Self] denotes that
+    environment itself, allowing recursion through the entry environment.
+    [PrintInt] prints a signed integer with no trailing newline. *)
 type body =
+  | Env of int
+  | Self
+  | MakeClosure of string * body list
   | Const of int
   | Var of string
   | BinOp of binop * body * body
   | If of body * body * body
   | App of callee * body list
   | Let of string * body * body
-  | Closure of string * int * body list
-  | ClosRec of string * int
   | PrintInt of body
 
 (** A call target: either a statically known function label (zero captured

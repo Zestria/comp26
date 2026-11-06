@@ -65,7 +65,25 @@ type t =
   ; data : (string * string) list
   }
 
+let small n = n >= -2048 && n <= 2047
+
 let instr_to_string = function
+  | Addi (dst, src, n) when not (small n) ->
+    Format.sprintf "li t6, %d\n  add %s, %s, t6" n (Reg.name dst) (Reg.name src)
+  | (Ld (r, off, base) | Sd (r, off, base) | Sb (r, off, base)) as i when not (small off)
+    ->
+    let op =
+      match i with
+      | Ld _ -> "ld"
+      | Sd _ -> "sd"
+      | _ -> "sb"
+    in
+    Format.sprintf
+      "li t6, %d\n  add t6, %s, t6\n  %s %s, 0(t6)"
+      off
+      (Reg.name base)
+      op
+      (Reg.name r)
   | Li (r, c) -> Format.sprintf "li %s, %d" (Reg.name r) c
   | Mov (dst, src) -> Format.sprintf "mv %s, %s" (Reg.name dst) (Reg.name src)
   | Neg (dst, src) -> Format.sprintf "neg %s, %s" (Reg.name dst) (Reg.name src)
@@ -107,26 +125,37 @@ let instr_to_string = function
 (** Emit GNU-assembler text.  The [.text] section header is always present;
     [.globl main] is added when a [main] label exists so that the output
     links against the C runtime and runs under [qemu-riscv64]. *)
-let emit { text; data } : string =
-  let buf = Buffer.create 4096 in
-  let out fmt = Format.kasprintf (Buffer.add_string buf) fmt in
-  out ".text\n";
-  if
-    List.exists
+let emit { text; data } =
+  let entry =
+    if
+      List.exists
+        (function
+          | Label "main" -> true
+          | _ -> false)
+        text
+    then [ ".globl main" ]
+    else []
+  in
+  let instructions =
+    List.map
       (function
-        | Label "main" -> true
-        | _ -> false)
+        | Label label -> label ^ ":"
+        | instruction -> "  " ^ instr_to_string instruction)
       text
-  then out ".globl main\n";
-  Buffer.add_char buf '\n';
-  List.iter
-    (function
-      | Label l -> out "%s:\n" l
-      | i -> out "  %s\n" (instr_to_string i))
-    text;
-  if data <> []
-  then (
-    out "\n.section .rodata\n.align 3\n";
-    List.iter (fun (l, target) -> out "%s:\n  .quad %s\n" l target) data);
-  Buffer.contents buf
+  in
+  let records =
+    match data with
+    | [] -> []
+    | _ ->
+      [ ""; ".section .rodata"; ".align 3" ]
+      @ List.concat_map (fun (label, target) -> [ label ^ ":"; "  .quad " ^ target ]) data
+  in
+  String.concat
+    "\n"
+    ([ ".text" ]
+     @ entry
+     @ [ "" ]
+     @ instructions
+     @ records
+     @ [ ""; ".section .note.GNU-stack,\"\",@progbits"; "" ])
 ;;

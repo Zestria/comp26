@@ -1,6 +1,9 @@
-.PHONY: all test
+.PHONY: all test lint
 all:
-	dune build
+	cd .. && dune build -p MyLittleML
 
 test:
-	dune test
+	cd .. && dune runtest -p MyLittleML
+
+lint: all
+	cd .. && opam exec -- zanuda -dir MyLittleML
