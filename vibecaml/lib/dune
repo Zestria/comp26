@@ -6,11 +6,13 @@
   anf_conv
   anf_simplify
   closure_conv
+  codegen
   config
   fresh
   lambda_lift
   parser_intf
   pprint
+  riscv
   menhir_parser
   menhir_lexer
   lexicon

@@ -1,0 +1,31 @@
+let calculate a b =
+  let sum = a + b in
+  let product = a * b in
+  sum - product
+let () = print_int (calculate 7 3)
+let () = print_int ((-17) / 5)
+let () = print_int ((-17) mod 5)
+let () = print_int ((5 land 3) lor (5 lxor 3))
+let () = print_int ((32 lsl 2) lsr 3)
+let () = print_int ((-32) asr 3)
+let () = print_int (-(-5))
+let comparisons a b =
+  let eq = a = b in
+  let ne = a <> b in
+  let lt = a < b in
+  let le = a <= b in
+  let gt = a > b in
+  let ge = a >= b in
+  (if eq then 1 else 0) + (if ne then 2 else 0)
+  + (if lt then 4 else 0) + (if le then 8 else 0)
+  + (if gt then 16 else 0) + (if ge then 32 else 0)
+let () = print_int (comparisons 3 5)
+let () = print_int (comparisons 5 3)
+let () = print_int (comparisons 4 4)
+let constant_conditions x =
+  (if x = 3 then 1 else 0) + (if x <> 3 then 2 else 0)
+  + (if x < 3 then 4 else 0) + (if x <= 3 then 8 else 0)
+  + (if x > 3 then 16 else 0) + (if x >= 3 then 32 else 0)
+let () = print_int (constant_conditions 1)
+let () = print_int (constant_conditions 3)
+let () = print_int (constant_conditions 5)

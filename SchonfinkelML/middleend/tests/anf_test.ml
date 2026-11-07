@@ -7,7 +7,7 @@
 [@@@ocaml.text "/*"]
 
 open SchonfinkelML_frontend.Common
-module Anf = Middleend.Anf
+module Anf = SchonfinkelML_middleend.Anf
 
 let print_anf e = print_endline (Anf.string_of_aexpr (Anf.create_anf e))
 

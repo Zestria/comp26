@@ -10,17 +10,20 @@
 
 open SchonfinkelML_frontend.Common
 open SchonfinkelML_frontend.Config
+open SchonfinkelML_middleend.Anf
+open SchonfinkelML_middleend.Closure_conversion
+open SchonfinkelML_middleend.Lambda_lifting
+open SchonfinkelML_backend.Emitter
+module BackendCommon = SchonfinkelML_backend.Common
+module Writer = SchonfinkelML_backend.Writer
+module Middleend = SchonfinkelML_middleend
 
-let write_output path text =
-  let write oc =
-    output_string oc text;
-    output_char oc '\n'
-  in
-  if path = "-"
-  then write stdout
-  else (
-    let oc = open_out path in
-    Fun.protect ~finally:(fun () -> close_out oc) (fun () -> write oc))
+let write_output path =
+  let fd = if path = "-" then stdout else open_out path in
+  function
+  | Ok rtl ->
+    Fun.protect ~finally:(fun () -> close_out fd) (fun () -> Writer.write fd rtl)
+  | Error e -> Format.printf "Error: %a\n" BackendCommon.pp_error e
 ;;
 
 let parser_ops cfg =
@@ -63,8 +66,10 @@ let lower cfg expr =
 
 let run input cfg =
   let src = In_channel.with_open_bin input In_channel.input_all in
-  let expr = parse cfg src in
-  write_output cfg.output (lower cfg expr)
+  let expr = parse cfg src |> closure_convert |> lift in
+  let anf = create_anf expr in
+  let rtl = get_rtl anf in
+  write_output cfg.output rtl
 ;;
 
 let die fmt =

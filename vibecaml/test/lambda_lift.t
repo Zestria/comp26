@@ -28,11 +28,13 @@ CPS-факториал после closure conversion: анонимная фун�
   $ vibecamlc --stop-after ll fibk.ml
   let rec lifted__1 k2 a2 b = k2 (a2 + b) and lifted__2 k1 n1 a = fibk (n1 - 2) (lifted__1 k1 a) and fibk n k = if n < 2 then k n else fibk (n - 1) (lifted__2 k n)
 
-Без --stop-after работает весь подключённый конвейер до упрощённого ANF.
+Без --stop-after конвейер идёт до RISC-V. Промежуточный ANF по-прежнему
+можно исполнить настоящим OCaml.
 
-  $ vibecamlc fack.ml > default.ml
-  $ vibecamlc --stop-after anf fack.ml > anf.ml
-  $ diff default.ml anf.ml
+  $ vibecamlc fack.ml > default.s
+  $ vibecamlc --stop-after asm fack.ml > explicit.s
+  $ diff default.s explicit.s
+  $ vibecamlc --stop-after anf fack.ml > default.ml
   $ echo 'let () = print_int (fack 5 (fun x -> x))' >> default.ml
   $ ocaml default.ml
   120

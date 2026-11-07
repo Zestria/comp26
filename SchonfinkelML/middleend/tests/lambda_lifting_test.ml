@@ -7,8 +7,8 @@
 [@@@ocaml.text "/*"]
 
 open SchonfinkelML_frontend.Common
-module CC = Middleend.Closure_conversion
-module Lifting = Middleend.Lambda_lifting
+module CC = SchonfinkelML_middleend.Closure_conversion
+module Lifting = SchonfinkelML_middleend.Lambda_lifting
 
 (* The pass runs after closure conversion, so the tests convert first: every
    abstraction of its input is closed. *)

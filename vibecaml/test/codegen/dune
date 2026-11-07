@@ -1,0 +1,28 @@
+(executable
+ (name snapshot)
+ (libraries vibecaml))
+
+(cram
+ (applies_to snapshots)
+ (package vibecaml)
+ (deps
+  snapshot.exe
+  (glob_files *.src)
+  (glob_files *.expected.s)))
+
+(cram
+ (applies_to qemu)
+ (package vibecaml)
+ (enabled_if
+  (and
+   %{bin-available:qemu-riscv64}
+   %{bin-available:riscv64-linux-gnu-as}
+   %{bin-available:riscv64-linux-gnu-ld}))
+ (deps
+  %{bin:vibecamlc}
+  %{bin:ocaml}
+  (glob_files *.src)
+  (glob_files abi/*.s)
+  %{project_root}/vibecaml/scripts/run.sh
+  %{project_root}/vibecaml/runtime/runtime.s
+  (glob_files ../middleend/*.src)))
