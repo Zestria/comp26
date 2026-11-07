@@ -59,6 +59,7 @@ workflows:
               - echo "SOURCECRAFT_ROOT_DIRECTORY = $SOURCECRAFT_ROOT_DIRECTORY"
               - echo "SOURCECRAFT_WORKSPACE = $SOURCECRAFT_WORKSPACE"
               - echo "SOURCECRAFT_EVENT = $SOURCECRAFT_EVENT"
+              - echo "SOURCECRAFT_PR_ID = $SOURCECRAFT_PR_ID"
               - echo "pwd =  $(pwd)..., OPAMROOT = $OPAMROOT"
               #- opam repo set-url default https://se.math.spbu.ru/opam
               - /usr/bin/time -f "%U" opam update
