@@ -3,9 +3,24 @@
 # Show user stats (commits, files modified, insertions, deletions, and total
 # lines modified) for a repo
 
-git_log_opts=( "$@" )
+set -e
 
-git log --format='author: %ae' "${git_log_opts[@]}"  --numstat -- $LOGDIR \
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+git_log_opts=( "$@" )
+log_paths=()
+
+if [ -n "${LOGDIR:-}" ]; then
+    log_paths=( "$LOGDIR" )
+    members="$(yq --arg compiler "$LOGDIR" -c \
+        '[.[] | to_entries[] | select(.key == $compiler) | .value[]]' \
+        "$script_dir/../teams.yml")"
+    author_pattern="$(printf '%s' "$members" | python3 "$script_dir/stats-authors.py")"
+    if [ -n "$author_pattern" ]; then
+        git_log_opts+=( --regexp-ignore-case --extended-regexp "--author=$author_pattern" )
+    fi
+fi
+
+git log --format='author: %ae' "${git_log_opts[@]}" --numstat -- "${log_paths[@]}" \
     | tr '[A-Z]' '[a-z]' \
     | grep -v '^$' \
     | grep -v '^-' \
