@@ -191,9 +191,7 @@ let check kind seed =
            if status <> Unix.WEXITED 0
            then
              failwith (Printf.sprintf "linker: %s\n%s" (status_to_string status) stderr);
-           let status, stdout, stderr =
-             run base "qemu-riscv64" [ "-cpu"; "rv64"; exe_path ]
-           in
+           let status, stdout, stderr = run base "qemu-riscv64" [ exe_path ] in
            if
              status = Unix.WEXITED expected_code
              && stdout = expected_stdout
