@@ -4,7 +4,7 @@
  (deps NewGVNtricky.ll))
 
 (executable
- (public_name compiler)
+ (public_name demo-compiler)
  (package demo)
  (name compiler)
  (modules compiler)
