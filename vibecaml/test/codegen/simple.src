@@ -1,0 +1,6 @@
+let choose flag x =
+  let y = if flag then x * 2 else x - 1 in
+  y + 3
+let pair = (choose true 4, choose false 4)
+let (left, right) = pair
+let () = print_int (left + right)

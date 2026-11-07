@@ -1,4 +1,4 @@
 (library
- (name middleend)
+ (name bkml_middleend)
  (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
- (libraries frontend))
+ (libraries bkml_frontend))

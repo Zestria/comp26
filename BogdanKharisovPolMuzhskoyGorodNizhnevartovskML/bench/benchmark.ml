@@ -47,8 +47,8 @@ let cases =
 let validate expected source =
   match
     ( expected
-    , Frontend.Parser.parse_program source
-    , Frontend.Menhir_parser.parse_program source )
+    , Bkml_frontend.Parser.parse_program source
+    , Bkml_frontend.Menhir_parser.parse_program source )
   with
   | Accepted, Ok left, Ok right when left = right -> Ok ()
   | Accepted, Ok _, Ok _ -> Error "Parsers produced different ASTs"
@@ -63,7 +63,7 @@ let measure iterations parse source =
   let rec loop remaining =
     if remaining > 0
     then (
-      let (_ : (Frontend.Ast.program, string) result) =
+      let (_ : (Bkml_frontend.Ast.program, string) result) =
         Sys.opaque_identity (parse source)
       in
       loop (remaining - 1))
@@ -115,8 +115,8 @@ let run_case (name, generate, expected) size =
   let source = generate size in
   let run () =
     let* () = validate expected source in
-    let* angstrom_iterations = calibrate Frontend.Parser.parse_program source in
-    let* menhir_iterations = calibrate Frontend.Menhir_parser.parse_program source in
+    let* angstrom_iterations = calibrate Bkml_frontend.Parser.parse_program source in
+    let* menhir_iterations = calibrate Bkml_frontend.Menhir_parser.parse_program source in
     let sample index label iterations parse =
       let batch_ms = 1000. *. measure iterations parse source in
       let parse_ms = batch_ms /. float_of_int iterations in
@@ -151,10 +151,14 @@ let run_case (name, generate, expected) size =
         Ok ())
       else (
         let measure_angstrom () =
-          sample index "angstrom" angstrom_iterations Frontend.Parser.parse_program
+          sample index "angstrom" angstrom_iterations Bkml_frontend.Parser.parse_program
         in
         let measure_menhir () =
-          sample index "menhir" menhir_iterations Frontend.Menhir_parser.parse_program
+          sample
+            index
+            "menhir"
+            menhir_iterations
+            Bkml_frontend.Menhir_parser.parse_program
         in
         let angstrom, menhir =
           if index mod 2 = 1

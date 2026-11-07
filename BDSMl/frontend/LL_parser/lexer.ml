@@ -39,11 +39,11 @@ let keyword_of_string = function
 ;;
 
 let take_while src len pred i =
-  let j = ref i in
-  while !j < len && pred src.[!j] do
-    incr j
-  done;
-  String.sub src i (!j - i), !j
+  let rec find_end j =
+    if j < len && pred src.[j] then find_end (j + 1) else j
+  in
+  let j = find_end i in
+  String.sub src i (j - i), j
 ;;
 
 type lex_state =

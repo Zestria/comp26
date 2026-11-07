@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 open Ast
 
 module Make (Parser : sig
@@ -774,8 +774,8 @@ struct
   end
 end
 
-let%test_module "Angstrom" = (module Make (Frontend.Parser))
-let%test_module "Menhir" = (module Make (Frontend.Menhir_parser))
+let%test_module "Angstrom" = (module Make (Bkml_frontend.Parser))
+let%test_module "Menhir" = (module Make (Bkml_frontend.Menhir_parser))
 
 module Diagnostics = struct
   let print_error source =

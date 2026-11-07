@@ -8,7 +8,7 @@ COV_DIR = /tmp/cov-$(PKG)
 DUNE_ROOT = cd .. &&
 
 .DEFAULT_GOAL = all
-.PHONY: all release test check fmt fmt-check lint deps coverage clean help
+.PHONY: all release test test-runtime check fmt fmt-check lint deps coverage clean help run
 
 all: ## Собрать пакет (профиль dev, быстрая сборка для разработки)
 	dune build @all
@@ -21,8 +21,15 @@ release: ## Собрать так, как проверяет преподава�
 test: ## Прогнать тесты пакета
 	dune test
 
+# Те же тесты входят в обычный dune runtest и серверный CI. Здесь только
+# удобный отдельный запуск: сборкой, зависимостями и выводом управляет Dune.
+test-runtime: ## Принудительно прогнать C-драйверы runtime под QEMU
+	dune test runtime_test --force
+
+# Алиас ограничен нашим пакетом: @check из этой папки задевает чужие пакеты
+# в общем dune project, и их ошибки роняли make lint.
 check: ## Проверить типы без полной сборки, самый быстрый прогон
-	dune build @check
+	$(DUNE_ROOT) dune build @$(PKG)/check
 
 fmt: ## Отформатировать исходники (правит файлы на месте)
 	dune build @fmt --auto-promote
@@ -31,8 +38,8 @@ fmt-check: ## Проверить форматирование, ничего не
 	dune build @fmt
 
 # Zanuda в opam-репозитории отсутствует, поэтому цель сначала проверяет, что
-# бинарь есть в PATH, и подсказывает команду установки. Проверку присваивания
-# в парсерах разрешено отключать через Zanuda, см. ТЗ в корневом AGENTS.md.
+# бинарь есть в PATH, и подсказывает команду установки. Проверка присваивания
+# отключена только для сгенерированного menhir-кода, см. ТЗ в корневом AGENTS.md.
 ZANUDA_PIN = opam pin add zanuda https://github.com/Kakadu/zanuda.git --yes
 
 # Zanuda читает .cmt из _build, поэтому зависит от check и запускается из
@@ -66,3 +73,7 @@ clean: ## Удалить артефакты сборки и покрытия
 help: ## Показать этот список
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk -F':.*?## ' '{ printf "  \033[1m%-12s\033[0m %s\n", $$1, $$2 }'
+
+# Тулчейн и отладка: docs/riscv.md.
+run: ## Собрать PROG=file.s с рантаймом и запустить под QEMU
+	scripts/run.sh $(PROG)

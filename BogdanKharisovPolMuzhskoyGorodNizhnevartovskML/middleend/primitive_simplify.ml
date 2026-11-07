@@ -14,11 +14,12 @@ let comparison primitive order =
   | Less_equal -> Some (order <= 0)
   | Greater -> Some (order > 0)
   | Greater_equal -> Some (order >= 0)
-  | Add | Subtract | Multiply | Divide | Modulo | Negate | And | Or | Not -> None
+  | Add | Subtract | Multiply | Divide | Modulo | Negate | And | Or | Not | Print_int ->
+    None
 ;;
 
 let apply primitive arguments =
-  let open Frontend.Constant in
+  let open Bkml_frontend.Constant in
   let result =
     match primitive, arguments with
     | Primitive.Not, [ Bool value ] -> Some (not value)

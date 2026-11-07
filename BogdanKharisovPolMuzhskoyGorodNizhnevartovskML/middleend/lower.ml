@@ -6,11 +6,12 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 
 type error =
   | Unbound_name of Name.t
   | Duplicate_pattern_name of Name.t
+  | Integer_literal_out_of_range of Integer_literal.t
   | Invalid_recursive_pattern
   | Identifier_error of Id.error
 
@@ -19,6 +20,9 @@ let error_to_string = function
   | Unbound_name name -> "Unbound value " ^ Name.to_string name
   | Duplicate_pattern_name name ->
     "Variable " ^ Name.to_string name ^ " is bound more than once in this pattern"
+  | Integer_literal_out_of_range literal ->
+    "Integer literal exceeds the range of representable integers of type int: "
+    ^ Integer_literal.to_string literal
   | Invalid_recursive_pattern -> "Only variables are allowed on the left of let rec"
 ;;
 
@@ -44,6 +48,21 @@ type bound_pattern =
 
 let return value supply = Ok (value, supply)
 let fail error _supply = Error error
+
+let lower_constant constant =
+  match constant with
+  | Constant.Int literal ->
+    let text =
+      literal |> Integer_literal.to_string |> String.split_on_char '_' |> String.concat ""
+    in
+    (match Int64.of_string_opt text with
+     | Some value
+       when Int64.compare value (-4611686018427387904L) >= 0
+            && Int64.compare value 4611686018427387903L <= 0 ->
+       return (Lambda.Constant constant)
+     | Some _ | None -> fail (Integer_literal_out_of_range literal))
+  | Constant.Bool _ | Constant.Unit -> return (Lambda.Constant constant)
+;;
 
 let ( let* ) action continuation supply =
   Result.bind (action supply) (fun (value, supply) -> continuation value supply)
@@ -109,7 +128,7 @@ let rec compile_pattern pattern value body =
 ;;
 
 let rec lower environment = function
-  | Ast.Constant constant -> return (Lambda.Constant constant)
+  | Ast.Constant constant -> lower_constant constant
   | Var name ->
     (match Names.find_opt (Name.to_string name) environment with
      | None -> fail (Unbound_name name)

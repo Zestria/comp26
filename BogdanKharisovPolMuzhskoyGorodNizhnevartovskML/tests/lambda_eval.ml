@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 open Eval_value
 
 let rec evaluate environment = function

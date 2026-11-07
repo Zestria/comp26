@@ -2,7 +2,8 @@
 
 Compiler for a subset of OCaml.
 
-Implemented stages: parsing, ANF, closure conversion and lambda lifting.
+Implemented stages: parsing, ANF, closure conversion, lambda lifting and
+RISC-V 64 code generation.
 
 Two parsers produce the same AST:
 
@@ -15,7 +16,7 @@ Two parsers produce the same AST:
 comp26 $ opam install ./BogdanKharisovPolMuzhskoyGorodNizhnevartovskML.opam --deps-only --with-test
 comp26 $ dune build -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
 comp26 $ dune test -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
-comp26 $ dune build BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/middleend/middleend.cma
+comp26 $ dune build -p BogdanKharisovPolMuzhskoyGorodNizhnevartovskML @BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/check
 comp26 $ zanuda -dir BogdanKharisovPolMuzhskoyGorodNizhnevartovskML
 ```
 
@@ -27,8 +28,8 @@ comp26 $ printf 'let x = 1;; x + 2\n' | dune exec BogdanKharisovPolMuzhskoyGorod
 ```
 
 - `-parsing topdown|menhir`: select the parser; defaults to topdown (Angstrom).
-- `--stop-after parsing|anf|cc|ll`: stop at the source AST, ANF, closure conversion
-  or lambda lifting. The default is `ll`, the complete middleend.
+- `--stop-after parsing|anf|cc|ll|riscv`: stop at the source AST, ANF, closure
+  conversion, lambda lifting or RISC-V 64 assembly. The default is `riscv`.
 - `-o FILE`: write the selected representation to a file; `-o -` writes to stdout (the default).
 - `--operator-extension`: enable [operator declarations](#operator-declarations) (Angstrom only).
 - `FILE`: input file; omit it or use `-` to read stdin.
@@ -39,10 +40,40 @@ middleend error leaves an existing output file unchanged. Diagnostics are writte
 to stderr. Selecting `parsing` does not perform semantic checks.
 
 ```console
-comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- -parsing menhir -o program.ir program.ml
+comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- -parsing menhir --stop-after ll -o program.ll program.ml
 comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- --stop-after anf -o program.anf program.ml
 comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- --stop-after cc -o program.cc program.ml
 ```
+
+## RISC-V 64
+
+The default output is RV64IM assembly exporting `ml_main`. Link it with the
+runtime and run it under QEMU:
+
+```console
+comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/compiler.exe -- -o program.s program.ml
+comp26 $ riscv64-linux-gnu-gcc -static program.s BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/runtime/runtime.c -o program
+comp26 $ qemu-riscv64 ./program
+```
+
+`dune test` runs these steps for its end-to-end tests, so it needs
+`riscv64-linux-gnu-gcc`, `qemu-riscv64` and coreutils `timeout`.
+
+`print_int` prints an integer without a newline; it is an ordinary builtin
+and can be shadowed. Integers are 63-bit and wrap like OCaml's `int`. Integer
+literals are checked during lowering, so every stage after parsing rejects one
+outside `[-2^62, 2^62 - 1]`, even if its value is unused. (OCaml additionally
+accepts `4611686018427387904`, as `min_int`; this compiler rejects it.) Division by zero and comparing
+functions stop the program with `Fatal error: exception ...` and exit code 2.
+Programs are assumed to be well typed; there is no type checker yet.
+Memory is allocated with a checked `malloc` and never freed (there is no
+collector); allocation failure exits with code 2. Tail calls are not optimized
+yet, so deep recursion is bounded by the stack.
+
+The runtime is the single C file `runtime/runtime.c`. It contains the program
+entry `main` (which calls `ml_main`), allocation, structural comparison,
+`print_int`, and generic application with partial and over-application; an
+inline assembly bridge `rt_invoke` calls code with any number of arguments.
 
 ## Syntax
 
@@ -127,5 +158,5 @@ Without the flag, `infixl`, `infixr` and `prefix` are ordinary identifiers.
 ## Parser benchmark
 
 ```console
-comp26 $ dune exec --profile release BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/bench/benchmark.exe > _build/parser-benchmark.csv
+comp26 $ dune exec BogdanKharisovPolMuzhskoyGorodNizhnevartovskML/bench/benchmark.exe > _build/parser-benchmark.csv
 ```

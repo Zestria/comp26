@@ -1,0 +1,14 @@
+; Эти драйверы вызывают runtime из C независимо от нашего кодогенератора.
+; Без кросс-компилятора или QEMU тесты пропускаются, как assembly-тесты.
+
+(cram
+ (package vibecaml)
+ (enabled_if
+  (and %{bin-available:riscv64-linux-gnu-gcc} %{bin-available:qemu-riscv64}))
+ (deps
+  ../runtime/runtime.s
+  (source_tree case1)
+  (source_tree case2)
+  (source_tree case3)
+  (source_tree case4)
+  (source_tree case5)))

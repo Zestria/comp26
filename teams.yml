@@ -3,6 +3,7 @@
 #   - teammate_nick_on_SC
 #   - teammate_nick_on_SC
 #   - teammate_nick_on_SC
+# Указывайте slug из URL профиля / поля author.slug API, а не отображаемое имя.
 
 # Макисмум три тиммейта
 # Если планируете ничего не делать -- лучше не записывайтесь

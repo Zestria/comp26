@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 
 let print source =
   match Parser.parse_program_with_operators source with

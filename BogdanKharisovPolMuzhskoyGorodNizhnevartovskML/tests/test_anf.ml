@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
-open Middleend_test_support
+open Bkml_middleend
+open Bkml_middleend_test_support
 
 let normalize_with_supply supply source =
   let lambda, supply = lower_with_supply supply source in
@@ -116,7 +116,7 @@ let behaviors =
 
 let returns_int expected = function
   | Anf.Return (Atom (Constant (Int n))) ->
-    Frontend.Integer_literal.to_string n = string_of_int expected
+    Bkml_frontend.Integer_literal.to_string n = string_of_int expected
   | _ -> false
 ;;
 
@@ -125,7 +125,8 @@ let shapes =
       "ANF eliminates chains of atomic aliases"
       "let x = 42 in let y = x in y"
       (function
-        | Return (Atom (Constant (Int n))) -> Frontend.Integer_literal.to_string n = "42"
+        | Return (Atom (Constant (Int n))) ->
+          Bkml_frontend.Integer_literal.to_string n = "42"
         | _ -> false)
       "Expected the constant itself, without any bindings"
   ; shape
@@ -244,7 +245,7 @@ let shapes =
       "let p = (1, 2) in let (a, _) = p in (p, a)"
       (function
         | Let (p, Tuple _, Return (Tuple (Var result, Constant (Int a), []))) ->
-          Id.equal p result && Frontend.Integer_literal.to_string a = "1"
+          Id.equal p result && Bkml_frontend.Integer_literal.to_string a = "1"
         | _ -> false)
       "Expected one retained tuple binding and a simplified projection"
   ; shape

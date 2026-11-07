@@ -6,8 +6,8 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
-open Middleend_test_support
+open Bkml_middleend
+open Bkml_middleend_test_support
 
 let error_case name source evaluate expected accepts =
   QCheck.Test.make ~name ~count:1 QCheck.unit (fun () ->
@@ -123,14 +123,16 @@ let missing_variable =
 
 let unsupported_integer =
   let source = "1" ^ String.make 100 '0' in
-  expression_error
+  let literal = Result.get_ok (Bkml_frontend.Integer_literal.of_string source) in
+  error_case
     "host integer limits are reported as an interpreter limitation"
     source
+    (fun () -> Lambda_eval.observe (Lambda.Constant (Bkml_frontend.Constant.Int literal)))
     "an unsupported-integer error"
     (function
-    | Eval_value.Unsupported_integer literal ->
-      Frontend.Integer_literal.to_string literal = source
-    | _ -> false)
+      | Eval_value.Unsupported_integer literal ->
+        Bkml_frontend.Integer_literal.to_string literal = source
+      | _ -> false)
 ;;
 
 let invalid_ir_fails_test =

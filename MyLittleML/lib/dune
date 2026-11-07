@@ -1,0 +1,10 @@
+(include_subdirs unqualified)
+
+(library
+ (name mylittleml)
+ (public_name MyLittleML)
+ (modules state state_error parser_state mylittleml frontend middleend ast pp parser lexer parser_topdown parse anf names closure lambda_lift eval)
+ (preprocess
+  (per_module
+   ((pps ppx_deriving.show) Ast Anf)))
+)

@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Middleend
+open Bkml_middleend
 module Address_map = Map.Make (Int)
 module Address_set = Set.Make (Int)
 
@@ -36,12 +36,13 @@ type invariant_error =
 type error =
   | Runtime of runtime_error
   | Invalid_ir of invariant_error
-  | Unsupported_integer of Frontend.Integer_literal.t
+  | Unsupported_integer of Bkml_frontend.Integer_literal.t
   | Heap_exhausted
 
 type heap =
   { next : int
   ; nodes : node Address_map.t
+  ; output : string list
   }
 
 and node =
@@ -91,7 +92,7 @@ let error_to_string = function
   | Invalid_ir error -> "Invalid interpreted IR: " ^ invariant_error_to_string error
   | Unsupported_integer literal ->
     "Test interpreter cannot represent integer "
-    ^ Frontend.Integer_literal.to_string literal
+    ^ Bkml_frontend.Integer_literal.to_string literal
   | Heap_exhausted -> "Test interpreter address space exhausted"
 ;;
 
@@ -184,8 +185,8 @@ let unary f = make (Function f)
 let binary f = unary (fun a -> unary (fun b -> f a b))
 
 let constant = function
-  | Frontend.Constant.Int n ->
-    (match int_of_string_opt (Frontend.Integer_literal.to_string n) with
+  | Bkml_frontend.Constant.Int n ->
+    (match int_of_string_opt (Bkml_frontend.Integer_literal.to_string n) with
      | Some value -> make (Int value)
      | None -> fail (Unsupported_integer n))
   | Bool b -> make (Bool b)
@@ -219,6 +220,8 @@ and compare_fields heap a b =
 let comparison predicate a b heap =
   Result.bind (compare_values heap a b) (fun order -> make (Bool (predicate order)) heap)
 ;;
+
+let print text heap = Ok ((), { heap with output = text :: heap.output })
 
 let arithmetic operator a b =
   let* a = integer a in
@@ -260,6 +263,11 @@ let primitive = function
     unary (fun a ->
       let* a = boolean a in
       make (Bool (not a)))
+  | Print_int ->
+    unary (fun a ->
+      let* a = integer a in
+      let* () = print (string_of_int a) in
+      make Unit)
 ;;
 
 let function_ environment parameters body =
@@ -301,10 +309,14 @@ let rec show ancestors value =
       return ("(" ^ String.concat ", " fields ^ ")")
 ;;
 
-let observe run =
+let observe_with_output run =
   let evaluation =
     let* value = run () in
     show Address_set.empty value
   in
-  Result.map fst (evaluation { next = 0; nodes = Address_map.empty })
+  match evaluation { next = 0; nodes = Address_map.empty; output = [] } with
+  | Ok (value, heap) -> Ok (value, String.concat "" (List.rev heap.output))
+  | Error error -> Error error
 ;;
+
+let observe run = Result.map fst (observe_with_output run)

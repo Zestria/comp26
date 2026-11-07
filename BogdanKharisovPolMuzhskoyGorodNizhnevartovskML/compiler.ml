@@ -19,6 +19,7 @@ type stage =
   | Anf
   | Cc
   | Ll
+  | Riscv
 
 type command =
   | Run of parser * stage * string option * string option
@@ -33,7 +34,7 @@ let parse_arguments argv =
   let operator_extension = ref false in
   let input = ref None in
   let output = ref None in
-  let stage = ref Ll in
+  let stage = ref Riscv in
   let set_input path =
     match !input with
     | None -> input := Some path
@@ -49,14 +50,16 @@ let parse_arguments argv =
     | "anf" -> stage := Anf
     | "cc" -> stage := Cc
     | "ll" -> stage := Ll
+    | "riscv" -> stage := Riscv
     | name ->
-      raise (Arg.Bad ("Unknown stage: " ^ name ^ "; expected parsing, anf, cc or ll"))
+      raise
+        (Arg.Bad ("Unknown stage: " ^ name ^ "; expected parsing, anf, cc, ll or riscv"))
   in
   let options =
     [ "-parsing", Arg.String set_parsing, "NAME Use topdown (default) or menhir"
     ; ( "--stop-after"
       , Arg.String set_stop_after
-      , "STAGE Stop after parsing, anf, cc or ll (default: ll)" )
+      , "STAGE Stop after parsing, anf, cc, ll or riscv (default: riscv)" )
     ; ( "-o"
       , Arg.String (fun path -> output := Some path)
       , "FILE Write to FILE or - for stdout (default)" )
@@ -73,8 +76,8 @@ let parse_arguments argv =
       argv
       options
       set_input
-      "Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll] [-o \
-       FILE] [--operator-extension] [FILE]\n\
+      "Usage: compiler [-parsing topdown|menhir] [--stop-after parsing|anf|cc|ll|riscv] \
+       [-o FILE] [--operator-extension] [FILE]\n\
        Without FILE, read standard input.";
     match !menhir, !operator_extension with
     | true, true -> Error "--operator-extension requires the Angstrom parser\n"
@@ -103,31 +106,47 @@ let run parser stage input output =
   in
   let parse =
     match parser with
-    | Angstrom Standard -> Frontend.Parser.parse_program
-    | Menhir -> Frontend.Menhir_parser.parse_program
-    | Angstrom Extended -> Frontend.Parser.parse_program_with_operators
+    | Angstrom Standard -> Bkml_frontend.Parser.parse_program
+    | Menhir -> Bkml_frontend.Menhir_parser.parse_program
+    | Angstrom Extended -> Bkml_frontend.Parser.parse_program_with_operators
   in
   let* program =
     Result.map_error (fun message -> "Parse error: " ^ message) (parse source)
   in
   let middleend printer result =
-    Result.map
-      (fun program formatter -> printer formatter program)
-      (Result.map_error
-         (fun error -> "Middleend error: " ^ Middleend.Pipeline.error_to_string error)
-         result)
+    let* program =
+      Result.map_error
+        (fun error -> "Middleend error: " ^ Bkml_middleend.Pipeline.error_to_string error)
+        result
+    in
+    Ok (Format.asprintf "%t@." (fun formatter -> printer formatter program))
   in
-  let* print_program =
+  let* text =
     match stage with
-    | Parsing -> Ok (fun formatter -> Frontend.Ast_print.program formatter program)
-    | Anf -> middleend Middleend.Anf_print.program (Middleend.Pipeline.anf program)
-    | Cc -> middleend Middleend.Closure_print.program (Middleend.Pipeline.cc program)
-    | Ll -> middleend Middleend.Lifted_print.program (Middleend.Pipeline.compile program)
+    | Parsing ->
+      Ok
+        (Format.asprintf "%t@." (fun formatter ->
+           Bkml_frontend.Ast_print.program formatter program))
+    | Anf ->
+      middleend Bkml_middleend.Anf_print.program (Bkml_middleend.Pipeline.anf program)
+    | Cc ->
+      middleend Bkml_middleend.Closure_print.program (Bkml_middleend.Pipeline.cc program)
+    | Ll ->
+      middleend
+        Bkml_middleend.Lifted_print.program
+        (Bkml_middleend.Pipeline.compile program)
+    | Riscv ->
+      let* lifted =
+        Result.map_error
+          (fun error ->
+             "Middleend error: " ^ Bkml_middleend.Pipeline.error_to_string error)
+          (Bkml_middleend.Pipeline.compile program)
+      in
+      Result.map_error
+        (fun error -> "Codegen error: " ^ Bkml_backend.Codegen.error_to_string error)
+        (Bkml_backend.Codegen.compile lifted)
   in
-  let print channel =
-    let formatter = Format.formatter_of_out_channel channel in
-    Format.fprintf formatter "%t@." print_program
-  in
+  let print channel = output_string channel text in
   io (fun () ->
     match output with
     | None | Some "-" -> print stdout

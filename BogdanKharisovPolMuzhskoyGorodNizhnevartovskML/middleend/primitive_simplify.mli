@@ -13,4 +13,7 @@
     Currently folds boolean operations and comparisons of booleans or units.
     Integer operations are not folded. No expression evaluation, binding
     lookup, type inference or effect analysis belongs to this module. *)
-val apply : Primitive.t -> Frontend.Constant.t list -> Frontend.Constant.t option
+val apply
+  :  Primitive.t
+  -> Bkml_frontend.Constant.t list
+  -> Bkml_frontend.Constant.t option

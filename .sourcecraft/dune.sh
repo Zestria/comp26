@@ -46,14 +46,30 @@ case "$CMD" in
         ;;
     build)
         echo "compiler = $COMPILER_NAME"
-        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @check @runtest @install
+        /usr/bin/time -f "%U" opam exec -- dune build -p "$COMPILER_NAME" @"$COMPILER_NAME"/check @"$COMPILER_NAME"/runtest @install
         ;;
     zanuda)
         echo "compiler = $COMPILER_NAME"
+        set +e
         opam exec -- zanuda -dir "$COMPILER_NAME" -osarif result.sarif -ordjsonl result.rdjsonl
+        status=$?
+        set -e
+        echo "zanuda exit status: $status"
+        [ -f result.sarif ] || printf '%s\n' '{"version":"2.1.0","runs":[]}' > result.sarif
+        [ -f result.rdjsonl ] || : > result.rdjsonl
+        cp result.sarif results.sarif
         ;;
     stats)
-        LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats
+        members="$(yq --arg compiler "$COMPILER_NAME" -c \
+            '[.[] | to_entries[] | select(.key == $compiler) | .value[]]' \
+            "$WORKSPACE/teams.yml")"
+        author_pattern="$(printf '%s' "$members" | python3 .sourcecraft/stats-authors.py)"
+        if [ -n "$author_pattern" ]; then
+            LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats \
+                --regexp-ignore-case --extended-regexp "--author=$author_pattern"
+        else
+            LOGDIR="$COMPILER_NAME" bash .sourcecraft/git-user-stats
+        fi
         ;;
     *)
         usage

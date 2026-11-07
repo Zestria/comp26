@@ -1,0 +1,44 @@
+(test
+ (name test_qc)
+ (package MyLittleML)
+ (modules test_qc)
+ (libraries qcheck mylittleml)
+ (preprocess
+  (pps ppx_deriving_qcheck ppx_deriving.show)))
+
+(test
+ (name test_mid)
+ (package MyLittleML)
+ (modules test_mid)
+ (libraries qcheck mylittleml))
+
+(test
+ (name test_monad)
+ (package MyLittleML)
+ (modules test_monad)
+ (libraries qcheck mylittleml riscv))
+
+(executable
+ (name bench)
+ (modules bench)
+ (libraries mylittleml))
+
+(executable
+ (name test_riscv)
+ (modules test_riscv)
+ (libraries unix))
+
+(cram
+ (package MyLittleML)
+ (applies_to bench)
+ (deps ./bench.exe))
+
+(cram
+ (package MyLittleML)
+ (applies_to pipeline)
+ (deps ../compiler.exe))
+
+(cram
+ (package MyLittleML)
+ (applies_to riscv)
+ (deps test_riscv.exe ../compiler.exe))

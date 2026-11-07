@@ -1,0 +1,5 @@
+(library
+ (name bkml_backend)
+ (package BogdanKharisovPolMuzhskoyGorodNizhnevartovskML)
+ (libraries bkml_frontend bkml_middleend)
+ (modules abi codegen liveness regalloc riscv))

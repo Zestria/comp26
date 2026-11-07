@@ -698,13 +698,9 @@ let rec generate
        | Arrow (argument, result) -> function_value argument result (budget - 1)))
 ;;
 
-let gen random =
+let gen_with_choices choices random =
   let rec attempt remaining =
-    let (Type typ) =
-      choose
-        [ Type Int; Type Bool; Type (Pair (Int, Bool)); Type (Pair (Int, Int)) ]
-        random
-    in
+    let (Type typ) = choose choices random in
     let expression = generate typ [] [] (12 + Random.State.int random 33) random in
     try
       if measure expression > 600 then raise Outside_budget;
@@ -717,7 +713,12 @@ let gen random =
   attempt 30
 ;;
 
-let arbitrary =
+let gen =
+  gen_with_choices
+    [ Type Int; Type Bool; Type (Pair (Int, Bool)); Type (Pair (Int, Int)) ]
+;;
+
+let make_arbitrary gen =
   QCheck.make
     ~print:(fun term -> source term ^ "\nOracle: " ^ expected term)
     ~small:size
@@ -734,6 +735,9 @@ let arbitrary =
       else "zero or one feature executed")
     gen
 ;;
+
+let arbitrary = make_arbitrary gen
+let arbitrary_int = make_arbitrary (gen_with_choices [ Type Int ])
 
 let shrink_witness () =
   let x = { key = [ 0 ]; hint = "x"; typ = Int } in

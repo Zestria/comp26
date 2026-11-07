@@ -1,0 +1,121 @@
+(rule
+ (targets gc_test.exe)
+ (deps gc_test.c ../gc.h ../libschoml_runtime.a)
+ (action
+  (run
+   cc
+   -std=c11
+   -Wall
+   -Wextra
+   -Werror
+   -pedantic
+   -O2
+   -I..
+   gc_test.c
+   ../libschoml_runtime.a
+   -o
+   %{targets})))
+
+(rule
+ (targets tuple_test.exe)
+ (deps tuple_test.c ../gc.h ../tuple.h ../libschoml_runtime.a)
+ (action
+  (run
+   cc
+   -std=c11
+   -Wall
+   -Wextra
+   -Werror
+   -pedantic
+   -O2
+   -I..
+   tuple_test.c
+   ../libschoml_runtime.a
+   -o
+   %{targets})))
+
+(rule
+ (targets runtime_error_test.exe)
+ (deps
+  runtime_error_test.c
+  ../runtime.h
+  ../gc.h
+  ../tuple.h
+  ../libschoml_runtime.a)
+ (action
+  (run
+   cc
+   -std=c11
+   -Wall
+   -Wextra
+   -Werror
+   -pedantic
+   -O2
+   -I..
+   runtime_error_test.c
+   ../libschoml_runtime.a
+   -o
+   %{targets})))
+
+(rule
+ (targets closure_runtime_test.exe)
+ (deps
+  closure_runtime_test.c
+  ../gc.h
+  ../tuple.h
+  ../closure.h
+  ../libschoml_runtime.a)
+ (action
+  (run
+   cc
+   -std=c11
+   -Wall
+   -Wextra
+   -Werror
+   -pedantic
+   -O2
+   -I..
+   closure_runtime_test.c
+   ../libschoml_runtime.a
+   -o
+   %{targets})))
+
+(rule
+ (alias runtest)
+ (package SchonfinkelML)
+ (action
+  (progn
+   (run ./gc_test.exe)
+   (run ./tuple_test.exe)
+   (run ./runtime_error_test.exe)
+   (run ./closure_runtime_test.exe))))
+
+(library
+ (name closures_tests)
+ (modules closures_test)
+ (libraries
+  SchonfinkelML_backend
+  SchonfinkelML_middleend
+  SchonfinkelML_frontend
+  top_down)
+ (inline_tests)
+ (preprocess
+  (pps ppx_inline_test))
+ (package SchonfinkelML))
+
+(env
+ (release
+  (inline_tests enabled)))
+
+(cram
+ (package SchonfinkelML)
+ (deps
+  ../../compiler.exe
+  ../runtime.c
+  ../runtime.h
+  ../gc.c
+  ../gc.h
+  ../tuple.c
+  ../tuple.h
+  ../closure.c
+  ../closure.h))

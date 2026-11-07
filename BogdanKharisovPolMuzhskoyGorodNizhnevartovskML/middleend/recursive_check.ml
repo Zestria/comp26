@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-open Frontend
+open Bkml_frontend
 
 (* Check source syntax: a unit/tuple pattern dereferences its input even
    when its runtime projections are later optimized away. There is one

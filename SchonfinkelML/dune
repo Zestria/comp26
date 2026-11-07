@@ -3,6 +3,11 @@
  (package SchonfinkelML)
  (name compiler)
  (modules compiler)
- (libraries SchonfinkelML_frontend top_down bottom_up middleend)
+ (libraries
+  SchonfinkelML_frontend
+  top_down
+  bottom_up
+  SchonfinkelML_middleend
+  SchonfinkelML_backend)
  (instrumentation
   (backend bisect_ppx_ng)))
