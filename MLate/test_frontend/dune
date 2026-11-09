@@ -1,0 +1,8 @@
+(test
+ (name test_parsers)
+ (package MLate)
+ (libraries MLate_frontend))
+
+(cram
+ (package MLate)
+ (deps ../compiler.exe))
