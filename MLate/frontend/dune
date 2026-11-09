@@ -1,0 +1,5 @@
+(library
+ (name MLate_frontend)
+ (public_name MLate.frontend)
+ (modules ast)
+ (libraries angstrom))
