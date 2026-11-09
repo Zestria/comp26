@@ -1,5 +1,11 @@
 (library
  (name MLate_frontend)
  (public_name MLate.frontend)
- (modules ast topdown)
+ (modules ast topdown lexer parser parse)
  (libraries angstrom))
+
+(menhir
+ (modules parser)
+ (flags --strict))
+
+(ocamllex lexer)
