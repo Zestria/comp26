@@ -2,6 +2,4 @@
  (name test_qc)
  (package MLate)
  (modules test_qc)
- (libraries qcheck angstrom)
- (preprocess
-  (pps ppx_deriving_qcheck ppx_deriving.show)))
+ (libraries qcheck MLate_frontend))
