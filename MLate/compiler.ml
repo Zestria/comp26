@@ -6,7 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-let () =
+let llvm_demo () =
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
   let () = assert (Llvm_executionengine.initialize ()) in
@@ -58,3 +58,51 @@ let () =
   prepare_main ();
   Llvm.print_module "out.ll" the_module
 ;;
+
+let frontend () =
+  let parsing = ref "topdown" in
+  let glued_keywords = ref false in
+  let input = ref None in
+  Arg.parse
+    [ ( "-parsing"
+      , Arg.Symbol ([ "topdown"; "menhir" ], fun name -> parsing := name)
+      , "Select the parser (default: topdown)" )
+    ; ( "--glued-keywords"
+      , Arg.Set glued_keywords
+      , "Allow keywords inside words (topdown only)" )
+    ]
+    (fun file ->
+       match !input with
+       | None -> input := Some file
+       | Some _ -> raise (Arg.Bad "expected one input file"))
+    "Usage: compiler [-parsing topdown|menhir] [--glued-keywords] input.ml";
+  let usage_error message =
+    prerr_endline message;
+    exit 2
+  in
+  if !glued_keywords && !parsing = "menhir"
+  then usage_error "--glued-keywords requires -parsing topdown";
+  let file =
+    match !input with
+    | Some file -> file
+    | None -> usage_error "missing input file"
+  in
+  try
+    let source = In_channel.with_open_bin file In_channel.input_all in
+    let parsed =
+      if !parsing = "menhir"
+      then MLate_frontend.Parse.parse source
+      else MLate_frontend.Topdown.parse_with ~glued_keywords:!glued_keywords source
+    in
+    match parsed with
+    | Ok program -> Printf.printf "Parsed %d top-level bindings\n" (List.length program)
+    | Error (`Parsing_error message) ->
+      prerr_endline message;
+      exit 1
+  with
+  | Sys_error message ->
+    prerr_endline message;
+    exit 1
+;;
+
+let () = if Array.length Sys.argv = 1 then llvm_demo () else frontend ()

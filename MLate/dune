@@ -8,6 +8,6 @@
  (package MLate)
  (name compiler)
  (modules compiler)
- (libraries LL)
+ (libraries MLate.LL MLate_frontend)
  (instrumentation
   (backend bisect_ppx_ng)))

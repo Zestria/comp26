@@ -112,5 +112,8 @@ let () =
             ~name:(name ^ ": parse(print(ast)) = ast")
             arbitrary_program
             (fun ast -> parse (print_program ast) = Ok ast))
-       [ "Angstrom", MLate_frontend.Topdown.parse; "Menhir", MLate_frontend.Parse.parse ])
+       [ "Angstrom", MLate_frontend.Topdown.parse
+       ; "Menhir", MLate_frontend.Parse.parse
+       ; "Angstrom (glued)", MLate_frontend.Topdown.parse_with ~glued_keywords:true
+       ])
 ;;
