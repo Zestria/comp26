@@ -1,5 +1,5 @@
   $ clang-18 -c runtime.c -o runtime.o
-  $ ../compiler.exe --help
+  $ ../compiler.exe
 
   $ cat out.ll | grep -E 'source_filename|target datalayout|ModuleID' --invert-match
   target triple = "x86_64-pc-linux-gnu"
