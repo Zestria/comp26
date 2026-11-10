@@ -6,8 +6,7 @@
 
 [@@@ocaml.text "/*"]
 
-let samples = 5
-let batch_seconds = 0.05
+let ( let* ) = Result.bind
 
 let corpus blocks =
   List.init blocks (fun i ->
@@ -33,53 +32,61 @@ let fib_result%d = fib%d 10 (fun x -> x)
   |> String.concat "\n"
 ;;
 
-let parse_exn parse source =
-  match parse source with
-  | Ok ast -> ast
-  | Error (`Parsing_error message) -> failwith message
+let parse_result parse source =
+  Result.map_error (fun (`Parsing_error message) -> message) (parse source)
 ;;
 
 let repeats = 100
 
 let average_seconds parse source =
   Gc.full_major ();
-
   let start = Sys.time () in
-
-  for _ = 1 to repeats do
-    ignore (Sys.opaque_identity (parse_exn parse source))
-  done;
-
+  let rec repeat remaining =
+    if remaining = 0
+    then Ok ()
+    else
+      let* ast = parse_result parse source in
+      let (_ : MLate_frontend.Ast.program) = Sys.opaque_identity ast in
+      repeat (remaining - 1)
+  in
+  let* () = repeat repeats in
   let elapsed = Sys.time () -. start in
-  elapsed /. float_of_int repeats
+  Ok (elapsed /. float_of_int repeats)
+;;
 
 let benchmark blocks =
   let source = corpus blocks in
-
   let ll = MLate_frontend.Topdown.parse in
   let lr = MLate_frontend.Parse.parse in
-
-  let ll_ast = parse_exn ll source in
-  let lr_ast = parse_exn lr source in
-
-  if List.length ll_ast <> blocks * 4 || ll_ast <> lr_ast then
-    failwith "Parsers disagree";
-
-  let ll_seconds = average_seconds ll source in
-  let lr_seconds = average_seconds lr source in
-
-  Printf.printf
-    "| %d | %d | %.3f | %.3f | %.2fx |\n%!"
-    blocks
-    (String.length source)
-    (ll_seconds *. 1000.)
-    (lr_seconds *. 1000.)
-    (ll_seconds /. lr_seconds)
+  let* ll_ast = parse_result ll source in
+  let* lr_ast = parse_result lr source in
+  if List.length ll_ast <> blocks * 4 || ll_ast <> lr_ast
+  then Error "Parsers disagree"
+  else
+    let* ll_seconds = average_seconds ll source in
+    let* lr_seconds = average_seconds lr source in
+    Printf.printf
+      "| %d | %d | %.3f | %.3f | %.2fx |\n%!"
+      blocks
+      (String.length source)
+      (ll_seconds *. 1000.)
+      (lr_seconds *. 1000.)
+      (ll_seconds /. lr_seconds);
+    Ok ()
+;;
 
 let () =
-  print_endline
-    "| Blocks | Bytes | Angstrom (ms) | Menhir (ms) | LL/LR |";
-  print_endline
-    "| ---: | ---: | ---: | ---: | ---: |";
-
-  List.iter benchmark [1; 10; 100; 1000]
+  print_endline "| Blocks | Bytes | Angstrom (ms) | Menhir (ms) | LL/LR |";
+  print_endline "| ---: | ---: | ---: | ---: | ---: |";
+  let rec run = function
+    | [] -> Ok ()
+    | blocks :: rest ->
+      let* () = benchmark blocks in
+      run rest
+  in
+  match run [ 1; 10; 100; 1000 ] with
+  | Ok () -> ()
+  | Error message ->
+    prerr_endline message;
+    exit 1
+;;
